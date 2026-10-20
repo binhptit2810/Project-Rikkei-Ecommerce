@@ -1,8 +1,0 @@
-# Database Backup Directory
-
-Thư mục này dùng để lưu file backup MySQL.
-
-**Lưu ý quan trọng:**
-- File `.sql` và `.sql.gz` trong thư mục này đã được thêm vào `.gitignore`
-- Không commit file backup thật lên Git (có thể chứa dữ liệu nhạy cảm)
-- Xem hướng dẫn backup/restore tại: `devops/README.md`
