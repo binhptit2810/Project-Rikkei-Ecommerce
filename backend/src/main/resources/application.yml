@@ -25,6 +25,27 @@ spring:
         dialect: org.hibernate.dialect.MySQL8Dialect
         format_sql: true
 
+  # Serialize LocalDateTime thành ISO-8601 string thay vì array số
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+# =============================================================================
+# CORS Configuration
+# =============================================================================
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://localhost:*}
+
+# =============================================================================
+# JWT Authentication
+# =============================================================================
+jwt:
+  # Secret phải >= 32 ký tự (256 bit) cho HMAC-SHA256
+  # Trong production: đặt biến môi trường JWT_SECRET
+  secret: ${JWT_SECRET:ecommerce-platform-default-dev-secret-change-this-in-production-2024}
+  # Thời hạn token tính bằng millisecond (mặc định: 24h = 86400000ms)
+  expiration: ${JWT_EXPIRATION:86400000}
+
 # Actuator (health check)
 management:
   endpoints:
