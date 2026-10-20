@@ -1,0 +1,55 @@
+# =============================================================================
+# ROOT .gitignore — E-commerce Platform Monorepo
+# =============================================================================
+
+# ---- Environment files (NEVER commit these) ----
+.env
+.env.local
+.env.production
+.env.staging
+*.env
+
+# ---- Frontend (Node.js / React) ----
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# ---- Backend (Java / Gradle) ----
+backend/.gradle/
+backend/build/
+backend/out/
+backend/*.class
+backend/*.jar
+backend/*.war
+backend/.idea/
+backend/.classpath
+backend/.project
+backend/.settings/
+backend/bin/
+
+# ---- Database backups (real data) ----
+database/backup/*.sql
+database/backup/*.sql.gz
+
+# ---- IDE / Editor ----
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ---- Docker ----
+# (docker-compose.override.yml có thể chứa override local)
+docker-compose.override.yml
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- OS ----
+.DS_Store
+ehthumbs.db
+Desktop.ini
