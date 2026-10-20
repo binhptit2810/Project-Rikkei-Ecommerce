@@ -4,6 +4,9 @@ import com.example.ecommerce.dto.response.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -14,6 +17,8 @@ import java.util.Map;
 
 /**
  * Xử lý lỗi tập trung — các exception được bắt tại đây và trả về format ApiResponse chuẩn.
+ *
+ * Thứ tự ưu tiên handler: từ cụ thể nhất đến tổng quát nhất.
  */
 @RestControllerAdvice
 @Slf4j
@@ -33,6 +38,40 @@ public class GlobalExceptionHandler {
         log.warn("Business exception: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
+     * Lỗi xác thực sai thông tin đăng nhập (email/password không đúng).
+     * Trả 401 thay vì 400 để phân biệt với lỗi validation dữ liệu.
+     * Không tiết lộ chi tiết (email không tồn tại vs password sai).
+     */
+    @ExceptionHandler(BadCredentialsException.class)
+    public ResponseEntity<ApiResponse<Void>> handleBadCredentials(BadCredentialsException ex) {
+        log.warn("Bad credentials attempt");
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error("Email hoặc mật khẩu không đúng"));
+    }
+
+    /**
+     * Lỗi tài khoản bị vô hiệu hóa — trả 403 thay vì 401.
+     */
+    @ExceptionHandler(DisabledException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDisabled(DisabledException ex) {
+        log.warn("Disabled account login attempt");
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("Tài khoản đã bị vô hiệu hóa"));
+    }
+
+    /**
+     * Lỗi không đủ quyền truy cập.
+     * Lưu ý: SecurityConfig đã xử lý AccessDeniedException qua accessDeniedHandler.
+     * Handler này là fallback cho @PreAuthorize trong Service/Controller.
+     */
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
+        log.warn("Access denied: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error("Bạn không có quyền thực hiện thao tác này"));
     }
 
     /** Lỗi validation Bean Validation */
