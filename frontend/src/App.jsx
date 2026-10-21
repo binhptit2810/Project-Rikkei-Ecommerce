@@ -1,22 +1,40 @@
 import React from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import Navbar from './components/common/Navbar'
-import Footer from './components/common/Footer'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import CustomerLayout from './components/common/CustomerLayout'
+import AdminLayout from './components/admin/AdminLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import GuestRoute from './components/auth/GuestRoute'
+import RoleRoute from './components/auth/RoleRoute'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
 import ProfilePage from './pages/user/ProfilePage'
+import AdminDashboardPage from './pages/admin/AdminDashboardPage'
+import UserManagementPage from './pages/admin/UserManagementPage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
 
 function App() {
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between antialiased">
-        <Navbar />
-        <Routes>
+      <Routes>
+        {/* 1. Admin Area Routes (Bảo vệ bởi RoleRoute requiredRole="ADMIN" & dùng AdminLayout riêng) */}
+        <Route
+          path="/admin"
+          element={
+            <RoleRoute requiredRole="ADMIN">
+              <AdminLayout />
+            </RoleRoute>
+          }
+        >
+          {/* Mặc định chuyển hướng /admin sang /admin/dashboard */}
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="dashboard" element={<AdminDashboardPage />} />
+          <Route path="users" element={<UserManagementPage />} />
+        </Route>
+
+        {/* 2. Customer Area Routes (Sử dụng CustomerLayout riêng với Navbar và Footer) */}
+        <Route element={<CustomerLayout />}>
           {/* Public Home Page */}
           <Route path="/" element={<HomePage />} />
 
@@ -51,9 +69,8 @@ function App() {
           {/* Error & Fallback Routes */}
           <Route path="/forbidden" element={<ForbiddenPage />} />
           <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-        <Footer />
-      </div>
+        </Route>
+      </Routes>
     </BrowserRouter>
   )
 }

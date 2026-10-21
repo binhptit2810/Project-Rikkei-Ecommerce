@@ -7,17 +7,20 @@ import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
 import com.example.ecommerce.exception.BusinessException;
+import com.example.ecommerce.exception.LockedAccountException;
 import com.example.ecommerce.repository.UserRepository;
 import com.example.ecommerce.security.JwtUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 /**
  * Nghiệp vụ xác thực người dùng: đăng ký và đăng nhập.
@@ -104,16 +107,35 @@ public class AuthService {
     public AuthResponse login(LoginRequest request) {
         String normalizedEmail = request.getEmail().toLowerCase().trim();
 
-        // authenticationManager ném BadCredentialsException nếu sai → GlobalExceptionHandler xử lý
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(normalizedEmail, request.getPassword())
-        );
+        // 1. Kiểm tra trạng thái tài khoản: Nếu tài khoản đã bị khóa, chặn ngay lập tức và ném LockedAccountException kèm lý do thực tế từ DB
+        User user = userRepository.findByEmail(normalizedEmail).orElse(null);
+        if (user != null && Boolean.FALSE.equals(user.getActive())) {
+            String lockReason = StringUtils.hasText(user.getLockReason()) ? user.getLockReason().trim() : null;
+            log.warn("Đăng nhập thất bại do tài khoản bị khóa: email={}, lý do={}", normalizedEmail, lockReason);
+            throw new LockedAccountException("Tài khoản của bạn đã bị khóa.", lockReason);
+        }
+
+        // 2. Xác thực thông tin đăng nhập (email & password)
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(normalizedEmail, request.getPassword())
+            );
+        } catch (DisabledException ex) {
+            String lockReason = (user != null && StringUtils.hasText(user.getLockReason()))
+                    ? user.getLockReason().trim()
+                    : null;
+            log.warn("Đăng nhập thất bại do tài khoản bị vô hiệu hóa: email={}, lý do={}", normalizedEmail, lockReason);
+            throw new LockedAccountException("Tài khoản của bạn đã bị khóa.", lockReason);
+        }
 
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
         String token = jwtUtils.generateToken(userDetails);
 
-        User user = userRepository.findByEmail(normalizedEmail)
-                .orElseThrow(() -> new BusinessException("Không tìm thấy thông tin người dùng"));
+        if (user == null) {
+            user = userRepository.findByEmail(normalizedEmail)
+                    .orElseThrow(() -> new BusinessException("Không tìm thấy thông tin người dùng"));
+        }
 
         log.info("Đăng nhập thành công: {}", normalizedEmail);
 

@@ -6,7 +6,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner'
 export const LoginPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, isLoading, error, clearError } = useAuthStore()
+  const { login, isLoading, error, lockReason, clearError } = useAuthStore()
 
   const [formData, setFormData] = useState({
     email: '',
@@ -16,9 +16,6 @@ export const LoginPage = () => {
   const [formErrors, setFormErrors] = useState({})
   const [showPassword, setShowPassword] = useState(false)
 
-  // Điểm đến sau khi đăng nhập thành công
-  const from = location.state?.from?.pathname || '/profile'
-
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -26,7 +23,7 @@ export const LoginPage = () => {
     if (formErrors[name]) {
       setFormErrors((prev) => ({ ...prev, [name]: '' }))
     }
-    if (error) {
+    if (error || lockReason) {
       clearError()
     }
   }
@@ -54,11 +51,26 @@ export const LoginPage = () => {
     if (!validate()) return
 
     try {
-      await login({
+      const result = await login({
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
       })
-      navigate(from, { replace: true })
+
+      const loggedInUser = result?.user
+      if (loggedInUser?.role === 'ADMIN') {
+        // Tài khoản Admin -> chuyển đến trang Dashboard Admin /admin/dashboard
+        const adminDest = location.state?.from?.pathname?.startsWith('/admin')
+          ? location.state.from.pathname
+          : '/admin/dashboard'
+        navigate(adminDest, { replace: true })
+      } else {
+        // Tài khoản Customer -> chuyển về trang chủ Customer / (không vào /profile, không vào admin)
+        const customerDest =
+          location.state?.from?.pathname && !location.state?.from?.pathname?.startsWith('/admin')
+            ? location.state.from.pathname
+            : '/'
+        navigate(customerDest, { replace: true })
+      }
     } catch (err) {
       // Lỗi đã được set trong store và hiển thị trên UI
     }
@@ -84,13 +96,29 @@ export const LoginPage = () => {
 
           {/* Backend Error Banner */}
           {error && (
-            <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-3">
-              <svg className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div>
-                <span className="font-semibold block mb-0.5">Xác thực không thành công:</span>
-                <span>{error}</span>
+            <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-3.5 shadow-xs animate-in fade-in duration-200">
+              <div className="w-8 h-8 rounded-xl bg-red-100 text-red-600 flex items-center justify-center text-base shrink-0 mt-0.5">
+                {lockReason ? '🔒' : '⚠️'}
+              </div>
+              <div className="flex-1 space-y-1.5">
+                {lockReason ? (
+                  <>
+                    <div className="font-extrabold text-red-900 text-sm leading-tight">
+                      {error.endsWith('.') ? error : `${error}.`}
+                    </div>
+                    <div className="text-red-800 bg-red-100/70 p-3 rounded-xl border border-red-200/80 leading-relaxed text-xs">
+                      <span className="font-bold text-red-900">Lý do:</span> {lockReason}
+                    </div>
+                    <p className="text-[11px] text-red-600 mt-0.5">
+                      Vui lòng liên hệ Quản trị viên hệ thống để được hỗ trợ mở khóa tài khoản.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-bold block text-red-900">Xác thực không thành công:</span>
+                    <span className="text-red-700 leading-relaxed">{typeof error === 'object' ? error.message : error}</span>
+                  </>
+                )}
               </div>
             </div>
           )}

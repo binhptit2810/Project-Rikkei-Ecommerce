@@ -7,10 +7,13 @@ import { useAuthStore } from '../../store/useAuthStore'
  * Nếu đã đăng nhập, tự động chuyển hướng về /profile.
  */
 export const GuestRoute = ({ children }) => {
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, user } = useAuthStore()
 
   if (isAuthenticated) {
-    return <Navigate to="/profile" replace />
+    if (user?.role === 'ADMIN') {
+      return <Navigate to="/admin/dashboard" replace />
+    }
+    return <Navigate to="/" replace />
   }
 
   return children ? children : <Outlet />

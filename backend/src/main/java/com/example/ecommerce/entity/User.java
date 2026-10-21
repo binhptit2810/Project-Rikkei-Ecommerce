@@ -55,6 +55,14 @@ public class User {
     @Builder.Default
     private Boolean active = true;
 
+    /** Lý do khóa tài khoản nếu active = false. */
+    @Column(name = "lock_reason", length = 500)
+    private String lockReason;
+
+    /** Thời điểm khóa tài khoản nếu active = false. */
+    @Column(name = "locked_at")
+    private LocalDateTime lockedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

@@ -21,12 +21,13 @@ export const useAuthStore = create((set, get) => ({
   isAuthenticated: Boolean(getInitialToken() && getInitialUser()),
   isLoading: false,
   error: null,
+  lockReason: null,
 
   /**
    * Đăng nhập
    */
   login: async (credentials) => {
-    set({ isLoading: true, error: null })
+    set({ isLoading: true, error: null, lockReason: null })
     try {
       const res = await authService.login(credentials)
       const { accessToken, user } = res.data
@@ -40,13 +41,22 @@ export const useAuthStore = create((set, get) => ({
         isAuthenticated: true,
         isLoading: false,
         error: null,
+        lockReason: null,
       })
       return { success: true, user }
     } catch (err) {
+      const errResponse = err.response?.data
       const message =
-        err.response?.data?.message || err.message || 'Đăng nhập không thành công'
-      set({ isLoading: false, error: message })
-      throw new Error(message)
+        errResponse?.message || err.message || 'Đăng nhập không thành công'
+      const reason =
+        errResponse?.data?.reason || errResponse?.data?.lockReason || null
+
+      set({
+        isLoading: false,
+        error: message,
+        lockReason: reason,
+      })
+      throw err
     }
   },
 
@@ -143,11 +153,12 @@ export const useAuthStore = create((set, get) => ({
       accessToken: null,
       isAuthenticated: false,
       error: null,
+      lockReason: null,
       isLoading: false,
     })
   },
 
-  clearError: () => set({ error: null }),
+  clearError: () => set({ error: null, lockReason: null }),
 }))
 
 // Lắng nghe sự kiện token hết hạn từ apiClient interceptor

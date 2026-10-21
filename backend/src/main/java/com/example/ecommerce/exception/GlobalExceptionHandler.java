@@ -10,8 +10,11 @@ import org.springframework.security.authentication.DisabledException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -23,6 +26,14 @@ import java.util.Map;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+    /** Lỗi đường dẫn / endpoint không tồn tại (Spring MVC 6.1+ / Spring Boot 3.3.x) */
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException ex) {
+        log.warn("Resource or endpoint not found: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiResponse.error("Đường dẫn không tồn tại"));
+    }
 
     /** Lỗi nghiệp vụ khi không tìm thấy tài nguyên */
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -53,13 +64,46 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Lỗi tài khoản bị khóa kèm theo lý do cụ thể từ Admin — trả 403 FORBIDDEN.
+     * data: { "reason": "...", "lockReason": "..." }
+     */
+    @ExceptionHandler(LockedAccountException.class)
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleLockedAccount(LockedAccountException ex) {
+        log.warn("Locked account login attempt: reason={}", ex.getReason());
+        Map<String, String> data = new HashMap<>();
+        if (StringUtils.hasText(ex.getReason())) {
+            data.put("reason", ex.getReason());
+            data.put("lockReason", ex.getReason());
+        }
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.<Map<String, String>>builder()
+                        .success(false)
+                        .message("Tài khoản của bạn đã bị khóa.")
+                        .data(data.isEmpty() ? null : data)
+                        .timestamp(LocalDateTime.now())
+                        .build());
+    }
+
+    /**
      * Lỗi tài khoản bị vô hiệu hóa — trả 403 thay vì 401.
      */
     @ExceptionHandler(DisabledException.class)
-    public ResponseEntity<ApiResponse<Void>> handleDisabled(DisabledException ex) {
-        log.warn("Disabled account login attempt");
+    public ResponseEntity<ApiResponse<Map<String, String>>> handleDisabled(DisabledException ex) {
+        log.warn("Disabled account login attempt: {}", ex.getMessage());
+        Map<String, String> data = new HashMap<>();
+        if (StringUtils.hasText(ex.getMessage()) && !ex.getMessage().equalsIgnoreCase("User is disabled")) {
+            data.put("reason", ex.getMessage());
+            data.put("lockReason", ex.getMessage());
+        }
+
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error("Tài khoản đã bị vô hiệu hóa"));
+                .body(ApiResponse.<Map<String, String>>builder()
+                        .success(false)
+                        .message("Tài khoản của bạn đã bị khóa.")
+                        .data(data.isEmpty() ? null : data)
+                        .timestamp(LocalDateTime.now())
+                        .build());
     }
 
     /**

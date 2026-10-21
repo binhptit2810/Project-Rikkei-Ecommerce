@@ -1,6 +1,7 @@
 package com.example.ecommerce.service;
 
 import com.example.ecommerce.dto.request.ChangePasswordRequest;
+import com.example.ecommerce.dto.request.LockUserRequest;
 import com.example.ecommerce.dto.request.UpdateProfileRequest;
 import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.entity.User;
@@ -9,11 +10,15 @@ import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
+import java.time.LocalDateTime;
 
 /**
  * Nghiệp vụ quản lý hồ sơ người dùng.
@@ -47,6 +52,94 @@ public class UserService {
     public UserResponse getCurrentUser(UserDetails userDetails) {
         User user = findUserByDetails(userDetails);
         return UserResponse.fromEntity(user);
+    }
+
+    /**
+     * Lấy danh sách toàn bộ người dùng có phân trang (dành cho Admin).
+     *
+     * @param pageable thông tin phân trang (page, size, sort)
+     * @return Page<UserResponse> danh sách người dùng được convert sang DTO an toàn (không chứa password)
+     */
+    @Transactional(readOnly = true)
+    public Page<UserResponse> getAllUsers(Pageable pageable) {
+        return userRepository.findAll(pageable)
+                .map(UserResponse::fromEntity);
+    }
+
+    /**
+     * Khóa tài khoản người dùng kèm lý do và thời điểm khóa (dành cho Admin).
+     *
+     * @param id               ID người dùng cần khóa
+     * @param request          chứa lý do khóa
+     * @param adminUserDetails thông tin Admin đang thực hiện (từ SecurityContext)
+     * @return UserResponse thông tin tài khoản sau khi khóa
+     * @throws ResourceNotFoundException nếu không tìm thấy người dùng
+     * @throws BusinessException        nếu admin tự khóa chính mình, tài khoản đã bị khóa, hoặc lý do không hợp lệ
+     */
+    @Transactional
+    public UserResponse lockUser(Long id, LockUserRequest request, UserDetails adminUserDetails) {
+        User targetUser = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với ID: " + id));
+
+        // Không cho phép Admin tự khóa tài khoản đang sử dụng
+        if (adminUserDetails != null && targetUser.getEmail().equalsIgnoreCase(adminUserDetails.getUsername())) {
+            throw new BusinessException("Bạn không thể tự khóa tài khoản của chính mình");
+        }
+
+        // Kiểm tra nếu tài khoản đã bị khóa trước đó
+        if (Boolean.FALSE.equals(targetUser.getActive())) {
+            throw new BusinessException("Tài khoản này đã bị khóa từ trước");
+        }
+
+        String reason = (request != null && request.getReason() != null) ? request.getReason().trim() : "";
+        if (!StringUtils.hasText(reason)) {
+            throw new BusinessException("Lý do khóa tài khoản không được để trống");
+        }
+        if (reason.length() > 500) {
+            throw new BusinessException("Lý do khóa tài khoản không được vượt quá 500 ký tự");
+        }
+
+        targetUser.setActive(false);
+        targetUser.setLockReason(reason);
+        targetUser.setLockedAt(LocalDateTime.now());
+
+        targetUser = userRepository.save(targetUser);
+        log.info("Admin [{}] đã khóa tài khoản ID={} ({}), lý do: {}",
+                adminUserDetails != null ? adminUserDetails.getUsername() : "UNKNOWN",
+                targetUser.getId(), targetUser.getEmail(), reason);
+
+        return UserResponse.fromEntity(targetUser);
+    }
+
+    /**
+     * Mở khóa tài khoản người dùng (dành cho Admin).
+     *
+     * @param id               ID người dùng cần mở khóa
+     * @param adminUserDetails thông tin Admin đang thực hiện (từ SecurityContext)
+     * @return UserResponse thông tin tài khoản sau khi mở khóa
+     * @throws ResourceNotFoundException nếu không tìm thấy người dùng
+     * @throws BusinessException        nếu tài khoản đang hoạt động
+     */
+    @Transactional
+    public UserResponse unlockUser(Long id, UserDetails adminUserDetails) {
+        User targetUser = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với ID: " + id));
+
+        // Kiểm tra nếu tài khoản đang hoạt động
+        if (Boolean.TRUE.equals(targetUser.getActive())) {
+            throw new BusinessException("Tài khoản này đang hoạt động bình thường, không cần mở khóa");
+        }
+
+        targetUser.setActive(true);
+        targetUser.setLockReason(null);
+        targetUser.setLockedAt(null);
+
+        targetUser = userRepository.save(targetUser);
+        log.info("Admin [{}] đã mở khóa tài khoản ID={} ({})",
+                adminUserDetails != null ? adminUserDetails.getUsername() : "UNKNOWN",
+                targetUser.getId(), targetUser.getEmail());
+
+        return UserResponse.fromEntity(targetUser);
     }
 
     /**

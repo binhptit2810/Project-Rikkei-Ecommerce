@@ -37,6 +37,8 @@ public class UserResponse {
     private String address;
     private Role role;
     private Boolean active;
+    private String lockReason;
+    private LocalDateTime lockedAt;
     private LocalDateTime createdAt;
 
     /**
@@ -55,6 +57,8 @@ public class UserResponse {
                 .address(user.getAddress())
                 .role(user.getRole())
                 .active(user.getActive())
+                .lockReason(user.getLockReason())
+                .lockedAt(user.getLockedAt())
                 .createdAt(user.getCreatedAt())
                 .build();
     }
