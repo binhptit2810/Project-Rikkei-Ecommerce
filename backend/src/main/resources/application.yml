@@ -25,6 +25,43 @@ spring:
         dialect: org.hibernate.dialect.MySQL8Dialect
         format_sql: true
 
+  # Serialize LocalDateTime thành ISO-8601 string thay vì array số
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
+  # Redis Configuration (cho Refresh Token & Session Management)
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      # Không cấu hình password rỗng (${REDIS_PASSWORD:}) vì sẽ khiến Lettuce gửi lệnh AUTH "" tới Redis không có mật khẩu.
+      # Khi cần xác thực, Spring Boot tự động map biến môi trường SPRING_DATA_REDIS_PASSWORD hoặc khai báo spring.data.redis.password.
+      timeout: 2000ms
+
+# =============================================================================
+# CORS Configuration
+# =============================================================================
+cors:
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://localhost:*}
+
+# =============================================================================
+# JWT & Refresh Token Authentication
+# =============================================================================
+jwt:
+  # Secret phải >= 32 ký tự (256 bit) cho HMAC-SHA256
+  # Trong production: đặt biến môi trường JWT_SECRET
+  secret: ${JWT_SECRET:ecommerce-platform-default-dev-secret-change-this-in-production-2024}
+  # Thời hạn Access Token tính bằng millisecond (mục tiêu: 15 phút = 900000ms)
+  expiration: ${JWT_EXPIRATION:900000}
+  # Thời hạn Refresh Token tính bằng millisecond (mục tiêu: 7 ngày = 604800000ms)
+  refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+  cookie:
+    name: refresh_token
+    path: /api/v1/auth
+    secure: ${JWT_COOKIE_SECURE:false}
+    same-site: ${JWT_COOKIE_SAME_SITE:Lax}
+
 # Actuator (health check)
 management:
   endpoints:

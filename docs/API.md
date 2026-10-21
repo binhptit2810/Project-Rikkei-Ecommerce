@@ -88,21 +88,35 @@ Spring Boot Actuator health endpoint.
 ```json
 {
   "success": true,
-  "message": "Đăng ký thành công",
+  "message": "Đăng ký tài khoản thành công",
   "data": {
-    "token": "eyJhbGci...",
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "tokenType": "Bearer",
-    "userId": 3,
-    "email": "user@example.com",
-    "fullName": "Nguyễn Văn A",
-    "role": "CUSTOMER"
-  }
+    "expiresIn": 86400,
+    "user": {
+      "id": 3,
+      "email": "user@example.com",
+      "fullName": "Nguyễn Văn A",
+      "phone": "0912345678",
+      "address": "123 Đường ABC, TP.HCM",
+      "role": "CUSTOMER",
+      "active": true,
+      "createdAt": "2024-10-15T10:00:00"
+    }
+  },
+  "timestamp": "2024-10-15T10:00:00"
 }
 ```
+*Lưu ý:* `expiresIn` tính bằng **giây** (86400 giây = 24 giờ).
 
-**Lỗi 400** — Email đã tồn tại:
+**Lỗi 400** — Email đã tồn tại hoặc validation lỗi:
 ```json
-{ "success": false, "message": "Email đã được sử dụng: user@example.com" }
+{
+  "success": false,
+  "message": "Email đã được sử dụng: user@example.com",
+  "data": null,
+  "timestamp": "2024-10-15T10:00:00"
+}
 ```
 
 ---
@@ -118,11 +132,48 @@ Spring Boot Actuator health endpoint.
 }
 ```
 
-**Response 200:** _(cùng format với register)_
-
-**Lỗi 401:**
+**Response 200:**
 ```json
-{ "success": false, "message": "Email hoặc mật khẩu không đúng" }
+{
+  "success": true,
+  "message": "Đăng nhập thành công",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "tokenType": "Bearer",
+    "expiresIn": 86400,
+    "user": {
+      "id": 1,
+      "email": "user@example.com",
+      "fullName": "Nguyễn Văn A",
+      "phone": "0912345678",
+      "address": "123 Đường ABC, TP.HCM",
+      "role": "CUSTOMER",
+      "active": true,
+      "createdAt": "2024-10-15T10:00:00"
+    }
+  },
+  "timestamp": "2024-10-15T10:00:00"
+}
+```
+
+**Lỗi 401** — Sai email hoặc mật khẩu:
+```json
+{
+  "success": false,
+  "message": "Email hoặc mật khẩu không đúng",
+  "data": null,
+  "timestamp": "2024-10-15T10:00:00"
+}
+```
+
+**Lỗi 403** — Tài khoản bị vô hiệu hóa (`active = false`):
+```json
+{
+  "success": false,
+  "message": "Tài khoản đã bị vô hiệu hóa",
+  "data": null,
+  "timestamp": "2024-10-15T10:00:00"
+}
 ```
 
 ---
@@ -237,13 +288,87 @@ Danh sách danh mục active. **Không cần xác thực.**
 
 ---
 
-## 👤 Users / Profile (TODO — Cao Chí Thiện)
+## 👤 Users / Profile (Cao Chí Thiện)
 
 | Method | Endpoint | Auth | Mô tả |
 |--------|----------|------|-------|
-| GET | `/api/v1/users/me` | CUSTOMER | Thông tin tài khoản |
-| PUT | `/api/v1/users/me` | CUSTOMER | Cập nhật hồ sơ |
-| PUT | `/api/v1/users/me/password` | CUSTOMER | Đổi mật khẩu |
+| GET | `/api/v1/users/me` | CUSTOMER, ADMIN | Lấy thông tin tài khoản hiện tại |
+| PUT | `/api/v1/users/me` | CUSTOMER, ADMIN | Cập nhật hồ sơ (partial update) |
+| PUT | `/api/v1/users/me/password` | CUSTOMER, ADMIN | Đổi mật khẩu |
+
+### `GET /api/v1/users/me`
+Lấy thông tin tài khoản người dùng đang đăng nhập.
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": null,
+  "data": {
+    "id": 1,
+    "email": "user@example.com",
+    "fullName": "Nguyễn Văn A",
+    "phone": "0912345678",
+    "address": "123 Đường ABC, TP.HCM",
+    "role": "CUSTOMER",
+    "active": true,
+    "createdAt": "2024-10-15T10:00:00"
+  },
+  "timestamp": "2024-10-15T10:00:00"
+}
+```
+
+### `PUT /api/v1/users/me`
+Cập nhật thông tin hồ sơ (chỉ cập nhật trường không null).
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Request:**
+```json
+{
+  "fullName": "Nguyễn Văn B",
+  "phone": "0987654321",
+  "address": "456 Đường XYZ, Hà Nội"
+}
+```
+
+**Response 200:** Cùng format với `GET /api/v1/users/me` kèm message `"Cập nhật hồ sơ thành công"`.
+
+### `PUT /api/v1/users/me/password`
+Đổi mật khẩu người dùng đang đăng nhập.
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Request:**
+```json
+{
+  "currentPassword": "Password@123",
+  "newPassword": "NewPassword@456",
+  "confirmPassword": "NewPassword@456"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Đổi mật khẩu thành công",
+  "data": null,
+  "timestamp": "2024-10-15T10:00:00"
+}
+```
+
+**Lỗi 400:** Mật khẩu cũ sai, hoặc xác nhận mật khẩu mới không khớp, hoặc mật khẩu mới trùng mật khẩu cũ:
+```json
+{
+  "success": false,
+  "message": "Mật khẩu hiện tại không chính xác",
+  "data": null,
+  "timestamp": "2024-10-15T10:00:00"
+}
+```
 
 ---
 
