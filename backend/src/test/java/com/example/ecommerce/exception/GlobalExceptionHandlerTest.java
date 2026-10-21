@@ -176,5 +176,19 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getMessage()).isEqualTo("Đơn hàng không tìm thấy với id: 100");
     }
+
+    @Test
+    @DisplayName("NFR-ERR-02: RedisConnectionFailureException trả về 503 SERVICE_UNAVAILABLE")
+    void handleRedisUnavailable_Returns503() {
+        org.springframework.data.redis.RedisConnectionFailureException ex =
+                new org.springframework.data.redis.RedisConnectionFailureException("Không thể kết nối đến Redis");
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleRedisUnavailable(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getMessage()).isEqualTo("Dịch vụ xác thực tạm thời không khả dụng, vui lòng thử lại sau");
+    }
 }
 

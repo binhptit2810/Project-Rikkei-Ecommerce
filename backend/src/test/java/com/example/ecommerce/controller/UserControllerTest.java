@@ -51,6 +51,9 @@ class UserControllerTest {
     @MockBean
     private UserService userService;
 
+    @MockBean
+    private com.example.ecommerce.service.RefreshTokenService refreshTokenService;
+
     @Test
     @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
     @DisplayName("FR-USER-01: Lấy thông tin cá nhân hiện tại GET /api/v1/users/me thành công trả 200 OK")
@@ -142,7 +145,7 @@ class UserControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.message").value("Đổi mật khẩu thành công"));
+                .andExpect(jsonPath("$.message").value("Đổi mật khẩu thành công. Vui lòng đăng nhập lại."));
     }
 
     @Test

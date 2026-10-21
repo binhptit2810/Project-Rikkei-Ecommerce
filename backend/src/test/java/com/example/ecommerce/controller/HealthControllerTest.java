@@ -33,6 +33,9 @@ class HealthControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private com.example.ecommerce.service.RefreshTokenService refreshTokenService;
+
     @Test
     @DisplayName("Health Check: GET /api/v1/health trả 200 OK với status UP")
     void checkHealth_V1_Returns200() throws Exception {

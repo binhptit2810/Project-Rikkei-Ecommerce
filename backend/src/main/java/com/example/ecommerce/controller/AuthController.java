@@ -5,23 +5,30 @@ import com.example.ecommerce.dto.request.RegisterRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.AuthResponse;
 import com.example.ecommerce.service.AuthService;
+import com.example.ecommerce.util.CookieUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.web.bind.annotation.*;
 
 /**
  * Controller xác thực người dùng.
  *
- * Tất cả endpoint trong controller này là PUBLIC (không cần token).
+ * Tất cả endpoint trong controller này là PUBLIC (không cần Bearer token).
  * Cấu hình mở trong SecurityConfig:
  *   .requestMatchers(POST, "/api/v1/auth/register").permitAll()
  *   .requestMatchers(POST, "/api/v1/auth/login").permitAll()
+ *   .requestMatchers(POST, "/api/v1/auth/refresh").permitAll()
+ *   .requestMatchers(POST, "/api/v1/auth/logout").permitAll()
  *
- * Được sử dụng bởi:
- *   - Frontend: trang đăng ký (/register) và đăng nhập (/login)
- *   - Đỗ Hoàng Anh: tích hợp Auth vào frontend, lưu token vào localStorage/Zustand
+ * Cơ chế bảo mật:
+ *   - Access Token: trả trong response body JSON (Zustand memory store).
+ *   - Refresh Token: truyền qua HttpOnly cookie (không trả trong JSON).
  */
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -30,65 +37,106 @@ public class AuthController {
 
     private final AuthService authService;
 
+    @Value("${jwt.refresh-expiration:604800000}")
+    private long refreshExpirationMs;
+
+    @Value("${jwt.cookie.secure:false}")
+    private boolean cookieSecure;
+
+    @Value("${jwt.cookie.same-site:Lax}")
+    private String cookieSameSite;
+
     /**
      * Đăng ký tài khoản mới.
-     *
      * POST /api/v1/auth/register
-     *
-     * Request body:
-     *   {
-     *     "fullName": "Nguyễn Văn A",
-     *     "email": "user@example.com",
-     *     "password": "Password123",
-     *     "phone": "0912345678",    // tùy chọn
-     *     "address": "123 Đường ABC" // tùy chọn
-     *   }
-     *
-     * Response 201 Created:
-     *   {
-     *     "success": true,
-     *     "message": "Đăng ký tài khoản thành công",
-     *     "data": { "accessToken": "...", "tokenType": "Bearer", "expiresIn": 86400, "user": {...} }
-     *   }
-     *
-     * Response 400: validation lỗi hoặc email đã tồn tại
      */
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(
             @Valid @RequestBody RegisterRequest request) {
 
         AuthResponse response = authService.register(request);
+        HttpHeaders headers = buildCookieHeaders(response.getRefreshToken());
+
         return ResponseEntity.status(HttpStatus.CREATED)
+                .headers(headers)
                 .body(ApiResponse.success("Đăng ký tài khoản thành công", response));
     }
 
     /**
      * Đăng nhập bằng email và mật khẩu.
-     *
      * POST /api/v1/auth/login
-     *
-     * Request body:
-     *   {
-     *     "email": "user@example.com",
-     *     "password": "Password123"
-     *   }
-     *
-     * Response 200 OK:
-     *   {
-     *     "success": true,
-     *     "message": "Đăng nhập thành công",
-     *     "data": { "accessToken": "...", "tokenType": "Bearer", "expiresIn": 86400, "user": {...} }
-     *   }
-     *
-     * Response 400: validation lỗi (email rỗng, format sai)
-     * Response 401: sai email hoặc mật khẩu
-     * Response 403: tài khoản bị vô hiệu hóa
      */
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(
             @Valid @RequestBody LoginRequest request) {
 
         AuthResponse response = authService.login(request);
-        return ResponseEntity.ok(ApiResponse.success("Đăng nhập thành công", response));
+        HttpHeaders headers = buildCookieHeaders(response.getRefreshToken());
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(ApiResponse.success("Đăng nhập thành công", response));
+    }
+
+    /**
+     * Làm mới Access Token thông qua Refresh Token cookie.
+     * POST /api/v1/auth/refresh
+     */
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<AuthResponse>> refresh(
+            @CookieValue(name = CookieUtils.REFRESH_TOKEN_COOKIE_NAME, required = false) String refreshToken) {
+
+        if (refreshToken == null || refreshToken.trim().isEmpty()) {
+            throw new BadCredentialsException("Refresh token không tồn tại trong cookie");
+        }
+
+        AuthResponse response = authService.refreshToken(refreshToken);
+        HttpHeaders headers = buildCookieHeaders(response.getRefreshToken());
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(ApiResponse.success("Làm mới token thành công", response));
+    }
+
+    /**
+     * Đăng xuất: thu hồi phiên trong Redis và xóa cookie trên trình duyệt.
+     * POST /api/v1/auth/logout
+     */
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @CookieValue(name = CookieUtils.REFRESH_TOKEN_COOKIE_NAME, required = false) String refreshToken) {
+
+        if (refreshToken != null && !refreshToken.trim().isEmpty()) {
+            authService.logout(refreshToken);
+        }
+
+        HttpHeaders headers = buildDeleteCookieHeaders();
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(ApiResponse.success("Đăng xuất thành công", null));
+    }
+
+    // ---------- Helper methods ----------
+
+    private HttpHeaders buildCookieHeaders(String refreshToken) {
+        HttpHeaders headers = new HttpHeaders();
+        if (refreshToken != null && !refreshToken.trim().isEmpty()) {
+            ResponseCookie cookie = CookieUtils.createRefreshTokenCookie(
+                    refreshToken,
+                    refreshExpirationMs / 1000,
+                    cookieSecure,
+                    cookieSameSite
+            );
+            headers.add(HttpHeaders.SET_COOKIE, cookie.toString());
+        }
+        return headers;
+    }
+
+    private HttpHeaders buildDeleteCookieHeaders() {
+        HttpHeaders headers = new HttpHeaders();
+        ResponseCookie cookie = CookieUtils.createDeleteRefreshTokenCookie(cookieSecure, cookieSameSite);
+        headers.add(HttpHeaders.SET_COOKIE, cookie.toString());
+        return headers;
     }
 }

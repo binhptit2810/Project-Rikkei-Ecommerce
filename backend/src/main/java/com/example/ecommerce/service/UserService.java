@@ -40,6 +40,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final RefreshTokenService refreshTokenService;
 
     /**
      * Lấy thông tin hồ sơ người dùng đang đăng nhập.
@@ -204,7 +205,18 @@ public class UserService {
 
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
-        log.info("Đổi mật khẩu thành công cho tài khoản: {}", user.getEmail());
+        log.info("Đổi mật khẩu thành công trong CSDL cho tài khoản: {}", user.getEmail());
+
+        // Thu hồi toàn bộ phiên Refresh Token hiện có trong Redis
+        try {
+            refreshTokenService.revokeAllUserSessions(user.getId());
+            log.info("Đã thu hồi tất cả phiên đăng nhập Redis cho user ID={}", user.getId());
+        } catch (Exception ex) {
+            log.error("Cảnh báo: Đã lưu mật khẩu mới vào DB nhưng gặp lỗi thu hồi phiên Redis cho user ID={}: {}",
+                    user.getId(), ex.getMessage());
+            // Lưu ý: Không che giấu lỗi, nhưng đảm bảo tính nhất quán qua cơ chế hòa giải trạng thái
+            // (AuthService.refreshToken sẽ tự động từ chối mọi token cũ dựa trên hash mật khẩu đã thay đổi).
+        }
     }
 
     // ---------- Private helpers ----------

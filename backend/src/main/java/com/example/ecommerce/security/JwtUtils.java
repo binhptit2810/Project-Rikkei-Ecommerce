@@ -17,7 +17,7 @@ import java.util.Date;
  *
  * Cấu hình qua biến môi trường (application.yml):
  *   jwt.secret   — secret >= 32 ký tự (256-bit HMAC-SHA256)
- *   jwt.expiration — thời hạn token (millisecond, mặc định 24h)
+ *   jwt.expiration — thời hạn token (millisecond, mặc định 15 phút = 900000ms)
  *
  * Token payload:
  *   - subject: email của người dùng

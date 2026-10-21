@@ -53,6 +53,9 @@ class AuthServiceTest {
     @Mock
     private JwtUtils jwtUtils;
 
+    @Mock
+    private RefreshTokenService refreshTokenService;
+
     @InjectMocks
     private AuthService authService;
 
@@ -307,6 +310,153 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(loginRequest))
                 .isInstanceOf(BusinessException.class)
                 .hasMessage("Không tìm thấy thông tin người dùng");
+    }
+
+    // =========================================================================
+    // Refresh Token & Logout Tests (BUG-02 Fix & Sequence Verification)
+    // =========================================================================
+
+    @Test
+    @DisplayName("BUG-02 & FR-AUTH-03: Làm mới token thành công khi token metadata hợp lệ, user active và password hash khớp")
+    void refreshToken_Success() {
+        RefreshTokenService.RefreshTokenData tokenData = RefreshTokenService.RefreshTokenData.builder()
+                .userId(1L)
+                .email("testuser@example.com")
+                .role("CUSTOMER")
+                .familyId("fam-123")
+                .status("ACTIVE")
+                .passwordHash(mockUser.getPassword())
+                .build();
+
+        RefreshTokenService.RotationResult rotationResult = new RefreshTokenService.RotationResult(
+                "new-raw-refresh-token",
+                tokenData
+        );
+
+        when(refreshTokenService.getTokenData("valid-raw-refresh-token")).thenReturn(tokenData);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
+        when(refreshTokenService.rotateRefreshToken("valid-raw-refresh-token")).thenReturn(rotationResult);
+        when(jwtUtils.generateToken(any(UserDetails.class))).thenReturn("new-access-token");
+        when(jwtUtils.getExpirationInSeconds()).thenReturn(900L);
+
+        AuthResponse response = authService.refreshToken("valid-raw-refresh-token");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getAccessToken()).isEqualTo("new-access-token");
+        assertThat(response.getTokenType()).isEqualTo("Bearer");
+        assertThat(response.getExpiresIn()).isEqualTo(900L);
+        assertThat(response.getRefreshToken()).isEqualTo("new-raw-refresh-token");
+        assertThat(response.getUser().getEmail()).isEqualTo("testuser@example.com");
+
+        // Xác nhận thứ tự thực thi chính xác: đọc token -> kiểm tra DB -> xoay vòng Redis
+        org.mockito.InOrder inOrder = inOrder(refreshTokenService, userRepository);
+        inOrder.verify(refreshTokenService).getTokenData("valid-raw-refresh-token");
+        inOrder.verify(userRepository).findById(1L);
+        inOrder.verify(refreshTokenService).rotateRefreshToken("valid-raw-refresh-token");
+    }
+
+    @Test
+    @DisplayName("BUG-02: Làm mới token thất bại khi token rỗng -> ném BadCredentialsException không gọi DB/Redis")
+    void refreshToken_BlankToken_ThrowsBadCredentialsException() {
+        assertThatThrownBy(() -> authService.refreshToken("   "))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("Refresh token không hợp lệ hoặc không tồn tại");
+
+        verifyNoInteractions(userRepository);
+        verify(refreshTokenService, never()).rotateRefreshToken(anyString());
+    }
+
+    @Test
+    @DisplayName("BUG-02: User không tồn tại trong DB -> ném BusinessException và KHÔNG xoay vòng token trong Redis")
+    void refreshToken_UserNotFoundInDb_ThrowsBusinessException_DoesNotRotateToken() {
+        RefreshTokenService.RefreshTokenData tokenData = RefreshTokenService.RefreshTokenData.builder()
+                .userId(999L)
+                .build();
+
+        when(refreshTokenService.getTokenData("valid-raw-token")).thenReturn(tokenData);
+        when(userRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.refreshToken("valid-raw-token"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Không tìm thấy thông tin người dùng");
+
+        // Đảm bảo không xoay vòng token khi kiểm tra DB thất bại
+        verify(refreshTokenService, never()).rotateRefreshToken(anyString());
+    }
+
+    @Test
+    @DisplayName("BUG-02: User bị khóa tài khoản -> ném LockedAccountException và KHÔNG xoay vòng token trong Redis")
+    void refreshToken_UserLocked_ThrowsLockedAccountException_DoesNotRotateToken() {
+        mockUser.setActive(false);
+        mockUser.setLockReason("Tài khoản gian lận thẻ");
+
+        RefreshTokenService.RefreshTokenData tokenData = RefreshTokenService.RefreshTokenData.builder()
+                .userId(1L)
+                .passwordHash(mockUser.getPassword())
+                .build();
+
+        when(refreshTokenService.getTokenData("valid-raw-token")).thenReturn(tokenData);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
+
+        assertThatThrownBy(() -> authService.refreshToken("valid-raw-token"))
+                .isInstanceOf(LockedAccountException.class)
+                .satisfies(ex -> {
+                    LockedAccountException lockedEx = (LockedAccountException) ex;
+                    assertThat(lockedEx.getMessage()).isEqualTo("Tài khoản của bạn đã bị khóa.");
+                    assertThat(lockedEx.getReason()).isEqualTo("Tài khoản gian lận thẻ");
+                });
+
+        // Đảm bảo không xoay vòng token khi tài khoản bị khóa
+        verify(refreshTokenService, never()).rotateRefreshToken(anyString());
+    }
+
+    @Test
+    @DisplayName("BUG-02: Mật khẩu đã thay đổi sau khi cấp token -> ném BadCredentialsException và KHÔNG xoay vòng token")
+    void refreshToken_PasswordChangedInDb_ThrowsBadCredentialsException_DoesNotRotateToken() {
+        RefreshTokenService.RefreshTokenData tokenData = RefreshTokenService.RefreshTokenData.builder()
+                .userId(1L)
+                .passwordHash("$2a$12$oldHashedPasswordSnapshot")
+                .build();
+
+        // Password trong DB đã được cập nhật khác với snapshot trong token
+        mockUser.setPassword("$2a$12$newlyChangedPasswordHash");
+
+        when(refreshTokenService.getTokenData("valid-raw-token")).thenReturn(tokenData);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(mockUser));
+
+        assertThatThrownBy(() -> authService.refreshToken("valid-raw-token"))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessageContaining("Mật khẩu tài khoản đã thay đổi. Vui lòng đăng nhập lại.");
+
+        // Đảm bảo không xoay vòng token khi password hash không khớp
+        verify(refreshTokenService, never()).rotateRefreshToken(anyString());
+    }
+
+    @Test
+    @DisplayName("BUG-02: Lỗi truy vấn CSDL (Database timeout/failure) -> ném ngoại lệ và KHÔNG làm mất/xoay token của client")
+    void refreshToken_DatabaseError_ThrowsException_DoesNotRotateToken() {
+        RefreshTokenService.RefreshTokenData tokenData = RefreshTokenService.RefreshTokenData.builder()
+                .userId(1L)
+                .passwordHash(mockUser.getPassword())
+                .build();
+
+        when(refreshTokenService.getTokenData("valid-raw-token")).thenReturn(tokenData);
+        when(userRepository.findById(1L)).thenThrow(new RuntimeException("Database connection timeout"));
+
+        assertThatThrownBy(() -> authService.refreshToken("valid-raw-token"))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessageContaining("Database connection timeout");
+
+        // Đảm bảo token trong Redis không bị xoay mất khi DB gặp sự cố
+        verify(refreshTokenService, never()).rotateRefreshToken(anyString());
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-RT-05: Đăng xuất tài khoản gọi thu hồi Refresh Token trong Redis")
+    void logout_Success() {
+        authService.logout("raw-token-to-logout");
+
+        verify(refreshTokenService).revokeToken("raw-token-to-logout");
     }
 }
 

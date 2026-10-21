@@ -49,6 +49,24 @@ export const authService = {
     const response = await apiClient.put('/users/me/password', data)
     return response.data // ApiResponse<Void>
   },
+
+  /**
+   * Làm mới Access Token bằng cookie HttpOnly.
+   * POST /api/v1/auth/refresh
+   */
+  async refreshToken() {
+    const response = await apiClient.post('/auth/refresh')
+    return response.data // ApiResponse<AuthResponse>
+  },
+
+  /**
+   * Đăng xuất tài khoản (thu hồi phiên trong Redis và xóa cookie).
+   * POST /api/v1/auth/logout
+   */
+  async logout() {
+    const response = await apiClient.post('/auth/logout')
+    return response.data // ApiResponse<Void>
+  },
 }
 
 export default authService

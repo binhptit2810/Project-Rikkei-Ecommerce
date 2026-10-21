@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 
 export const ProfilePage = () => {
+  const navigate = useNavigate()
   const { user, fetchProfile, updateProfile, changePassword, isLoading } = useAuthStore()
 
   const [activeTab, setActiveTab] = useState('profile') // 'profile' | 'password'
@@ -145,11 +147,11 @@ export const ProfilePage = () => {
         newPassword: passwordData.newPassword,
         confirmPassword: passwordData.confirmPassword,
       })
-      setPasswordSuccessMsg(res.message || 'Đổi mật khẩu thành công!')
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
+      navigate('/login', {
+        state: {
+          successMessage:
+            res.message || 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.',
+        },
       })
     } catch (err) {
       setPasswordErrorMsg(err.message || 'Đổi mật khẩu thất bại. Vui lòng kiểm tra lại.')

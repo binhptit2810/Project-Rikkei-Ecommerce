@@ -138,6 +138,20 @@ public class GlobalExceptionHandler {
                         .build());
     }
 
+    /**
+     * Lỗi Redis không khả dụng hoặc truy vấn quá thời gian — trả 503 SERVICE UNAVAILABLE.
+     */
+    @ExceptionHandler({
+            org.springframework.data.redis.RedisConnectionFailureException.class,
+            org.springframework.dao.QueryTimeoutException.class,
+            org.springframework.data.redis.RedisSystemException.class
+    })
+    public ResponseEntity<ApiResponse<Void>> handleRedisUnavailable(Exception ex) {
+        log.error("Redis service unavailable or query timeout: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error("Dịch vụ xác thực tạm thời không khả dụng, vui lòng thử lại sau"));
+    }
+
     /** Lỗi không xác định — ghi log và trả về 500 */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneral(Exception ex) {

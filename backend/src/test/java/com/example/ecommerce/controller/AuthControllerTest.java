@@ -52,6 +52,9 @@ class AuthControllerTest {
     @MockBean
     private AuthService authService;
 
+    @MockBean
+    private com.example.ecommerce.service.RefreshTokenService refreshTokenService;
+
     @Test
     @DisplayName("FR-AUTH-03: Đăng ký tài khoản với dữ liệu hợp lệ trả 201 CREATED")
     void register_ValidRequest_Returns201AndToken() throws Exception {

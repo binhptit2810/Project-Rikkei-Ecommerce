@@ -107,6 +107,8 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/**").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/logout").permitAll()
                 // GET sản phẩm và danh mục: khách vãng lai được xem
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()

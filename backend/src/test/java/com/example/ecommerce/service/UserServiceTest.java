@@ -47,6 +47,9 @@ class UserServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
 
+    @Mock
+    private RefreshTokenService refreshTokenService;
+
     @InjectMocks
     private UserService userService;
 
@@ -306,6 +309,7 @@ class UserServiceTest {
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
         assertThat(captor.getValue().getPassword()).isEqualTo("$2a$12$hashedNewPassword");
+        verify(refreshTokenService).revokeAllUserSessions(customerUser.getId());
     }
 
     @Test

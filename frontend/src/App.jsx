@@ -1,5 +1,6 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { useAuthStore } from './store/useAuthStore'
 import CustomerLayout from './components/common/CustomerLayout'
 import AdminLayout from './components/admin/AdminLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
@@ -15,6 +16,27 @@ import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
 
 function App() {
+  const { initAuth, isInitializing } = useAuthStore()
+  const initRef = useRef(false)
+
+  // Khôi phục phiên làm việc khi ứng dụng khởi chạy / reload trang (App Bootstrapping)
+  useEffect(() => {
+    if (!initRef.current) {
+      initRef.current = true
+      initAuth()
+    }
+  }, [initAuth])
+
+  // Hiển thị màn hình chờ toàn trang khi đang kiểm tra và làm mới token trong memory
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50">
+        <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mb-3"></div>
+        <p className="text-gray-500 font-medium text-sm">Đang khôi phục phiên đăng nhập...</p>
+      </div>
+    )
+  }
+
   return (
     <BrowserRouter>
       <Routes>

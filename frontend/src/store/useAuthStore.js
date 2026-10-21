@@ -1,30 +1,51 @@
 import { create } from 'zustand'
 import authService from '../services/authService'
-
-// Helper lấy dữ liệu lưu trữ từ localStorage
-const getInitialUser = () => {
-  try {
-    const raw = localStorage.getItem('user_info')
-    return raw ? JSON.parse(raw) : null
-  } catch (e) {
-    return null
-  }
-}
-
-const getInitialToken = () => {
-  return localStorage.getItem('access_token') || null
-}
+import { setInMemoryToken } from '../services/apiClient'
 
 export const useAuthStore = create((set, get) => ({
-  user: getInitialUser(),
-  accessToken: getInitialToken(),
-  isAuthenticated: Boolean(getInitialToken() && getInitialUser()),
+  user: null,
+  accessToken: null,
+  isAuthenticated: false,
+  isInitializing: true, // Cờ khởi tạo ứng dụng (khôi phục phiên sau khi F5/reload)
   isLoading: false,
   error: null,
   lockReason: null,
 
   /**
-   * Đăng nhập
+   * Khởi tạo và khôi phục phiên người dùng khi ứng dụng khởi chạy / reload trang (App Bootstrapping).
+   * Gọi POST /api/v1/auth/refresh để lấy lại Access Token vào memory thông qua cookie HttpOnly.
+   */
+  initAuth: async () => {
+    set({ isInitializing: true, error: null })
+    try {
+      const res = await authService.refreshToken()
+      const { accessToken, user } = res.data
+
+      setInMemoryToken(accessToken)
+
+      set({
+        user,
+        accessToken,
+        isAuthenticated: true,
+        isInitializing: false,
+        error: null,
+      })
+    } catch (err) {
+      // Nếu không có cookie hoặc token hết hạn, đưa về trạng thái khách vãng lai
+      setInMemoryToken(null)
+      set({
+        user: null,
+        accessToken: null,
+        isAuthenticated: false,
+        isInitializing: false,
+        error: null,
+      })
+    }
+  },
+
+  /**
+   * Đăng nhập bằng email & mật khẩu.
+   * Access Token được lưu thuần in-memory (không lưu localStorage).
    */
   login: async (credentials) => {
     set({ isLoading: true, error: null, lockReason: null })
@@ -32,8 +53,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await authService.login(credentials)
       const { accessToken, user } = res.data
 
-      localStorage.setItem('access_token', accessToken)
-      localStorage.setItem('user_info', JSON.stringify(user))
+      setInMemoryToken(accessToken)
 
       set({
         user,
@@ -61,7 +81,7 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Đăng ký tài khoản mới (tự động đăng nhập sau khi đăng ký thành công)
+   * Đăng ký tài khoản mới.
    */
   register: async (formData) => {
     set({ isLoading: true, error: null })
@@ -69,8 +89,7 @@ export const useAuthStore = create((set, get) => ({
       const res = await authService.register(formData)
       const { accessToken, user } = res.data
 
-      localStorage.setItem('access_token', accessToken)
-      localStorage.setItem('user_info', JSON.stringify(user))
+      setInMemoryToken(accessToken)
 
       set({
         user,
@@ -89,14 +108,13 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Lấy thông tin hồ sơ mới nhất từ backend
+   * Lấy thông tin hồ sơ mới nhất từ backend.
    */
   fetchProfile: async () => {
     if (!get().accessToken) return
     try {
       const res = await authService.getCurrentUser()
       const user = res.data
-      localStorage.setItem('user_info', JSON.stringify(user))
       set({ user, isAuthenticated: true })
       return user
     } catch (err) {
@@ -107,14 +125,13 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Cập nhật thông tin hồ sơ (fullName, phone, address)
+   * Cập nhật thông tin hồ sơ (fullName, phone, address).
    */
   updateProfile: async (updateData) => {
     set({ isLoading: true, error: null })
     try {
       const res = await authService.updateProfile(updateData)
       const updatedUser = res.data
-      localStorage.setItem('user_info', JSON.stringify(updatedUser))
       set({ user: updatedUser, isLoading: false, error: null })
       return { success: true, message: res.message, user: updatedUser }
     } catch (err) {
@@ -126,14 +143,20 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Đổi mật khẩu
+   * Đổi mật khẩu: khi thành công, thu hồi tất cả phiên và yêu cầu đăng nhập lại.
    */
   changePassword: async (passwordData) => {
     set({ isLoading: true, error: null })
     try {
       const res = await authService.changePassword(passwordData)
+      // Thu hồi phiên local ngay lập tức
+      get().logout()
       set({ isLoading: false, error: null })
-      return { success: true, message: res.message }
+      return {
+        success: true,
+        message:
+          res.message || 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.',
+      }
     } catch (err) {
       const message =
         err.response?.data?.message || err.message || 'Đổi mật khẩu thất bại'
@@ -143,11 +166,10 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Đăng xuất
+   * Đăng xuất tài khoản: gọi API thu hồi phiên Redis và xóa cookie trên client.
    */
-  logout: () => {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('user_info')
+  logout: async () => {
+    setInMemoryToken(null)
     set({
       user: null,
       accessToken: null,
@@ -156,6 +178,12 @@ export const useAuthStore = create((set, get) => ({
       lockReason: null,
       isLoading: false,
     })
+
+    try {
+      await authService.logout()
+    } catch (e) {
+      // Bỏ qua lỗi mạng khi logout, vì client memory đã xóa sạch và cookie được backend xóa
+    }
   },
 
   clearError: () => set({ error: null, lockReason: null }),
@@ -164,6 +192,23 @@ export const useAuthStore = create((set, get) => ({
 // Lắng nghe sự kiện token hết hạn từ apiClient interceptor
 if (typeof window !== 'undefined') {
   window.addEventListener('auth:expired', () => {
-    useAuthStore.getState().logout()
+    setInMemoryToken(null)
+    useAuthStore.setState({
+      user: null,
+      accessToken: null,
+      isAuthenticated: false,
+    })
+  })
+
+  // Lắng nghe sự kiện refresh thành công từ single-flight queue
+  window.addEventListener('auth:refreshed', (event) => {
+    const authData = event.detail
+    if (authData?.accessToken) {
+      useAuthStore.setState((state) => ({
+        accessToken: authData.accessToken,
+        user: authData.user || state.user,
+        isAuthenticated: true,
+      }))
+    }
   })
 }

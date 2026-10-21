@@ -94,6 +94,14 @@ export const LoginPage = () => {
             </p>
           </div>
 
+          {/* Success Banner */}
+          {location.state?.successMessage && (
+            <div className="mb-6 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-3 shadow-xs animate-in fade-in duration-200">
+              <span className="text-base">✅</span>
+              <span className="font-semibold">{location.state.successMessage}</span>
+            </div>
+          )}
+
           {/* Backend Error Banner */}
           {error && (
             <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-3.5 shadow-xs animate-in fade-in duration-200">

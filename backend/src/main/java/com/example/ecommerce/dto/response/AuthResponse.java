@@ -1,9 +1,11 @@
 package com.example.ecommerce.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 /**
  * Response body cho POST /api/v1/auth/register và POST /api/v1/auth/login.
@@ -45,4 +47,13 @@ public class AuthResponse {
 
     /** Thông tin người dùng đã lọc trường nhạy cảm. */
     private UserResponse user;
+
+    /**
+     * Refresh Token thô (chỉ dùng nội bộ để Controller đặt cookie HttpOnly).
+     * @JsonIgnore đảm bảo giá trị này TUYỆT ĐỐI không bị serialize ra JSON response.
+     * @ToString.Exclude đảm bảo token không bị lộ qua AuthResponse.toString() hoặc logging.
+     */
+    @JsonIgnore
+    @ToString.Exclude
+    private String refreshToken;
 }

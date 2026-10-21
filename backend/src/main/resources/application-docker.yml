@@ -13,6 +13,13 @@ spring:
       ddl-auto: update
     show-sql: false
 
+  data:
+    redis:
+      host: ${REDIS_HOST:redis}
+      port: ${REDIS_PORT:6379}
+      # Không cấu hình password rỗng (${REDIS_PASSWORD:}) để tránh Lettuce gửi lệnh AUTH "" trong Docker.
+      # Khi cần xác thực trong Docker, đặt biến môi trường SPRING_DATA_REDIS_PASSWORD trong compose/env.
+
 logging:
   level:
     com.example.ecommerce: INFO

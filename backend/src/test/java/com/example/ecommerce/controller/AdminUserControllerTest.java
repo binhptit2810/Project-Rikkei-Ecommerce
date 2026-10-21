@@ -56,6 +56,9 @@ class AdminUserControllerTest {
     @MockBean
     private UserService userService;
 
+    @MockBean
+    private com.example.ecommerce.service.RefreshTokenService refreshTokenService;
+
     @Test
     @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
     @DisplayName("NFR-SEC-22 & FR-ADMIN-04: Admin truy cập GET /api/v1/admin/users thành công trả 200 OK")

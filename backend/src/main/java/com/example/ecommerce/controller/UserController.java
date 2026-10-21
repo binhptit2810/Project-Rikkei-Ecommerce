@@ -5,8 +5,12 @@ import com.example.ecommerce.dto.request.UpdateProfileRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.service.UserService;
+import com.example.ecommerce.util.CookieUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -28,6 +32,12 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
 
     private final UserService userService;
+
+    @Value("${jwt.cookie.secure:false}")
+    private boolean cookieSecure;
+
+    @Value("${jwt.cookie.same-site:Lax}")
+    private String cookieSameSite;
 
     /**
      * Lấy thông tin hồ sơ người dùng đang đăng nhập.
@@ -117,6 +127,11 @@ public class UserController {
             @Valid @RequestBody ChangePasswordRequest request) {
 
         userService.changePassword(userDetails, request);
-        return ResponseEntity.ok(ApiResponse.success("Đổi mật khẩu thành công", null));
+
+        ResponseCookie deleteCookie = CookieUtils.createDeleteRefreshTokenCookie(cookieSecure, cookieSameSite);
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, deleteCookie.toString())
+                .body(ApiResponse.success("Đổi mật khẩu thành công. Vui lòng đăng nhập lại.", null));
     }
 }
