@@ -7,6 +7,8 @@ setlocal
 
 set APP_NAME=Gradle
 set APP_BASE_NAME=%~n0
+set APP_HOME=%~dp0
+if "%APP_HOME%"=="" set APP_HOME=.
 set DEFAULT_JVM_OPTS="-Xmx64m" "-Xms64m"
 
 @rem Find java.exe
