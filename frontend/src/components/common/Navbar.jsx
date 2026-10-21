@@ -47,6 +47,17 @@ export const Navbar = () => {
             Trang chủ
           </Link>
 
+          <Link
+            to="/products"
+            className={`text-sm font-medium transition-colors ${
+              isActive('/products')
+                ? 'text-orange-600 font-semibold'
+                : 'text-slate-600 hover:text-orange-600'
+            }`}
+          >
+            Sản phẩm
+          </Link>
+
           {isAuthenticated && (
             <Link
               to="/profile"
@@ -147,6 +158,13 @@ export const Navbar = () => {
             className="block py-2 text-sm font-medium text-slate-700 hover:text-orange-600"
           >
             Trang chủ
+          </Link>
+          <Link
+            to="/products"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block py-2 text-sm font-medium text-slate-700 hover:text-orange-600"
+          >
+            Sản phẩm
           </Link>
           {isAuthenticated && (
             <Link

@@ -47,36 +47,36 @@ INSERT INTO users (email, password, full_name, phone, address, role, active) VAL
 -- =============================================================================
 -- Danh mục sản phẩm mẫu
 -- =============================================================================
-INSERT INTO categories (name, description, active) VALUES
-('Thời trang',  'Áo, quần, giày dép và phụ kiện thời trang', TRUE),
-('Điện tử',     'Điện thoại, máy tính, tai nghe và thiết bị điện tử', TRUE),
-('Gia dụng',    'Đồ dùng nhà bếp, nội thất và thiết bị gia đình', TRUE),
-('Sách',        'Sách giáo khoa, tiểu thuyết, kỹ năng sống', TRUE),
-('Thể thao',    'Dụng cụ thể thao, đồ tập gym và outdoor', TRUE);
+INSERT INTO categories (name, description, image_url, active) VALUES
+('Thời trang',  'Áo, quần, giày dép và phụ kiện thời trang', 'https://images.unsplash.com/photo-1445205170230-053b83016050?w=600&auto=format&fit=crop&q=80', TRUE),
+('Điện tử',     'Điện thoại, máy tính, tai nghe và thiết bị điện tử', 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=600&auto=format&fit=crop&q=80', TRUE),
+('Gia dụng',    'Đồ dùng nhà bếp, nội thất và thiết bị gia đình', 'https://images.unsplash.com/photo-1556911220-e15b29be8c8f?w=600&auto=format&fit=crop&q=80', TRUE),
+('Sách',        'Sách giáo khoa, tiểu thuyết, kỹ năng sống', 'https://images.unsplash.com/photo-1512820790803-83ca734da794?w=600&auto=format&fit=crop&q=80', TRUE),
+('Thể thao',    'Dụng cụ thể thao, đồ tập gym và outdoor', 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?w=600&auto=format&fit=crop&q=80', TRUE);
 
 -- =============================================================================
 -- Sản phẩm mẫu
 -- =============================================================================
-INSERT INTO products (name, description, price, category_id, stock_quantity, active) VALUES
+INSERT INTO products (name, description, price, image_url, category_id, stock_quantity, active) VALUES
 -- Thời trang (category_id = 1)
-('Áo thun nam basic Cotton', 'Áo thun cotton 100%, thoáng mát, dễ phối đồ. Có nhiều màu sắc.', 199000, 1, 50, TRUE),
-('Quần jean nam slim fit', 'Quần jean co giãn nhẹ, dáng slim fit hiện đại, phù hợp đi làm và đi chơi.', 450000, 1, 30, TRUE),
-('Áo khoác hoodie nữ', 'Hoodie lót bông ấm, túi chuột, phù hợp mùa lạnh.', 350000, 1, 25, TRUE),
-('Giày thể thao nam', 'Giày thể thao đế cao su chống trơn, đế EVA êm chân, phù hợp chạy bộ.', 850000, 1, 20, TRUE),
+('Áo thun nam basic Cotton', 'Áo thun cotton 100%, thoáng mát, dễ phối đồ. Có nhiều màu sắc đa dạng.', 199000, 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=600&auto=format&fit=crop&q=80', 1, 50, TRUE),
+('Quần jean nam slim fit', 'Quần jean co giãn nhẹ, dáng slim fit hiện đại, phù hợp đi làm và đi chơi.', 450000, 'https://images.unsplash.com/photo-1542272604-780c96856592?w=600&auto=format&fit=crop&q=80', 1, 30, TRUE),
+('Áo khoác hoodie nữ', 'Hoodie lót bông ấm áp, có mũ trùm và túi chuột, phù hợp mùa thu đông.', 350000, 'https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=600&auto=format&fit=crop&q=80', 1, 25, TRUE),
+('Giày thể thao nam', 'Giày thể thao đế cao su chống trơn trượt, đệm EVA siêu êm chân, phù hợp chạy bộ và tập gym.', 850000, 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=80', 1, 20, TRUE),
 -- Điện tử (category_id = 2)
-('Tai nghe Bluetooth không dây', 'Tai nghe over-ear, âm thanh Hi-Fi, chống ồn chủ động, pin 30 giờ.', 1200000, 2, 15, TRUE),
-('Bàn phím cơ gaming TKL', 'Switch blue, đèn LED RGB, layout 87 phím, cổng USB-C.', 1500000, 2, 8, TRUE),
-('Chuột gaming wireless', 'Chuột không dây 4000 DPI, pin 70 giờ, trọng lượng nhẹ.', 750000, 2, 12, TRUE),
-('Webcam 1080p Full HD', 'Webcam tích hợp micro chống ồn, phù hợp học online và họp video.', 550000, 2, 20, TRUE),
+('Tai nghe Bluetooth không dây', 'Tai nghe over-ear, âm thanh Hi-Fi sống động, chống ồn chủ động ANC, pin trâu 30 giờ.', 1200000, 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=600&auto=format&fit=crop&q=80', 2, 15, TRUE),
+('Bàn phím cơ gaming TKL', 'Switch cơ quang học nhạy bén, đèn nền LED RGB tùy biến, layout 87 phím nhỏ gọn, kết nối Type-C.', 1500000, 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=600&auto=format&fit=crop&q=80', 2, 8, TRUE),
+('Chuột gaming wireless', 'Cảm biến quang học 16000 DPI, kết nối không dây siêu tốc 2.4GHz, trọng lượng siêu nhẹ 65g.', 750000, 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=600&auto=format&fit=crop&q=80', 2, 12, TRUE),
+('Webcam 1080p Full HD', 'Webcam độ phân giải Full HD 1080p 60fps, micro kép lọc tạp âm, ống kính tự động lấy nét.', 550000, 'https://images.unsplash.com/photo-1588508065123-287b28e013da?w=600&auto=format&fit=crop&q=80', 2, 20, TRUE),
 -- Gia dụng (category_id = 3)
-('Bình nước giữ nhiệt 500ml', 'Thân thép không gỉ 304, giữ nóng 12h, giữ lạnh 24h.', 350000, 3, 40, TRUE),
-('Nồi cơm điện 1.8L', 'Công suất 500W, lòng nồi phủ chống dính 5 lớp, hẹn giờ nấu.', 780000, 3, 18, TRUE),
+('Bình nước giữ nhiệt 500ml', 'Inox 304 cao cấp an toàn sức khỏe, cách nhiệt chân không 2 lớp, giữ nóng 12h, giữ lạnh 24h.', 350000, 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=600&auto=format&fit=crop&q=80', 3, 40, TRUE),
+('Nồi cơm điện 1.8L', 'Công suất 700W nấu nhanh chín đều, lòng nồi phủ men chống dính siêu bền, nhiều chế độ nấu tự động.', 780000, 'https://images.unsplash.com/photo-1544233726-9f1d2b27be8b?w=600&auto=format&fit=crop&q=80', 3, 18, TRUE),
 -- Sách (category_id = 4)
-('Clean Code - Robert C. Martin', 'Sách kinh điển về viết code sạch, dễ đọc và bảo trì. Bản dịch tiếng Việt.', 180000, 4, 35, TRUE),
-('Lập trình Spring Boot 3 từ A đến Z', 'Hướng dẫn xây dựng REST API với Spring Boot 3 và Java 17+, kèm bài tập.', 250000, 4, 22, TRUE),
+('Clean Code - Robert C. Martin', 'Sách kinh điển về nghệ thuật viết mã sạch, dễ đọc và dễ bảo trì cho lập trình viên chuyên nghiệp.', 180000, 'https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=600&auto=format&fit=crop&q=80', 4, 35, TRUE),
+('Lập trình Spring Boot 3 từ A đến Z', 'Giáo trình toàn diện về xây dựng kiến trúc Microservices và RESTful API với Spring Boot 3, Java 21.', 250000, 'https://images.unsplash.com/photo-1532012164546-f432f2e3edd4?w=600&auto=format&fit=crop&q=80', 4, 22, TRUE),
 -- Thể thao (category_id = 5)
-('Bộ tạ tay 2kg x 2 cái', 'Tạ tay bọc cao su, tay cầm chống trơn, phù hợp tập gym tại nhà.', 290000, 5, 0, TRUE),  -- Hết hàng
-('Thảm yoga TPE 6mm', 'Thảm yoga chống trơn, dày 6mm, kích thước 183x61cm, kèm túi đựng.', 380000, 5, 15, TRUE);
+('Bộ tạ tay 2kg x 2 cái', 'Tạ tay cao cấp bọc cao su chống trầy xước sàn nhà, tay cầm vân kim cương chống trơn hiệu quả.', 290000, 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?w=600&auto=format&fit=crop&q=80', 5, 0, TRUE),  -- Hết hàng
+('Thảm yoga TPE 6mm', 'Chất liệu TPE nguyên sinh thân thiện môi trường, chống trơn trượt 2 mặt, êm ái bảo vệ khớp gối.', 380000, 'https://images.unsplash.com/photo-1601925260368-ae2f83cf8b7f?w=600&auto=format&fit=crop&q=80', 5, 15, TRUE);
 
 -- =============================================================================
 -- Lịch sử tồn kho ban đầu (INITIAL_STOCK) cho mỗi sản phẩm

@@ -65,10 +65,17 @@ export const HomePage = () => {
           </p>
 
           <div className="flex flex-wrap gap-3 items-center">
+            <Link
+              to="/products"
+              className="bg-white text-orange-600 font-bold px-6 py-3 rounded-xl shadow-md hover:bg-orange-50 active:scale-95 transition-all text-sm inline-flex items-center gap-2"
+            >
+              <span>🛍️</span> Khám phá sản phẩm
+            </Link>
+
             {isAuthenticated ? (
               <Link
                 to="/profile"
-                className="bg-white text-orange-600 font-bold px-6 py-3 rounded-xl shadow-md hover:bg-orange-50 active:scale-95 transition-all text-sm inline-flex items-center gap-2"
+                className="bg-orange-700/60 hover:bg-orange-700/80 text-white font-semibold px-6 py-3 rounded-xl border border-white/20 backdrop-blur-sm active:scale-95 transition-all text-sm inline-flex items-center gap-2"
               >
                 <span>👤</span> Xem hồ sơ của bạn
               </Link>
@@ -76,15 +83,15 @@ export const HomePage = () => {
               <>
                 <Link
                   to="/login"
-                  className="bg-white text-orange-600 font-bold px-6 py-3 rounded-xl shadow-md hover:bg-orange-50 active:scale-95 transition-all text-sm inline-flex items-center gap-2"
+                  className="bg-orange-700/60 hover:bg-orange-700/80 text-white font-semibold px-6 py-3 rounded-xl border border-white/20 backdrop-blur-sm active:scale-95 transition-all text-sm inline-flex items-center gap-2"
                 >
-                  <span>🔐</span> Đăng nhập ngay
+                  <span>🔐</span> Đăng nhập
                 </Link>
                 <Link
                   to="/register"
-                  className="bg-orange-700/60 hover:bg-orange-700/80 text-white font-semibold px-6 py-3 rounded-xl border border-white/20 backdrop-blur-sm active:scale-95 transition-all text-sm"
+                  className="bg-black/20 hover:bg-black/30 text-white font-semibold px-6 py-3 rounded-xl border border-white/20 backdrop-blur-sm active:scale-95 transition-all text-sm"
                 >
-                  Tạo tài khoản mới
+                  Đăng ký
                 </Link>
               </>
             )}
