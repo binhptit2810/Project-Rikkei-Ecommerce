@@ -68,19 +68,53 @@ export const CheckoutPage = () => {
     e.preventDefault()
 
     if (!formData.recipientName.trim()) {
-      setErrorMessage('Vui lòng nhập họ tên người nhận')
+      setErrorMessage('Vui lòng nhập họ tên người nhận hàng')
+      return
+    }
+
+    if (formData.recipientName.trim().length > 100) {
+      setErrorMessage('Họ tên người nhận không được vượt quá 100 ký tự')
       return
     }
 
     const phoneRegex = /^(0|\+84)[0-9]{9}$/
+    if (!formData.recipientPhone.trim()) {
+      setErrorMessage('Vui lòng nhập số điện thoại người nhận hàng')
+      return
+    }
+
     if (!phoneRegex.test(formData.recipientPhone.trim())) {
-      setErrorMessage('Số điện thoại không hợp lệ (yêu cầu 10 chữ số, ví dụ: 0912345678)')
+      setErrorMessage('Số điện thoại không hợp lệ (yêu cầu 10 chữ số, ví dụ: 0912345678 hoặc +84912345678)')
       return
     }
 
     if (!formData.shippingAddress.trim()) {
       setErrorMessage('Vui lòng nhập địa chỉ nhận hàng chi tiết')
       return
+    }
+
+    if (formData.shippingAddress.trim().length < 5) {
+      setErrorMessage('Địa chỉ nhận hàng quá ngắn, vui lòng nhập chi tiết số nhà, tên đường, phường/xã')
+      return
+    }
+
+    if (!formData.paymentMethod) {
+      setErrorMessage('Vui lòng chọn phương thức thanh toán (COD hoặc SIMULATED)')
+      return
+    }
+
+    // Validate tồn kho: 1 <= quantity <= stockQuantity
+    for (const item of items) {
+      if (!item.quantity || item.quantity < 1) {
+        setErrorMessage(`Số lượng đặt của sản phẩm "${item.name}" không hợp lệ (phải >= 1)`)
+        return
+      }
+      if (item.stockQuantity !== undefined && item.stockQuantity !== null && item.quantity > item.stockQuantity) {
+        setErrorMessage(
+          `Sản phẩm "${item.name}" chỉ còn ${item.stockQuantity} món trong kho (bạn đang chọn ${item.quantity}). Vui lòng điều chỉnh lại.`
+        )
+        return
+      }
     }
 
     setIsSubmitting(true)
