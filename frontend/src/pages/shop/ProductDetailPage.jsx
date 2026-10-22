@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import productService from '../../services/productService'
+import { useCartStore } from '../../store/useCartStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 
 export const ProductDetailPage = () => {
   const { id } = useParams()
   const navigate = useNavigate()
+  const addToCart = useCartStore((state) => state.addToCart)
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -41,10 +43,11 @@ export const ProductDetailPage = () => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0)
   }
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (!product || product.stockQuantity <= 0) return
+    await addToCart(product, quantity)
     setCartNotice(`Đã thêm ${quantity} "${product.name}" vào giỏ hàng!`)
-    setTimeout(() => setCartNotice(null), 4000)
+    setTimeout(() => setCartNotice(null), 5000)
   }
 
   if (loading) {
@@ -103,14 +106,20 @@ export const ProductDetailPage = () => {
 
       {/* Cart Feedback Notification */}
       {cartNotice && (
-        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center justify-between text-sm shadow-sm animate-fade-in">
+        <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-sm shadow-sm animate-fade-in">
           <div className="flex items-center gap-2.5">
             <span className="text-lg">✅</span>
             <span>{cartNotice}</span>
+            <Link
+              to="/cart"
+              className="ml-2 font-bold text-orange-600 hover:text-orange-700 underline inline-flex items-center gap-1"
+            >
+              Xem giỏ hàng &rarr;
+            </Link>
           </div>
           <button
             onClick={() => setCartNotice(null)}
-            className="text-emerald-600 hover:text-emerald-900 font-bold text-xs"
+            className="text-emerald-600 hover:text-emerald-900 font-bold text-xs cursor-pointer px-2 py-1 rounded hover:bg-emerald-100"
           >
             Đóng
           </button>

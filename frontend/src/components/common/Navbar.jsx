@@ -1,9 +1,11 @@
 import React, { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
+import { useCartStore } from '../../store/useCartStore'
 
 export const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuthStore()
+  const totalCartCount = useCartStore((state) => state.getTotalCount())
   const navigate = useNavigate()
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -72,8 +74,28 @@ export const Navbar = () => {
           )}
         </nav>
 
-        {/* User Auth Section */}
+        {/* Cart & User Auth Section */}
         <div className="hidden md:flex items-center gap-3">
+          {/* Cart Icon Button */}
+          <Link
+            to="/cart"
+            className="relative p-2 text-slate-700 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-colors flex items-center"
+            title="Xem giỏ hàng"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+              />
+            </svg>
+            {totalCartCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-orange-600 text-white font-bold text-[11px] rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center border-2 border-white shadow-sm">
+                {totalCartCount > 99 ? '99+' : totalCartCount}
+              </span>
+            )}
+          </Link>
           {isAuthenticated && user ? (
             <div className="flex items-center gap-3 pl-3 border-l border-slate-200">
               <Link
@@ -131,8 +153,28 @@ export const Navbar = () => {
           )}
         </div>
 
-        {/* Mobile menu button */}
-        <div className="md:hidden flex items-center">
+        {/* Mobile cart & menu button */}
+        <div className="md:hidden flex items-center gap-1">
+          <Link
+            to="/cart"
+            className="relative p-2 text-slate-700 hover:text-orange-600 rounded-lg"
+            aria-label="Giỏ hàng"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z"
+              />
+            </svg>
+            {totalCartCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-orange-600 text-white font-bold text-[10px] rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center border-2 border-white">
+                {totalCartCount > 99 ? '99+' : totalCartCount}
+              </span>
+            )}
+          </Link>
+
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100 focus:outline-none"
@@ -165,6 +207,18 @@ export const Navbar = () => {
             className="block py-2 text-sm font-medium text-slate-700 hover:text-orange-600"
           >
             Sản phẩm
+          </Link>
+          <Link
+            to="/cart"
+            onClick={() => setMobileMenuOpen(false)}
+            className="flex items-center justify-between py-2 text-sm font-medium text-slate-700 hover:text-orange-600"
+          >
+            <span>Giỏ hàng</span>
+            {totalCartCount > 0 && (
+              <span className="bg-orange-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                {totalCartCount}
+              </span>
+            )}
           </Link>
           {isAuthenticated && (
             <Link
