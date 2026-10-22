@@ -247,4 +247,99 @@ class OrderServiceTest {
 
         verify(inventoryService, never()).restoreStockForOrder(any());
     }
+
+    @Test
+    @DisplayName("Cập nhật trạng thái tuần tự PENDING sang CONFIRMED - Thành công")
+    void updateOrderStatus_PendingToConfirmed_Success() {
+        Order order = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261022-1001")
+                .orderStatus(OrderStatus.PENDING)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse response = orderService.updateOrderStatus(1L, OrderStatus.CONFIRMED);
+
+        assertThat(response.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    @DisplayName("Cập nhật trạng thái nhảy bước PENDING sang SHIPPING - Ném BusinessException")
+    void updateOrderStatus_ThrowsException_WhenSkippingState() {
+        Order order = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261022-1001")
+                .orderStatus(OrderStatus.PENDING)
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(1L, OrderStatus.SHIPPING))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Không thể chuyển trạng thái đơn hàng");
+    }
+
+    @Test
+    @DisplayName("Cập nhật trạng thái ngược SHIPPING sang PROCESSING - Ném BusinessException")
+    void updateOrderStatus_ThrowsException_WhenReverseState() {
+        Order order = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261022-1001")
+                .orderStatus(OrderStatus.SHIPPING)
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(1L, OrderStatus.PROCESSING))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Không thể chuyển trạng thái đơn hàng");
+    }
+
+    @Test
+    @DisplayName("Cập nhật trạng thái đơn COMPLETED - Ném BusinessException")
+    void updateOrderStatus_ThrowsException_WhenAlreadyCompleted() {
+        Order order = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261022-1001")
+                .orderStatus(OrderStatus.COMPLETED)
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(1L, OrderStatus.CANCELLED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Đơn hàng đã hoàn thành");
+    }
+
+    @Test
+    @DisplayName("Cập nhật trạng thái đơn COD từ SHIPPING sang COMPLETED - Tự động cập nhật Payment sang PAID")
+    void updateOrderStatus_ShippingToCompleted_UpdatesPaymentToPaid() {
+        Payment payment = Payment.builder()
+                .id(5L)
+                .status(PaymentStatus.UNPAID)
+                .paymentMethod(PaymentMethod.COD)
+                .build();
+
+        Order order = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261022-1001")
+                .orderStatus(OrderStatus.SHIPPING)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .payment(payment)
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse response = orderService.updateOrderStatus(1L, OrderStatus.COMPLETED);
+
+        assertThat(response.getOrderStatus()).isEqualTo(OrderStatus.COMPLETED);
+        assertThat(response.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
+        verify(paymentRepository).save(payment);
+    }
 }

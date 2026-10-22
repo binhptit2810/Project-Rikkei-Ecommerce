@@ -2,6 +2,7 @@ package com.example.ecommerce.service;
 
 import com.example.ecommerce.dto.request.CreateOrderRequest;
 import com.example.ecommerce.dto.request.OrderItemRequest;
+import com.example.ecommerce.dto.response.DashboardStatsResponse;
 import com.example.ecommerce.dto.response.OrderItemResponse;
 import com.example.ecommerce.dto.response.OrderResponse;
 import com.example.ecommerce.entity.*;
@@ -264,6 +265,9 @@ public class OrderService {
             return mapToOrderResponse(order);
         }
 
+        // Kiểm tra tính hợp lệ của luồng chuyển trạng thái (State Machine)
+        validateStatusTransition(currentStatus, newStatus);
+
         // Nếu admin chuyển trạng thái sang CANCELLED mà đơn chưa hủy: hoàn tồn kho
         if (newStatus == OrderStatus.CANCELLED && currentStatus != OrderStatus.CANCELLED) {
             inventoryService.restoreStockForOrder(order);
@@ -293,6 +297,92 @@ public class OrderService {
                 order.getOrderCode(), currentStatus, newStatus);
 
         return mapToOrderResponse(savedOrder);
+    }
+
+    /**
+     * Dành cho Admin: Lấy chi tiết đơn hàng theo ID.
+     */
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderById(Long orderId) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với id: " + orderId));
+        return mapToOrderResponse(order);
+    }
+
+    /**
+     * Dành cho Admin: Thống kê số liệu đơn hàng và doanh thu.
+     */
+    @Transactional(readOnly = true)
+    public DashboardStatsResponse getDashboardStats() {
+        long totalOrders = orderRepository.count();
+        long pendingOrders = orderRepository.countByOrderStatus(OrderStatus.PENDING);
+        long confirmedOrders = orderRepository.countByOrderStatus(OrderStatus.CONFIRMED);
+        long processingOrders = orderRepository.countByOrderStatus(OrderStatus.PROCESSING);
+        long shippingOrders = orderRepository.countByOrderStatus(OrderStatus.SHIPPING);
+        long completedOrders = orderRepository.countByOrderStatus(OrderStatus.COMPLETED);
+        long cancelledOrders = orderRepository.countByOrderStatus(OrderStatus.CANCELLED);
+        BigDecimal totalRevenue = orderRepository.sumTotalAmountByOrderStatus(OrderStatus.COMPLETED);
+
+        long totalProducts = productRepository.count();
+        long outOfStock = productRepository.countByStockQuantity(0);
+        long lowStock = productRepository.countByStockQuantityLessThanEqualAndStockQuantityGreaterThan(5, 0);
+
+        return DashboardStatsResponse.builder()
+                .totalOrders(totalOrders)
+                .pendingOrders(pendingOrders)
+                .confirmedOrders(confirmedOrders)
+                .processingOrders(processingOrders)
+                .shippingOrders(shippingOrders)
+                .completedOrders(completedOrders)
+                .cancelledOrders(cancelledOrders)
+                .totalRevenue(totalRevenue != null ? totalRevenue : BigDecimal.ZERO)
+                .totalProducts(totalProducts)
+                .outOfStockProducts(outOfStock)
+                .lowStockProducts(lowStock)
+                .build();
+    }
+
+    /**
+     * Xác thực tính hợp lệ của luồng chuyển trạng thái đơn hàng (State Machine).
+     */
+    public void validateStatusTransition(OrderStatus current, OrderStatus next) {
+        if (current == next) {
+            return;
+        }
+
+        if (current == OrderStatus.COMPLETED) {
+            throw new BusinessException("Đơn hàng đã hoàn thành, không thể thay đổi trạng thái.");
+        }
+
+        if (current == OrderStatus.CANCELLED) {
+            throw new BusinessException("Đơn hàng đã bị hủy, không thể thay đổi trạng thái.");
+        }
+
+        boolean valid = false;
+        switch (current) {
+            case PENDING:
+                valid = (next == OrderStatus.CONFIRMED || next == OrderStatus.CANCELLED);
+                break;
+            case CONFIRMED:
+                valid = (next == OrderStatus.PROCESSING || next == OrderStatus.CANCELLED);
+                break;
+            case PROCESSING:
+                valid = (next == OrderStatus.SHIPPING);
+                break;
+            case SHIPPING:
+                valid = (next == OrderStatus.COMPLETED);
+                break;
+            default:
+                valid = false;
+                break;
+        }
+
+        if (!valid) {
+            throw new BusinessException(String.format(
+                    "Không thể chuyển trạng thái đơn hàng từ '%s' sang '%s'. Vui lòng tuân thủ đúng quy trình xử lý đơn hàng.",
+                    current.getDescription(), next.getDescription()
+            ));
+        }
     }
 
     /**

@@ -6,6 +6,7 @@ import {
   Package,
   Tags,
   ClipboardList,
+  Boxes,
   Star,
   Percent,
   Settings,
@@ -61,6 +62,13 @@ export const AdminSidebar = ({ onClose }) => {
           label: 'Quản lý đơn hàng',
           path: '/admin/orders',
           icon: ClipboardList,
+          isImplemented: true,
+        },
+        {
+          key: 'inventory',
+          label: 'Quản lý tồn kho',
+          path: '/admin/inventory',
+          icon: Boxes,
           isImplemented: true,
         },
         {

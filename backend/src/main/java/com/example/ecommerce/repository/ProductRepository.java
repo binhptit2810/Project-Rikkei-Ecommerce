@@ -35,4 +35,12 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     Optional<Product> findByIdWithCategory(@Param("id") Long id);
 
     boolean existsByCategoryId(Long categoryId);
+
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT p FROM Product p WHERE p.id = :id")
+    Optional<Product> findByIdForUpdate(@Param("id") Long id);
+
+    long countByStockQuantity(Integer stockQuantity);
+
+    long countByStockQuantityLessThanEqualAndStockQuantityGreaterThan(Integer max, Integer min);
 }

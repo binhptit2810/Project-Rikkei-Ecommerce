@@ -34,6 +34,16 @@ public class AdminOrderController {
     }
 
     /**
+     * Lấy chi tiết đơn hàng theo ID dành cho Admin.
+     * GET /api/v1/admin/orders/{id}
+     */
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<OrderResponse>> getOrderDetail(@PathVariable Long id) {
+        OrderResponse response = orderService.getOrderById(id);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
      * Cập nhật trạng thái đơn hàng.
      * PATCH /api/v1/admin/orders/{id}/status
      */
