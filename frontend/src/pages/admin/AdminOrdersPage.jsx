@@ -1,4 +1,12 @@
 import React, { useState, useEffect } from 'react'
+import {
+  RefreshCw,
+  Search,
+  CheckCircle2,
+  AlertCircle,
+  ClipboardList,
+  Filter,
+} from 'lucide-react'
 import orderService from '../../services/orderService'
 
 export const AdminOrdersPage = () => {
@@ -41,7 +49,7 @@ export const AdminOrdersPage = () => {
         setOrders((prev) =>
           prev.map((o) => (o.id === orderId ? res.data : o))
         )
-        setSuccessMessage(`Đã cập nhật trạng thái đơn hàng #${orderId} sang "${newStatus}"`)
+        setSuccessMessage(`Đã cập nhật đơn hàng #${orderId} sang trạng thái "${newStatus}"`)
         setTimeout(() => setSuccessMessage(null), 3000)
       } else {
         alert(res.message || 'Cập nhật thất bại')
@@ -73,19 +81,19 @@ export const AdminOrdersPage = () => {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'PENDING':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800">Chờ xác nhận</span>
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">Chờ xác nhận</span>
       case 'CONFIRMED':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800">Đã xác nhận</span>
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-800 border border-blue-200">Đã xác nhận</span>
       case 'PROCESSING':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-100 text-indigo-800">Đang chuẩn bị</span>
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">Đang chuẩn bị</span>
       case 'SHIPPING':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800">Đang giao</span>
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-800 border border-purple-200">Đang giao</span>
       case 'COMPLETED':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800">Hoàn thành</span>
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">Hoàn thành</span>
       case 'CANCELLED':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">Đã hủy</span>
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">Đã hủy</span>
       default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700">{status}</span>
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{status}</span>
     }
   }
 
@@ -104,40 +112,47 @@ export const AdminOrdersPage = () => {
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Quản lý Đơn hàng</h1>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Quản lý Đơn hàng</h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-0.5">
             Theo dõi, cập nhật tiến trình và xử lý tất cả các đơn hàng trong hệ thống.
           </p>
         </div>
         <button
           onClick={fetchOrders}
-          className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl shadow-xs self-start sm:self-auto cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-xl shadow-2xs self-start sm:self-auto cursor-pointer transition-colors"
         >
-          🔄 Làm mới dữ liệu
+          <RefreshCw className="w-3.5 h-3.5" />
+          <span>Làm mới</span>
         </button>
       </div>
 
       {/* Success Notification */}
       {successMessage && (
-        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-2xl text-xs sm:text-sm flex items-center justify-between shadow-xs">
-          <span>✅ {successMessage}</span>
-          <button onClick={() => setSuccessMessage(null)} className="font-bold text-xs text-emerald-700">Đóng</button>
+        <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs sm:text-sm flex items-center justify-between shadow-2xs">
+          <div className="flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>{successMessage}</span>
+          </div>
+          <button onClick={() => setSuccessMessage(null)} className="font-bold text-xs text-emerald-700 hover:text-emerald-950">
+            Đóng
+          </button>
         </div>
       )}
 
       {/* Search & Filter Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row gap-4 items-center justify-between">
-        <div className="w-full md:w-80">
+      <div className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-2xs flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="w-full md:w-80 relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Tìm theo mã đơn, người nhận, email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-4 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
+            className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
           />
         </div>
 
-        <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
+        <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
           {[
             { id: 'ALL', label: 'Tất cả' },
             { id: 'PENDING', label: 'Chờ xác nhận' },
@@ -150,9 +165,9 @@ export const AdminOrdersPage = () => {
             <button
               key={tab.id}
               onClick={() => setFilterStatus(tab.id)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition-colors cursor-pointer ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
                 filterStatus === tab.id
-                  ? 'bg-orange-600 text-white'
+                  ? 'bg-orange-600 text-white shadow-2xs'
                   : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
@@ -163,15 +178,16 @@ export const AdminOrdersPage = () => {
       </div>
 
       {/* Orders Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden">
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
         {loading ? (
           <div className="p-12 text-center">
-            <div className="w-8 h-8 border-4 border-orange-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+            <div className="w-8 h-8 border-3 border-orange-600 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
             <p className="text-slate-500 text-xs">Đang tải danh sách đơn hàng...</p>
           </div>
         ) : error ? (
-          <div className="p-12 text-center text-red-600 text-xs">
-            ⚠️ {error}
+          <div className="p-12 text-center text-red-600 text-xs flex items-center justify-center gap-2">
+            <AlertCircle className="w-4 h-4 text-red-500" />
+            <span>{error}</span>
           </div>
         ) : filteredOrders.length === 0 ? (
           <div className="p-12 text-center text-slate-500 text-xs">
@@ -181,7 +197,7 @@ export const AdminOrdersPage = () => {
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse text-xs">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider font-bold">
+                <tr className="bg-slate-50/70 border-b border-slate-200 text-slate-500 uppercase tracking-wider font-bold text-[11px]">
                   <th className="py-3.5 px-4">Mã đơn</th>
                   <th className="py-3.5 px-4">Khách hàng</th>
                   <th className="py-3.5 px-4">Ngày đặt</th>
@@ -194,12 +210,12 @@ export const AdminOrdersPage = () => {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50/70 transition-colors">
-                    <td className="py-3.5 px-4 font-black text-slate-900">
+                  <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3.5 px-4 font-bold text-slate-900">
                       {order.orderCode}
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="font-bold text-slate-800">{order.recipientName}</div>
+                      <div className="font-semibold text-slate-900">{order.recipientName}</div>
                       <div className="text-[11px] text-slate-500">{order.recipientPhone}</div>
                       <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{order.userEmail}</div>
                     </td>
@@ -207,17 +223,17 @@ export const AdminOrdersPage = () => {
                       {formatDate(order.createdAt)}
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className="font-semibold text-slate-700">
+                      <span className="font-medium text-slate-700">
                         {order.items?.length || 0} sản phẩm
                       </span>
                     </td>
-                    <td className="py-3.5 px-4 text-right font-black text-orange-600">
+                    <td className="py-3.5 px-4 text-right font-extrabold text-orange-600 tabular-nums">
                       {formatPrice(order.totalAmount)}
                     </td>
                     <td className="py-3.5 px-4">
-                      <div className="font-semibold text-slate-700">{order.paymentMethod}</div>
-                      <div className="text-[10px] text-slate-400">
-                        {order.paymentStatus === 'PAID' ? '✓ Đã thanh toán' : order.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : 'Chưa thanh toán'}
+                      <div className="font-semibold text-slate-800">{order.paymentMethod}</div>
+                      <div className="text-[10px] text-slate-500">
+                        {order.paymentStatus === 'PAID' ? 'Đã thanh toán' : order.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : 'Chưa thanh toán'}
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
@@ -228,7 +244,7 @@ export const AdminOrdersPage = () => {
                         value={order.orderStatus}
                         disabled={updatingId === order.id}
                         onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                        className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-semibold text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                        className="px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white font-semibold text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500/20 cursor-pointer shadow-2xs"
                       >
                         <option value="PENDING">Chờ xác nhận</option>
                         <option value="CONFIRMED">Đã xác nhận</option>

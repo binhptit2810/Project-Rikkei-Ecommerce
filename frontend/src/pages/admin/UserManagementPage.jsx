@@ -1,4 +1,20 @@
 import React, { useState, useEffect, useMemo } from 'react'
+import {
+  Shield,
+  Users,
+  ShieldCheck,
+  ShoppingBag,
+  CheckCircle2,
+  AlertCircle,
+  AlertTriangle,
+  User,
+  Lock,
+  Unlock,
+  X,
+  Info,
+  RefreshCw,
+  Eye,
+} from 'lucide-react'
 import adminUserService from '../../services/adminUserService'
 import { useAuthStore } from '../../store/useAuthStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -305,7 +321,7 @@ export const UserManagementPage = () => {
               Quản lý người dùng
             </h1>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200 uppercase tracking-wider">
-              <span>🛡️</span> Admin Portal
+              <Shield className="w-3.5 h-3.5" /> Admin Portal
             </span>
           </div>
           <p className="text-sm text-slate-500 mt-1">
@@ -344,14 +360,14 @@ export const UserManagementPage = () => {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 my-6">
         {/* Card 1: Tổng người dùng */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center text-xl shrink-0">
-            👥
+          <div className="w-12 h-12 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+            <Users className="w-6 h-6 stroke-[1.75]" />
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Tổng người dùng
             </div>
-            <div className="text-2xl font-extrabold text-slate-800 mt-0.5">
+            <div className="text-2xl font-extrabold text-slate-800 mt-0.5 tabular-nums">
               {backendNotImplemented ? '--' : stats.total}
             </div>
           </div>
@@ -359,14 +375,14 @@ export const UserManagementPage = () => {
 
         {/* Card 2: Quản trị viên */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center text-xl shrink-0">
-            👑
+          <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+            <ShieldCheck className="w-6 h-6 stroke-[1.75]" />
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Quản trị viên
             </div>
-            <div className="text-2xl font-extrabold text-purple-700 mt-0.5">
+            <div className="text-2xl font-extrabold text-purple-700 mt-0.5 tabular-nums">
               {backendNotImplemented ? '--' : stats.admins}
             </div>
           </div>
@@ -374,14 +390,14 @@ export const UserManagementPage = () => {
 
         {/* Card 3: Khách hàng */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center text-xl shrink-0">
-            🛍️
+          <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center shrink-0">
+            <ShoppingBag className="w-6 h-6 stroke-[1.75]" />
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Khách hàng
             </div>
-            <div className="text-2xl font-extrabold text-blue-700 mt-0.5">
+            <div className="text-2xl font-extrabold text-blue-700 mt-0.5 tabular-nums">
               {backendNotImplemented ? '--' : stats.customers}
             </div>
           </div>
@@ -389,14 +405,14 @@ export const UserManagementPage = () => {
 
         {/* Card 4: Đang hoạt động */}
         <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl shrink-0">
-            ✅
+          <div className="w-12 h-12 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-6 h-6 stroke-[1.75]" />
           </div>
           <div>
             <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Đang hoạt động
             </div>
-            <div className="text-2xl font-extrabold text-emerald-700 mt-0.5">
+            <div className="text-2xl font-extrabold text-emerald-700 mt-0.5 tabular-nums">
               {backendNotImplemented ? '--' : stats.active}
             </div>
           </div>
@@ -437,7 +453,7 @@ export const UserManagementPage = () => {
       {actionSuccessMessage && (
         <div className="mb-6 bg-emerald-50 border border-emerald-200 rounded-2xl p-4 text-emerald-800 flex items-center justify-between gap-3 shadow-sm animate-in fade-in duration-200">
           <div className="flex items-center gap-2.5 text-sm font-semibold">
-            <span className="text-lg">✅</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{actionSuccessMessage}</span>
           </div>
           <button
@@ -446,7 +462,7 @@ export const UserManagementPage = () => {
             className="text-xs font-bold text-emerald-700 hover:text-emerald-900 p-1 rounded-lg hover:bg-emerald-100 transition-colors cursor-pointer"
             title="Đóng thông báo"
           >
-            ✕
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
@@ -612,11 +628,11 @@ export const UserManagementPage = () => {
                     <td className="py-3.5 px-4">
                       {item.role === 'ADMIN' ? (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200">
-                          <span>👑</span> ADMIN
+                          <ShieldCheck className="w-3 h-3" /> ADMIN
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
-                          <span>🛍️</span> CUSTOMER
+                          <User className="w-3 h-3" /> CUSTOMER
                         </span>
                       )}
                     </td>
@@ -709,8 +725,8 @@ export const UserManagementPage = () => {
         ) : (
           /* Empty state */
           <div className="py-16 px-4 text-center">
-            <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-3">
-              👥
+            <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <Users className="w-8 h-8 text-slate-300 stroke-[1.5]" />
             </div>
             <h3 className="text-base font-bold text-slate-700 mb-1">
               {backendNotImplemented
@@ -825,11 +841,11 @@ export const UserManagementPage = () => {
                   <div>
                     {selectedUser.role === 'ADMIN' ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-700 border border-purple-200">
-                        👑 QUẢN TRỊ VIÊN (ADMIN)
+                        <ShieldCheck className="w-3 h-3" /> QUẢN TRỊ VIÊN (ADMIN)
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 border border-blue-200">
-                        🛍️ KHÁCH HÀNG (CUSTOMER)
+                        <User className="w-3 h-3" /> KHÁCH HÀNG (CUSTOMER)
                       </span>
                     )}
                   </div>
@@ -880,7 +896,7 @@ export const UserManagementPage = () => {
               {selectedUser.active === false && (
                 <div className="p-3.5 bg-red-50/90 border border-red-200 rounded-2xl text-xs space-y-1.5">
                   <div className="font-bold text-red-700 flex items-center gap-1.5 text-xs">
-                    <span>🔒</span> THÔNG TIN KHÓA TÀI KHOẢN
+                    <Lock className="w-3.5 h-3.5" /> THÔNG TIN KHÓA TÀI KHOẢN
                   </div>
                   <div className="text-red-900 leading-relaxed">
                     <strong>Lý do khóa:</strong> {selectedUser.lockReason || 'Không có lý do cụ thể'}
@@ -913,7 +929,7 @@ export const UserManagementPage = () => {
                     }`}
                     title={isSelf(selectedUser) ? 'Không thể tự khóa tài khoản của chính mình' : 'Khóa tài khoản này'}
                   >
-                    <span>🔒</span>
+                    <Lock className="w-3.5 h-3.5" />
                     <span>Khóa tài khoản</span>
                   </button>
                 ) : (
@@ -927,7 +943,7 @@ export const UserManagementPage = () => {
                     className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors cursor-pointer"
                     title="Mở khóa tài khoản này"
                   >
-                    <span>🔓</span>
+                    <Unlock className="w-3.5 h-3.5" />
                     <span>Mở khóa tài khoản</span>
                   </button>
                 )}
@@ -951,11 +967,11 @@ export const UserManagementPage = () => {
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-100 transform transition-all">
             <div className="flex items-start justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center text-xl shrink-0">
-                  🔒
+                <div className="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center shrink-0">
+                  <Lock className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-800 leading-tight">
+                  <h3 className="text-base font-extrabold text-slate-800 leading-tight">
                     Khóa tài khoản
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
@@ -970,7 +986,7 @@ export const UserManagementPage = () => {
                 className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50"
                 title="Đóng modal"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -1045,7 +1061,7 @@ export const UserManagementPage = () => {
                     </>
                   ) : (
                     <>
-                      <span>🔒</span>
+                      <Lock className="w-3.5 h-3.5" />
                       <span>Xác nhận khóa</span>
                     </>
                   )}
@@ -1062,11 +1078,11 @@ export const UserManagementPage = () => {
           <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-100 transform transition-all">
             <div className="flex items-start justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
-                <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center text-xl shrink-0">
-                  🔓
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                  <Unlock className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-extrabold text-slate-800 leading-tight">
+                  <h3 className="text-base font-extrabold text-slate-800 leading-tight">
                     Mở khóa tài khoản
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
@@ -1081,7 +1097,7 @@ export const UserManagementPage = () => {
                 className="text-slate-400 hover:text-slate-600 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer disabled:opacity-50"
                 title="Đóng modal"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -1146,7 +1162,7 @@ export const UserManagementPage = () => {
                     </>
                   ) : (
                     <>
-                      <span>🔓</span>
+                      <Unlock className="w-3.5 h-3.5" />
                       <span>Xác nhận mở khóa</span>
                     </>
                   )}
