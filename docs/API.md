@@ -250,18 +250,20 @@ Danh sách danh mục active. **Không cần xác thực.**
 
 ---
 
-## 🛒 Orders (TODO — Vũ Đức Huy Hoàng)
+## 🛒 Orders (Vũ Đức Huy Hoàng)
 
-> **Chưa triển khai.** Sẽ bổ sung khi module Order được phát triển.
+> **Đã triển khai hoàn chỉnh.** Tích hợp kiểm tra tồn kho, trừ kho và hoàn kho trong `@Transactional`.
 
 | Method | Endpoint | Auth | Mô tả |
 |--------|----------|------|-------|
-| POST | `/api/v1/orders` | CUSTOMER | Tạo đơn hàng từ giỏ hàng |
-| GET | `/api/v1/orders/my` | CUSTOMER | Lịch sử đơn hàng của tôi |
-| GET | `/api/v1/orders/{id}` | CUSTOMER | Chi tiết đơn hàng |
-| PATCH | `/api/v1/orders/{id}/cancel` | CUSTOMER | Hủy đơn hàng |
+| POST | `/api/v1/orders` | CUSTOMER, ADMIN | Tạo đơn hàng từ giỏ hàng (tính totalAmount tại Backend, trừ kho) |
+| GET | `/api/v1/orders/my` | CUSTOMER, ADMIN | Lịch sử đơn hàng của tôi |
+| GET | `/api/v1/orders/{id}` | CUSTOMER, ADMIN | Chi tiết đơn hàng |
+| PATCH | `/api/v1/orders/{id}/cancel` | CUSTOMER, ADMIN | Hủy đơn hàng (hoàn kho, hoàn tiền nếu thanh toán trực tuyến) |
+| GET | `/api/v1/admin/orders` | ADMIN | Danh sách tất cả đơn hàng |
+| PATCH | `/api/v1/admin/orders/{id}/status` | ADMIN | Cập nhật trạng thái đơn hàng |
 
-**Request tạo đơn hàng:**
+**Request tạo đơn hàng (`POST /api/v1/orders`):**
 ```json
 {
   "recipientName": "Nguyễn Văn A",
@@ -273,6 +275,43 @@ Danh sách danh mục active. **Không cần xác thực.**
     { "productId": 1, "quantity": 2 },
     { "productId": 5, "quantity": 1 }
   ]
+}
+```
+
+**Response 201:**
+```json
+{
+  "success": true,
+  "message": "Đặt hàng thành công",
+  "data": {
+    "id": 1,
+    "orderCode": "ORD-20261022-8142",
+    "userId": 2,
+    "userEmail": "customer1@example.com",
+    "recipientName": "Nguyễn Văn A",
+    "recipientPhone": "0912345678",
+    "shippingAddress": "123 Đường ABC, TP.HCM",
+    "totalAmount": 1598000.00,
+    "orderStatus": "PENDING",
+    "orderStatusDescription": "Chờ xác nhận",
+    "paymentStatus": "UNPAID",
+    "paymentStatusDescription": "Chưa thanh toán",
+    "paymentMethod": "COD",
+    "paymentMethodDescription": "Thanh toán khi nhận hàng (COD)",
+    "note": "Giao giờ hành chính",
+    "createdAt": "2026-10-22T10:30:00",
+    "items": [
+      {
+        "id": 1,
+        "productId": 1,
+        "productName": "Áo thun nam basic Cotton",
+        "unitPrice": 199000.00,
+        "quantity": 2,
+        "subtotal": 398000.00,
+        "imageUrl": "https://..."
+      }
+    ]
+  }
 }
 ```
 

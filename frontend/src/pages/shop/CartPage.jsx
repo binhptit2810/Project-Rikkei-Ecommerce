@@ -17,14 +17,11 @@ export const CartPage = () => {
 
   const handleCheckout = () => {
     if (!isAuthenticated) {
-      navigate('/login?redirect=/cart')
+      navigate('/login?redirect=/checkout')
       return
     }
 
-    setCheckoutNotice(
-      'Hệ thống đang chuẩn bị kết nối cổng thanh toán & tạo đơn hàng (Backend Order API)!'
-    )
-    setTimeout(() => setCheckoutNotice(null), 6000)
+    navigate('/checkout')
   }
 
   const totalCount = getTotalCount()

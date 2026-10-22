@@ -61,16 +61,28 @@ export const Navbar = () => {
           </Link>
 
           {isAuthenticated && (
-            <Link
-              to="/profile"
-              className={`text-sm font-medium transition-colors ${
-                isActive('/profile')
-                  ? 'text-orange-600 font-semibold'
-                  : 'text-slate-600 hover:text-orange-600'
-              }`}
-            >
-              Hồ sơ của tôi
-            </Link>
+            <>
+              <Link
+                to="/orders"
+                className={`text-sm font-medium transition-colors ${
+                  isActive('/orders')
+                    ? 'text-orange-600 font-semibold'
+                    : 'text-slate-600 hover:text-orange-600'
+                }`}
+              >
+                Đơn hàng của tôi
+              </Link>
+              <Link
+                to="/profile"
+                className={`text-sm font-medium transition-colors ${
+                  isActive('/profile')
+                    ? 'text-orange-600 font-semibold'
+                    : 'text-slate-600 hover:text-orange-600'
+                }`}
+              >
+                Hồ sơ của tôi
+              </Link>
+            </>
           )}
         </nav>
 
@@ -221,13 +233,22 @@ export const Navbar = () => {
             )}
           </Link>
           {isAuthenticated && (
-            <Link
-              to="/profile"
-              onClick={() => setMobileMenuOpen(false)}
-              className="block py-2 text-sm font-medium text-slate-700 hover:text-orange-600"
-            >
-              Hồ sơ của tôi ({user?.fullName})
-            </Link>
+            <>
+              <Link
+                to="/orders"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block py-2 text-sm font-medium text-slate-700 hover:text-orange-600"
+              >
+                Đơn hàng của tôi
+              </Link>
+              <Link
+                to="/profile"
+                onClick={() => setMobileMenuOpen(false)}
+                className="block py-2 text-sm font-medium text-slate-700 hover:text-orange-600"
+              >
+                Hồ sơ của tôi ({user?.fullName})
+              </Link>
+            </>
           )}
 
           <div className="pt-2 border-t border-slate-100">
