@@ -31,6 +31,11 @@ export const AdminHeader = ({ onToggleSidebar }) => {
           title: 'Quản lý đơn hàng',
           breadcrumb: 'Đơn hàng',
         }
+      case '/admin/inventory':
+        return {
+          title: 'Quản lý tồn kho',
+          breadcrumb: 'Tồn kho',
+        }
       case '/admin/dashboard':
       case '/admin':
         return {
