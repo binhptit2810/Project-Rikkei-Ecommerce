@@ -1,4 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react'
+import {
+  Plus,
+  CheckCircle2,
+  Search,
+  Package,
+  ShoppingBag,
+  Edit2,
+  Trash2,
+  AlertTriangle,
+  X,
+} from 'lucide-react'
 import productService from '../../services/productService'
 import categoryService from '../../services/categoryService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -231,7 +242,7 @@ export const AdminProductsPage = () => {
           onClick={handleOpenCreateModal}
           className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-bold text-sm rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer shrink-0"
         >
-          <span>➕</span>
+          <Plus className="w-4 h-4" />
           <span>Thêm sản phẩm</span>
         </button>
       </div>
@@ -240,7 +251,7 @@ export const AdminProductsPage = () => {
       {successMessage && (
         <div className="p-4 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-sm font-medium flex items-center justify-between shadow-sm animate-fade-in">
           <div className="flex items-center gap-2">
-            <span>✅</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{successMessage}</span>
           </div>
           <button
@@ -256,6 +267,7 @@ export const AdminProductsPage = () => {
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
         {/* Search Input */}
         <div className="relative w-full md:w-80">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Tìm theo tên sản phẩm..."
@@ -264,9 +276,8 @@ export const AdminProductsPage = () => {
               setSearchTerm(e.target.value)
               setPage(0)
             }}
-            className="w-full pl-9 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50/50"
+            className="w-full pl-10 pr-4 py-2 text-xs rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500 bg-slate-50/50"
           />
-          <span className="absolute left-3 top-2.5 text-slate-400 text-xs">🔍</span>
         </div>
 
         {/* Filters */}
@@ -316,7 +327,9 @@ export const AdminProductsPage = () => {
           </div>
         ) : products.length === 0 ? (
           <div className="py-16 text-center text-slate-400">
-            <span className="text-4xl block mb-2">📦</span>
+            <div className="w-12 h-12 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center mx-auto mb-3">
+              <Package className="w-6 h-6" />
+            </div>
             <p className="text-sm font-semibold text-slate-700">Chưa có sản phẩm nào</p>
             <p className="text-xs text-slate-400 mt-1">Bấm nút "Thêm sản phẩm" ở trên để tạo sản phẩm đầu tiên.</p>
           </div>
@@ -351,7 +364,7 @@ export const AdminProductsPage = () => {
                               }}
                             />
                           ) : (
-                            <span className="text-slate-400 text-lg">🛍️</span>
+                            <ShoppingBag className="w-5 h-5 text-slate-300 stroke-1" />
                           )}
                         </div>
                         <div>
@@ -415,20 +428,22 @@ export const AdminProductsPage = () => {
 
                     {/* Actions */}
                     <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => handleOpenEditModal(item)}
-                          className="px-2.5 py-1 text-slate-600 hover:text-orange-600 hover:bg-orange-50 font-semibold rounded-lg transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-600 hover:text-orange-600 hover:bg-orange-50 font-semibold rounded-lg transition-colors cursor-pointer"
                           title="Sửa sản phẩm"
                         >
-                          ✏️ Sửa
+                          <Edit2 className="w-3 h-3" />
+                          <span>Sửa</span>
                         </button>
                         <button
                           onClick={() => setDeletingProduct(item)}
-                          className="px-2.5 py-1 text-slate-400 hover:text-red-600 hover:bg-red-50 font-semibold rounded-lg transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-slate-400 hover:text-red-600 hover:bg-red-50 font-semibold rounded-lg transition-colors cursor-pointer"
                           title="Ẩn / Xóa sản phẩm"
                         >
-                          🗑️ Ẩn
+                          <Trash2 className="w-3 h-3" />
+                          <span>Ẩn</span>
                         </button>
                       </div>
                     </td>
@@ -476,9 +491,9 @@ export const AdminProductsPage = () => {
               <button
                 type="button"
                 onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg font-bold p-1 cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
               >
-                ✕
+                <X className="w-4 h-4" />
               </button>
             </div>
 
@@ -638,8 +653,8 @@ export const AdminProductsPage = () => {
       {deletingProduct && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-100 text-center">
-            <div className="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-xl mx-auto mb-3">
-              ⚠️
+            <div className="w-12 h-12 rounded-xl bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-3">
+              <AlertTriangle className="w-6 h-6" />
             </div>
             <h3 className="text-base font-black text-slate-900 mb-1">
               Ẩn sản phẩm này?
