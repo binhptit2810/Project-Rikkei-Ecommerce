@@ -1,7 +1,10 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.dto.request.AdjustInventoryRequest;
+import com.example.ecommerce.dto.response.InventoryTransactionResponse;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
+import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.repository.InventoryTransactionRepository;
 import com.example.ecommerce.repository.ProductRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -115,5 +119,125 @@ class InventoryServiceTest {
         assertThat(tx.getStockAfter()).isEqualTo(13);
         assertThat(tx.getTransactionType()).isEqualTo(InventoryTransactionType.ORDER_CANCELLED);
         assertThat(tx.getOrderId()).isEqualTo(50L);
+    }
+
+    @Test
+    @DisplayName("Admin tăng tồn kho - Số lượng cập nhật đúng và ghi log MANUAL_ADJUST")
+    void adjustStock_Success_IncreaseStock() {
+        when(productRepository.findById(1L)).thenReturn(Optional.of(testProduct));
+        when(inventoryTransactionRepository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> {
+            InventoryTransaction tx = invocation.getArgument(0);
+            tx.setId(99L);
+            tx.setCreatedAt(LocalDateTime.now());
+            return tx;
+        });
+
+        AdjustInventoryRequest request = AdjustInventoryRequest.builder()
+                .changeQuantity(15)
+                .note("Nhập hàng từ kho tổng")
+                .build();
+
+        InventoryTransactionResponse response = inventoryService.adjustStock(1L, request);
+
+        assertThat(testProduct.getStockQuantity()).isEqualTo(25); // 10 + 15
+        verify(productRepository).save(testProduct);
+        assertThat(response.getChangeQuantity()).isEqualTo(15);
+        assertThat(response.getStockAfter()).isEqualTo(25);
+        assertThat(response.getTransactionType()).isEqualTo(InventoryTransactionType.MANUAL_ADJUST);
+    }
+
+    @Test
+    @DisplayName("Admin giảm tồn kho hợp lệ - Số lượng giảm đúng và ghi log MANUAL_ADJUST")
+    void adjustStock_Success_DecreaseStock() {
+        when(productRepository.findById(1L)).thenReturn(Optional.of(testProduct));
+        when(inventoryTransactionRepository.save(any(InventoryTransaction.class))).thenAnswer(invocation -> {
+            InventoryTransaction tx = invocation.getArgument(0);
+            tx.setId(100L);
+            tx.setCreatedAt(LocalDateTime.now());
+            return tx;
+        });
+
+        AdjustInventoryRequest request = AdjustInventoryRequest.builder()
+                .changeQuantity(-4)
+                .note("Xuất mẫu trưng bày")
+                .build();
+
+        InventoryTransactionResponse response = inventoryService.adjustStock(1L, request);
+
+        assertThat(testProduct.getStockQuantity()).isEqualTo(6); // 10 - 4
+        verify(productRepository).save(testProduct);
+        assertThat(response.getChangeQuantity()).isEqualTo(-4);
+        assertThat(response.getStockAfter()).isEqualTo(6);
+    }
+
+    @Test
+    @DisplayName("Admin giảm tồn kho vượt quá số lượng hiện tại - Ném BusinessException")
+    void adjustStock_ThrowsException_WhenStockAfterNegative() {
+        when(productRepository.findById(1L)).thenReturn(Optional.of(testProduct));
+
+        AdjustInventoryRequest request = AdjustInventoryRequest.builder()
+                .changeQuantity(-15) // Tồn chỉ có 10
+                .note("Xuất lỗi")
+                .build();
+
+        assertThatThrownBy(() -> inventoryService.adjustStock(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("không thể âm");
+
+        verify(productRepository, never()).save(testProduct);
+        verify(inventoryTransactionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Admin điều chỉnh số lượng bằng 0 hoặc null - Ném BusinessException")
+    void adjustStock_ThrowsException_WhenQuantityZeroOrNull() {
+        AdjustInventoryRequest requestZero = AdjustInventoryRequest.builder()
+                .changeQuantity(0)
+                .build();
+
+        assertThatThrownBy(() -> inventoryService.adjustStock(1L, requestZero))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("phải khác 0");
+
+        AdjustInventoryRequest requestNull = AdjustInventoryRequest.builder()
+                .changeQuantity(null)
+                .build();
+
+        assertThatThrownBy(() -> inventoryService.adjustStock(1L, requestNull))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("Admin điều chỉnh sản phẩm không tồn tại - Ném ResourceNotFoundException")
+    void adjustStock_ThrowsException_WhenProductNotFound() {
+        when(productRepository.findById(999L)).thenReturn(Optional.empty());
+
+        AdjustInventoryRequest request = AdjustInventoryRequest.builder()
+                .changeQuantity(5)
+                .build();
+
+        assertThatThrownBy(() -> inventoryService.adjustStock(999L, request))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("không tồn tại");
+    }
+
+    @Test
+    @DisplayName("Lấy lịch sử giao dịch kho của một sản phẩm thành công")
+    void getTransactionsByProduct_Success() {
+        when(productRepository.existsById(1L)).thenReturn(true);
+        InventoryTransaction tx = InventoryTransaction.builder()
+                .id(1L)
+                .product(testProduct)
+                .changeQuantity(10)
+                .stockAfter(10)
+                .transactionType(InventoryTransactionType.INITIAL_STOCK)
+                .createdAt(LocalDateTime.now())
+                .build();
+        when(inventoryTransactionRepository.findByProductIdOrderByCreatedAtDesc(1L)).thenReturn(List.of(tx));
+
+        List<InventoryTransactionResponse> list = inventoryService.getTransactionsByProduct(1L);
+
+        assertThat(list).hasSize(1);
+        assertThat(list.get(0).getProductName()).isEqualTo("Tai nghe Bluetooth");
     }
 }

@@ -4,8 +4,15 @@ import {
   Search,
   CheckCircle2,
   AlertCircle,
-  ClipboardList,
-  Filter,
+  Eye,
+  X,
+  CreditCard,
+  Truck,
+  MapPin,
+  Calendar,
+  User,
+  Phone,
+  FileText,
 } from 'lucide-react'
 import orderService from '../../services/orderService'
 
@@ -17,6 +24,9 @@ export const AdminOrdersPage = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [updatingId, setUpdatingId] = useState(null)
   const [successMessage, setSuccessMessage] = useState(null)
+
+  // Order Detail Modal State
+  const [selectedOrder, setSelectedOrder] = useState(null)
 
   const fetchOrders = async () => {
     setLoading(true)
@@ -49,8 +59,11 @@ export const AdminOrdersPage = () => {
         setOrders((prev) =>
           prev.map((o) => (o.id === orderId ? res.data : o))
         )
+        if (selectedOrder && selectedOrder.id === orderId) {
+          setSelectedOrder(res.data)
+        }
         setSuccessMessage(`Đã cập nhật đơn hàng #${orderId} sang trạng thái "${newStatus}"`)
-        setTimeout(() => setSuccessMessage(null), 3000)
+        setTimeout(() => setSuccessMessage(null), 4000)
       } else {
         alert(res.message || 'Cập nhật thất bại')
       }
@@ -94,6 +107,40 @@ export const AdminOrdersPage = () => {
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">Đã hủy</span>
       default:
         return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">{status}</span>
+    }
+  }
+
+  // State Machine: Tính toán các trạng thái hợp lệ tiếp theo
+  const getAvailableNextStatuses = (currentStatus) => {
+    switch (currentStatus) {
+      case 'PENDING':
+        return [
+          { value: 'PENDING', label: 'Chờ xác nhận (Hiện tại)' },
+          { value: 'CONFIRMED', label: 'Duyệt đơn (Đã xác nhận)' },
+          { value: 'CANCELLED', label: 'Hủy đơn hàng' },
+        ]
+      case 'CONFIRMED':
+        return [
+          { value: 'CONFIRMED', label: 'Đã xác nhận (Hiện tại)' },
+          { value: 'PROCESSING', label: 'Đang chuẩn bị hàng' },
+          { value: 'CANCELLED', label: 'Hủy đơn hàng' },
+        ]
+      case 'PROCESSING':
+        return [
+          { value: 'PROCESSING', label: 'Đang chuẩn bị (Hiện tại)' },
+          { value: 'SHIPPING', label: 'Giao hàng' },
+        ]
+      case 'SHIPPING':
+        return [
+          { value: 'SHIPPING', label: 'Đang giao (Hiện tại)' },
+          { value: 'COMPLETED', label: 'Hoàn thành đơn hàng' },
+        ]
+      case 'COMPLETED':
+        return [{ value: 'COMPLETED', label: 'Đã hoàn thành' }]
+      case 'CANCELLED':
+        return [{ value: 'CANCELLED', label: 'Đã hủy đơn' }]
+      default:
+        return []
     }
   }
 
@@ -209,58 +256,244 @@ export const AdminOrdersPage = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
-                    <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {order.orderCode}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-slate-900">{order.recipientName}</div>
-                      <div className="text-[11px] text-slate-500">{order.recipientPhone}</div>
-                      <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{order.userEmail}</div>
-                    </td>
-                    <td className="py-3.5 px-4 text-slate-500">
-                      {formatDate(order.createdAt)}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <span className="font-medium text-slate-700">
-                        {order.items?.length || 0} sản phẩm
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-4 text-right font-extrabold text-orange-600 tabular-nums">
-                      {formatPrice(order.totalAmount)}
-                    </td>
-                    <td className="py-3.5 px-4">
-                      <div className="font-semibold text-slate-800">{order.paymentMethod}</div>
-                      <div className="text-[10px] text-slate-500">
-                        {order.paymentStatus === 'PAID' ? 'Đã thanh toán' : order.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : 'Chưa thanh toán'}
-                      </div>
-                    </td>
-                    <td className="py-3.5 px-4">
-                      {getStatusBadge(order.orderStatus)}
-                    </td>
-                    <td className="py-3.5 px-4 text-right">
-                      <select
-                        value={order.orderStatus}
-                        disabled={updatingId === order.id}
-                        onChange={(e) => handleStatusChange(order.id, e.target.value)}
-                        className="px-2.5 py-1.5 rounded-xl border border-slate-300 bg-white font-semibold text-slate-700 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500/20 cursor-pointer shadow-2xs"
-                      >
-                        <option value="PENDING">Chờ xác nhận</option>
-                        <option value="CONFIRMED">Đã xác nhận</option>
-                        <option value="PROCESSING">Đang chuẩn bị</option>
-                        <option value="SHIPPING">Đang giao hàng</option>
-                        <option value="COMPLETED">Hoàn thành</option>
-                        <option value="CANCELLED">Hủy đơn</option>
-                      </select>
-                    </td>
-                  </tr>
-                ))}
+                {filteredOrders.map((order) => {
+                  const isLocked = order.orderStatus === 'COMPLETED' || order.orderStatus === 'CANCELLED'
+                  const availableOptions = getAvailableNextStatuses(order.orderStatus)
+
+                  return (
+                    <tr key={order.id} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3.5 px-4">
+                        <button
+                          onClick={() => setSelectedOrder(order)}
+                          className="font-bold text-orange-600 hover:text-orange-700 hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <span>{order.orderCode}</span>
+                        </button>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="font-semibold text-slate-900">{order.recipientName}</div>
+                        <div className="text-[11px] text-slate-500">{order.recipientPhone}</div>
+                        <div className="text-[10px] text-slate-400 truncate max-w-[150px]">{order.userEmail}</div>
+                      </td>
+                      <td className="py-3.5 px-4 text-slate-500">
+                        {formatDate(order.createdAt)}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <span className="font-medium text-slate-700">
+                          {order.items?.length || 0} sản phẩm
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-extrabold text-orange-600 tabular-nums">
+                        {formatPrice(order.totalAmount)}
+                      </td>
+                      <td className="py-3.5 px-4">
+                        <div className="font-semibold text-slate-800">{order.paymentMethod}</div>
+                        <div className="text-[10px] text-slate-500">
+                          {order.paymentStatus === 'PAID' ? 'Đã thanh toán' : order.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : 'Chưa thanh toán'}
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4">
+                        {getStatusBadge(order.orderStatus)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right space-x-2">
+                        {/* Status Select with State Machine constraints */}
+                        <select
+                          value={order.orderStatus}
+                          disabled={isLocked || updatingId === order.id}
+                          onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                          className={`px-2.5 py-1.5 rounded-xl border text-xs font-semibold transition-all shadow-2xs ${
+                            isLocked
+                              ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed'
+                              : 'bg-white text-slate-800 border-slate-300 hover:border-orange-500 cursor-pointer focus:outline-none focus:ring-2 focus:ring-orange-500/20'
+                          }`}
+                        >
+                          {availableOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* View Detail Button */}
+                        <button
+                          onClick={() => setSelectedOrder(order)}
+                          className="inline-flex items-center gap-1 p-1.5 text-slate-500 hover:text-orange-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+                          title="Xem chi tiết đơn hàng"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* ORDER DETAIL MODAL */}
+      {selectedOrder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-2xl w-full overflow-hidden max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/80 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-sm">
+                  #{selectedOrder.id}
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-slate-900 text-base">
+                    Chi tiết đơn hàng {selectedOrder.orderCode}
+                  </h3>
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-0.5">
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Đặt lúc: {formatDate(selectedOrder.createdAt)}</span>
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="text-slate-400 hover:text-slate-700 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="p-6 overflow-y-auto space-y-6">
+              {/* Delivery & Customer Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2">
+                  <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
+                    <User className="w-4 h-4 text-orange-600" />
+                    <span>Thông tin người nhận</span>
+                  </div>
+                  <div className="text-xs text-slate-700 font-semibold">{selectedOrder.recipientName}</div>
+                  <div className="text-xs text-slate-600 flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5 text-slate-400" />
+                    <span>{selectedOrder.recipientPhone}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500">
+                    Tài khoản đặt: {selectedOrder.userEmail}
+                  </div>
+                </div>
+
+                <div className="p-4 bg-slate-50/80 rounded-xl border border-slate-200/80 space-y-2">
+                  <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
+                    <MapPin className="w-4 h-4 text-orange-600" />
+                    <span>Địa chỉ giao hàng</span>
+                  </div>
+                  <div className="text-xs text-slate-700 leading-relaxed">
+                    {selectedOrder.shippingAddress}
+                  </div>
+                  {selectedOrder.note && (
+                    <div className="text-[11px] text-slate-500 italic mt-1 pt-1 border-t border-slate-200/60">
+                      Ghi chú: {selectedOrder.note}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Status & Payment Overview */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-orange-50/40 rounded-xl border border-orange-200/60">
+                <div>
+                  <div className="text-xs font-medium text-slate-500 mb-1">Trạng thái đơn hàng:</div>
+                  <div>{getStatusBadge(selectedOrder.orderStatus)}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-medium text-slate-500 mb-1">Thanh toán:</div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-xs text-slate-800">{selectedOrder.paymentMethod}</span>
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                        selectedOrder.paymentStatus === 'PAID'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : selectedOrder.paymentStatus === 'REFUNDED'
+                          ? 'bg-slate-200 text-slate-800'
+                          : 'bg-amber-100 text-amber-800'
+                      }`}
+                    >
+                      {selectedOrder.paymentStatus === 'PAID' ? 'Đã thanh toán' : selectedOrder.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : 'Chưa thanh toán'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div>
+                <div className="text-xs font-bold text-slate-900 mb-3 flex items-center gap-1.5 uppercase tracking-wide">
+                  <FileText className="w-4 h-4 text-orange-600" />
+                  <span>Danh sách sản phẩm ({selectedOrder.items?.length || 0})</span>
+                </div>
+
+                <div className="border border-slate-200 rounded-xl overflow-hidden">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold text-[11px]">
+                        <th className="py-2.5 px-3">Sản phẩm</th>
+                        <th className="py-2.5 px-3 text-right">Đơn giá</th>
+                        <th className="py-2.5 px-3 text-center">Số lượng</th>
+                        <th className="py-2.5 px-3 text-right">Thành tiền</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {selectedOrder.items?.map((item) => (
+                        <tr key={item.id} className="hover:bg-slate-50/50">
+                          <td className="py-2.5 px-3">
+                            <div className="flex items-center gap-2.5">
+                              {item.imageUrl && (
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.productName}
+                                  className="w-9 h-9 rounded-lg object-cover border border-slate-200 shrink-0"
+                                />
+                              )}
+                              <span className="font-semibold text-slate-800">{item.productName}</span>
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-slate-600 tabular-nums">
+                            {formatPrice(item.unitPrice)}
+                          </td>
+                          <td className="py-2.5 px-3 text-center font-bold text-slate-800 tabular-nums">
+                            {item.quantity}
+                          </td>
+                          <td className="py-2.5 px-3 text-right font-bold text-slate-900 tabular-nums">
+                            {formatPrice(item.subtotal)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-slate-50/80 border-t border-slate-200 font-bold">
+                        <td colSpan="3" className="py-3 px-4 text-right text-slate-700">
+                          Tổng thanh toán:
+                        </td>
+                        <td className="py-3 px-4 text-right text-sm font-black text-orange-600 tabular-nums">
+                          {formatPrice(selectedOrder.totalAmount)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between shrink-0">
+              <div className="text-xs text-slate-500">
+                Mã đơn: <span className="font-bold text-slate-800">{selectedOrder.orderCode}</span>
+              </div>
+              <button
+                onClick={() => setSelectedOrder(null)}
+                className="px-4 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
