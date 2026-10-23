@@ -34,7 +34,4 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 EXPOSE 8080
 
 # Chờ database sẵn sàng qua healthcheck của Docker Compose
-ENTRYPOINT ["java", \
-  "-Djava.security.egd=file:/dev/./urandom", \
-  "-Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:docker}", \
-  "-jar", "app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-docker} -jar app.jar"]

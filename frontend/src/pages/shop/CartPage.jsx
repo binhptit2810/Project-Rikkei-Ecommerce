@@ -31,8 +31,22 @@ export const CartPage = () => {
   }
 
   const handleCheckout = () => {
+    // Validate mọi mặt hàng: 1 <= quantity <= stockQuantity
+    for (const item of items) {
+      if (!item.quantity || item.quantity <= 0) {
+        setCheckoutNotice(`Sản phẩm "${item.name}" có số lượng không hợp lệ. Vui lòng cập nhật lại.`)
+        return
+      }
+      if (item.stockQuantity !== undefined && item.stockQuantity !== null && item.quantity > item.stockQuantity) {
+        setCheckoutNotice(
+          `Sản phẩm "${item.name}" chỉ còn ${item.stockQuantity} sản phẩm trong kho. Vui lòng giảm số lượng đặt hàng.`
+        )
+        return
+      }
+    }
+
     if (!isAuthenticated) {
-      navigate('/login?redirect=/checkout')
+      navigate('/login', { state: { from: { pathname: '/checkout' } } })
       return
     }
 

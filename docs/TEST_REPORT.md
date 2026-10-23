@@ -365,3 +365,111 @@ cd backend
   `backend/build/reports/jacoco/test/html/index.html` (89% instruction coverage, 76% branch coverage)
 - **File chi tiết kết quả từng Test Class (XML):**  
   `backend/build/test-results/test/TEST-*.xml` (13 test suites tương ứng 120 test cases)
+
+---
+
+## 9. BÁO CÁO KIỂM THỬ TÍCH HỢP FRONTEND & HỆ THỐNG DEVOPS (GIAI ĐOẠN 3 & 4)
+
+> **Người thực hiện:** Đỗ Hoàng Anh — Senior Frontend & DevOps Engineer (`feature/frontend-devops`)  
+> **Thời điểm xác minh:** 23/10/2026, 02:30:00 (GMT+7)  
+> **Môi trường xác minh:** Windows 11 + Docker Desktop (WSL2 engine) + Nginx 1.27 + Spring Boot 3.3.5 (Java 21) + MySQL 8.0 + Redis 7
+
+### 9.1. Kết quả kiểm tra Build mã nguồn Frontend (React + Vite)
+- **Công cụ build:** Vite 5.4.21, React 18, TailwindCSS.
+- **Lệnh thực thi:** `npm install --no-audit --no-fund && npm run build`
+- **Kết quả:** **BUILD THÀNH CÔNG (0 Lỗi, 0 Warning)**
+- **Tối ưu hóa Rollup Chunks (`vite.config.js`):**
+  - Đã cấu hình `manualChunks` phân tách rõ ràng:
+    + `dist/assets/vendor-*.js`: Thư viện lõi runtime.
+    + `dist/assets/icons-*.js` (34.76 kB / gzip 7.62 kB): Bộ icon `lucide-react`.
+    + `dist/assets/store-*.js` (52.10 kB / gzip 19.78 kB): Quản lý state `zustand` + `axios`.
+    + `dist/assets/router-*.js` (162.87 kB / gzip 53.15 kB): Hệ thống định tuyến `react-router-dom`.
+    + `dist/assets/index-*.js` (270.03 kB / gzip 50.75 kB): Giao diện các trang và components.
+  - Loại bỏ hoàn toàn cảnh báo vượt kích thước bundle chunk (>500 kB).
+
+### 9.2. Rà soát Giao diện, Phân quyền & Ràng buộc Form (Frontend Validation)
+1. **Giao diện dùng chung & Admin Layout:**
+   - Hoàn thiện `CustomerLayout`, `Navbar`, `Footer`, `AdminLayout`, `AdminHeader`, `AdminSidebar`.
+   - Đáp ứng Responsive 100% trên cả 3 kích thước màn hình Mobile (< 768px), Tablet (768px – 1024px) và Desktop (> 1024px).
+   - Badge hiển thị giỏ hàng trên Header tự động tính toán tổng số lượng sản phẩm từ `useCartStore`.
+   - Hiển thị menu phù hợp theo vai trò: Khách (Guest), Khách hàng (`CUSTOMER`) và Quản trị viên (`ADMIN`).
+2. **Hệ thống Routing & Route Guards:**
+   - `ProtectedRoute.jsx`: Bảo vệ các trang yêu cầu đăng nhập (Profile, Checkout, Orders).
+   - `GuestRoute.jsx`: Chuyển hướng người dùng đã đăng nhập khi truy cập `/login`, `/register`.
+   - `RoleRoute.jsx`: Kiểm soát phân quyền nghiêm ngặt các trang quản trị `/admin/*` (chỉ cho phép `ROLE_ADMIN`).
+   - `NotFoundPage.jsx` (404) & `ForbiddenPage.jsx` (403): Thiết kế trực quan, có nút quay về trang chủ.
+3. **Kiểm tra và Ràng buộc Form (Form Validation):**
+   - `LoginPage.jsx` & `RegisterPage.jsx`: Kiểm tra hợp lệ email (regex RFC 5322), độ dài mật khẩu (>= 6 ký tự), xác nhận mật khẩu khớp nhau, họ tên và số điện thoại.
+   - `ProfilePage.jsx`: Ràng buộc cập nhật thông tin cá nhân và quy trình đổi mật khẩu 3 bước (mật khẩu hiện tại, mật khẩu mới, xác nhận mật khẩu).
+   - `CartPage.jsx` & `CheckoutPage.jsx`:
+     + Khống chế số lượng mua `1 <= quantity <= stockQuantity`, ngăn chặn tràn số lượng vượt tồn kho hoặc nhập số âm.
+     + Ràng buộc số điện thoại Việt Nam chuẩn định dạng (`/^(0|\+84)[0-9]{9}$/`).
+     + Ràng buộc địa chỉ giao hàng chi tiết và phương thức thanh toán hợp lệ (COD / VNPAY / Momo).
+   - Các trang Quản trị (`AdminProductsPage.jsx`, `AdminCategoriesPage.jsx`, `AdminOrdersPage.jsx`, `AdminInventoryPage.jsx`, `UserManagementPage.jsx`): Kiểm soát dữ liệu đầu vào khi tạo/sửa sản phẩm (giá > 0, tồn kho >= 0, chọn đúng danh mục), thêm danh mục, điều chỉnh kho và cập nhật trạng thái đơn hàng.
+4. **Xử lý sự cố giao diện & Trải nghiệm người dùng:**
+   - Tích hợp fallback ảnh tự động (`onError`) khi link hình ảnh sản phẩm hỏng hoặc không tải được.
+   - Thông báo lỗi bằng tiếng Việt dễ hiểu trên toàn bộ các thao tác qua Toast thông báo.
+   - Hiển thị Empty State và Loading Skeleton khi đang tải dữ liệu hoặc danh sách trống.
+
+### 9.3. Kết quả Khởi chạy & Kiểm thử Hệ thống Container (Docker Compose)
+Toàn bộ hệ sinh thái container được điều phối qua `docker-compose.yml` và đã khởi chạy thành công 100%:
+
+| Tên Container | Dịch vụ | Image | Trạng thái (Health Status) | Cổng Host -> Container | Chức năng xác minh |
+| :--- | :--- | :--- | :---: | :---: | :--- |
+| **`ecommerce-mysql`** | `mysql` | `mysql:8.0` | **Up (healthy)** | `3307:3306` | CSDL quan hệ chính, khởi tạo schema và seed data ban đầu thành công. |
+| **`ecommerce-redis`** | `redis` | `redis:7-alpine` | **Up (healthy)** | `6379:6379` | Quản lý phiên làm việc Opaque Refresh Token, ZSET và bộ nhớ đệm cache. |
+| **`ecommerce-backend`** | `backend` | `project-rikkei-ecommerce-develop-backend:latest` | **Up (healthy)** | `8080:8080` | Spring Boot 3.3.5 / Java 21, multi-stage build, non-root user `spring`. |
+| **`ecommerce-frontend`** | `frontend` | `project-rikkei-ecommerce-develop-frontend:latest` | **Up (healthy)** | `3000:80` | Nginx 1.27-Alpine phục vụ SPA bundle và reverse proxy `/api` sang backend. |
+
+### 9.4. Kết quả Kiểm tra Trực tiếp các Endpoint (Smoke Test & E2E Verification)
+
+```bash
+# 1. Kiểm tra Frontend Web (Nginx SPA)
+$ curl.exe -i http://localhost:3000/
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Content-Type: text/html
+-> Phản hồi mã nguồn HTML của ứng dụng React thành công.
+
+# 2. Kiểm tra Nginx Reverse Proxy từ Frontend sang Backend
+$ curl.exe -i http://localhost:3000/api/v1/products
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Content-Type: application/json
+-> Nginx chuyển hướng `/api` sang container `backend:8080` thông suốt.
+
+# 3. Kiểm tra Spring Boot Actuator Health Check
+$ curl.exe -s http://localhost:8080/actuator/health
+{
+  "status": "UP",
+  "components": {
+    "db": { "status": "UP", "details": { "database": "MySQL", "validationQuery": "isValid()" } },
+    "redis": { "status": "UP", "details": { "version": "7.4.11" } },
+    "ping": { "status": "UP" },
+    "diskSpace": { "status": "UP" }
+  }
+}
+-> Toàn bộ kết nối cơ sở dữ liệu MySQL và Redis hoạt động hoàn hảo.
+
+# 4. Kiểm tra Backend Products API
+$ curl.exe -s http://localhost:8080/api/v1/products | jq .data.totalElements
+14
+-> Trả về đúng 14 sản phẩm mẫu theo chuẩn cấu trúc ApiResponse<Page<ProductResponse>>.
+
+# 5. Kiểm tra Backend Categories API
+$ curl.exe -s http://localhost:8080/api/v1/categories | jq .data.[].name
+"Điện tử"
+"Gia dụng"
+"Sách"
+"Thể thao"
+"Thời trang"
+-> Danh mục sản phẩm hoạt động chuẩn xác.
+```
+
+### 9.5. Tối ưu hóa CI/CD (.github/workflows/ci.yml)
+- Bổ sung theo dõi nhánh `develop` và các nhánh tính năng `feature/**`.
+- Tách bạch và tự động hóa 3 jobs chính:
+  1. `backend-test`: Kiểm tra build Gradle, chạy trọn vẹn 120 automated tests và xuất báo cáo JaCoCo coverage.
+  2. `frontend-build`: Thiết lập Node.js 20, cài đặt phụ thuộc `npm ci`, kiểm tra linting và chạy `npm run build`.
+  3. `docker-build`: Kiểm tra tính khả thi khi build container images cho cả Backend và Frontend trên runner Ubuntu.
+

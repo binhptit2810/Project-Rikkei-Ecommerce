@@ -1,6 +1,6 @@
 import React from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
-import { Menu, Store, LogOut, ChevronRight } from 'lucide-react'
+import { useNavigate, useLocation } from 'react-router-dom'
+import { Menu, LogOut, ChevronRight } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 
 export const AdminHeader = ({ onToggleSidebar }) => {
@@ -89,20 +89,10 @@ export const AdminHeader = ({ onToggleSidebar }) => {
         </div>
       </div>
 
-      {/* Phía phải: Xem cửa hàng, Hồ sơ Admin, Nút Đăng xuất */}
+      {/* Phía phải: Hồ sơ Admin, Nút Đăng xuất */}
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Nút Xem cửa hàng (Trang Customer) */}
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-slate-700 hover:text-orange-600 hover:bg-orange-50 border border-slate-200 transition-all shadow-2xs"
-          title="Chuyển sang giao diện người dùng"
-        >
-          <Store className="w-3.5 h-3.5 text-orange-600" />
-          <span className="hidden sm:inline">Xem storefront</span>
-        </Link>
-
         {/* Thông tin Admin Pill */}
-        <div className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-slate-200">
+        <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-lg bg-slate-900 text-white font-bold text-xs flex items-center justify-center">
             {getInitial(user?.fullName)}
           </div>
