@@ -16,19 +16,21 @@ export const useCartStore = create(
        * Thêm sản phẩm vào giỏ hàng
        */
       addToCart: async (product, quantity = 1) => {
-        if (!product || product.stockQuantity <= 0) {
+        if (!product || (product.stockQuantity !== undefined && product.stockQuantity !== null && product.stockQuantity <= 0)) {
           return { success: false, message: 'Sản phẩm đã hết hàng' }
         }
 
         const currentItems = get().items
         const existingIndex = currentItems.findIndex((item) => item.id === product.id)
         let newItems = [...currentItems]
+        const maxStock = (product.stockQuantity !== undefined && product.stockQuantity !== null) ? Number(product.stockQuantity) : 9999
+        const desiredQty = Math.max(1, Number(quantity) || 1)
 
         if (existingIndex > -1) {
           const current = newItems[existingIndex]
           const updatedQuantity = Math.min(
-            product.stockQuantity,
-            (current.quantity || 1) + quantity
+            maxStock,
+            (Number(current.quantity) || 1) + desiredQty
           )
           newItems[existingIndex] = {
             ...current,
@@ -41,14 +43,14 @@ export const useCartStore = create(
             price: Number(product.price) || 0,
             imageUrl: product.imageUrl || '',
             stockQuantity: product.stockQuantity,
-            quantity: Math.min(product.stockQuantity, Math.max(1, quantity)),
+            quantity: Math.min(maxStock, desiredQty),
           })
         }
 
         set({ items: newItems })
 
         // Gửi request API lên backend (Network Tab F12 sẽ ghi nhận request POST /cart/items)
-        cartService.addToCart(product.id, quantity)
+        cartService.addToCart(product.id, desiredQty)
 
         return { success: true }
       },
@@ -57,7 +59,8 @@ export const useCartStore = create(
        * Cập nhật số lượng sản phẩm trong giỏ
        */
       updateQuantity: (productId, quantity) => {
-        if (quantity <= 0) {
+        const numQty = Number(quantity)
+        if (numQty <= 0) {
           get().removeFromCart(productId)
           return
         }
@@ -65,15 +68,15 @@ export const useCartStore = create(
         set({
           items: get().items.map((item) => {
             if (item.id === productId) {
-              const maxStock = item.stockQuantity || 999
-              const clamped = Math.min(maxStock, quantity)
+              const maxStock = (item.stockQuantity !== undefined && item.stockQuantity !== null) ? Number(item.stockQuantity) : 9999
+              const clamped = Math.min(maxStock, Math.max(1, numQty))
               return { ...item, quantity: clamped }
             }
             return item
           }),
         })
 
-        cartService.updateCartItem(productId, quantity)
+        cartService.updateCartItem(productId, numQty)
       },
 
       /**
