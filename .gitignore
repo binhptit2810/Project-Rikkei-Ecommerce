@@ -53,3 +53,6 @@ logs/
 .DS_Store
 ehthumbs.db
 Desktop.ini
+
+# ---- Scratch ----
+scratch/

@@ -5,6 +5,9 @@
 
 USE ecommerce_db;
 
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
+
 -- =============================================================================
 -- Tài khoản mẫu
 -- Mật khẩu: Admin@123 (BCrypt hash — chỉ dùng cho development)
@@ -15,7 +18,7 @@ USE ecommerce_db;
 INSERT INTO users (email, password, full_name, phone, address, role, active) VALUES
 (
     'admin@eshop.com',
-    '$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewYp9Cdi.xJiT7e2',
+    '$2a$12$DeJXKsMNyJICotlNotxyRu/9P8LFnQlt5E96Z6V2Vx.eNtRMjdfUC',
     -- Mật khẩu: Admin@123 (BCrypt cost=12)
     'Quản trị viên',
     '0900000001',
@@ -25,7 +28,7 @@ INSERT INTO users (email, password, full_name, phone, address, role, active) VAL
 ),
 (
     'customer1@example.com',
-    '$2a$12$eA9Bk8FxL7nYqV6LxXGGh.rTZ9mHiL6M7GqFbXMnT.eZ5FO2/8fDi',
+    '$2a$12$.SsIZ3p2ZhYDIEYzPsOKdOVD2UGgW8zC83zXrXD1LBhAY/0bCUJdK',
     -- Mật khẩu: Customer@123
     'Nguyễn Văn An',
     '0912345678',
@@ -35,7 +38,7 @@ INSERT INTO users (email, password, full_name, phone, address, role, active) VAL
 ),
 (
     'customer2@example.com',
-    '$2a$12$eA9Bk8FxL7nYqV6LxXGGh.rTZ9mHiL6M7GqFbXMnT.eZ5FO2/8fDi',
+    '$2a$12$.SsIZ3p2ZhYDIEYzPsOKdOVD2UGgW8zC83zXrXD1LBhAY/0bCUJdK',
     -- Mật khẩu: Customer@123
     'Trần Thị Bình',
     '0987654321',

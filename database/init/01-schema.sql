@@ -10,6 +10,9 @@ CREATE DATABASE IF NOT EXISTS ecommerce_db
 
 USE ecommerce_db;
 
+SET NAMES utf8mb4;
+SET CHARACTER SET utf8mb4;
+
 -- =============================================================================
 -- Bảng users — Tài khoản người dùng
 -- =============================================================================
