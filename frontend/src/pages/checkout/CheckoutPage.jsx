@@ -18,6 +18,7 @@ import {
 import { useCartStore } from '../../store/useCartStore'
 import { useAuthStore } from '../../store/useAuthStore'
 import orderService from '../../services/orderService'
+import AddressMapModal from '../../components/common/AddressMapModal'
 
 export const CheckoutPage = () => {
   const navigate = useNavigate()
@@ -32,6 +33,7 @@ export const CheckoutPage = () => {
     note: '',
   })
 
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
 
@@ -61,6 +63,11 @@ export const CheckoutPage = () => {
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
+    if (errorMessage) setErrorMessage(null)
+  }
+
+  const handleConfirmMapAddress = ({ address }) => {
+    setFormData((prev) => ({ ...prev, shippingAddress: address }))
     if (errorMessage) setErrorMessage(null)
   }
 
@@ -255,9 +262,19 @@ export const CheckoutPage = () => {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Địa chỉ nhận hàng chi tiết <span className="text-red-500">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Địa chỉ nhận hàng chi tiết <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setIsMapModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-orange-600 hover:text-orange-700 bg-orange-50 hover:bg-orange-100 px-2.5 py-1 rounded-lg border border-orange-200/80 transition-all cursor-pointer shadow-2xs hover:shadow-xs active:scale-[0.98]"
+                    >
+                      <MapPin className="w-3.5 h-3.5 text-orange-600" />
+                      <span>Chọn từ bản đồ</span>
+                    </button>
+                  </div>
                   <div className="relative">
                     <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                     <textarea
@@ -269,6 +286,18 @@ export const CheckoutPage = () => {
                       required
                       className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-sm text-slate-800 bg-white"
                     />
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
+                    <span>Bạn có thể nhập trực tiếp hoặc mở bản đồ để chọn tọa độ chính xác.</span>
+                    {formData.shippingAddress && (
+                      <button
+                        type="button"
+                        onClick={() => setIsMapModalOpen(true)}
+                        className="text-orange-600 hover:underline font-semibold cursor-pointer"
+                      >
+                        Đổi vị trí trên bản đồ
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -447,6 +476,14 @@ export const CheckoutPage = () => {
           </div>
         </form>
       </div>
+
+      {/* Modal chọn vị trí trên bản đồ */}
+      <AddressMapModal
+        isOpen={isMapModalOpen}
+        onClose={() => setIsMapModalOpen(false)}
+        onConfirmAddress={handleConfirmMapAddress}
+        initialAddress={formData.shippingAddress}
+      />
     </div>
   )
 }
