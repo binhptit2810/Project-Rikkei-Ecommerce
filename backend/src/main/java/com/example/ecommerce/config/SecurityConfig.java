@@ -28,6 +28,8 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Cấu hình Spring Security cho toàn bộ ứng dụng.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Kiến trúc xác thực:
  *   - Stateless: KHÔNG sử dụng session (SessionCreationPolicy.STATELESS)

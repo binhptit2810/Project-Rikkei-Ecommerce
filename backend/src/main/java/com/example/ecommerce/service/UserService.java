@@ -4,6 +4,7 @@ import com.example.ecommerce.dto.request.ChangePasswordRequest;
 import com.example.ecommerce.dto.request.LockUserRequest;
 import com.example.ecommerce.dto.request.UpdateProfileRequest;
 import com.example.ecommerce.dto.response.UserResponse;
+import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
@@ -22,6 +23,8 @@ import java.time.LocalDateTime;
 
 /**
  * Nghiệp vụ quản lý hồ sơ người dùng.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Nguyên tắc bảo mật:
  *   - Danh tính người dùng luôn được lấy từ SecurityContext (UserDetails), KHÔNG tin tưởng ID do client gửi.
@@ -65,6 +68,25 @@ public class UserService {
     public Page<UserResponse> getAllUsers(Pageable pageable) {
         return userRepository.findAll(pageable)
                 .map(UserResponse::fromEntity);
+    }
+
+    /**
+     * Lấy danh sách khách hàng (role = CUSTOMER) có phân trang và tìm kiếm (dành cho User area).
+     * Tuyệt đối không trả về tài khoản ADMIN.
+     *
+     * @param pageable thông tin phân trang (page, size, sort)
+     * @param keyword  từ khóa tìm kiếm theo tên, email, sđt (chỉ tìm trong phạm vi CUSTOMER)
+     * @return Page<UserResponse> danh sách khách hàng
+     */
+    @Transactional(readOnly = true)
+    public Page<UserResponse> getCustomers(Pageable pageable, String keyword) {
+        Page<User> userPage;
+        if (StringUtils.hasText(keyword)) {
+            userPage = userRepository.searchByRoleAndKeyword(Role.CUSTOMER, keyword.trim(), pageable);
+        } else {
+            userPage = userRepository.findByRole(Role.CUSTOMER, pageable);
+        }
+        return userPage.map(UserResponse::fromEntity);
     }
 
     /**

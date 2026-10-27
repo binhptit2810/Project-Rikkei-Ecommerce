@@ -32,6 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Integration Test cho AdminUserController.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra RBAC (Phân quyền Admin vs Customer), Validation dữ liệu đầu vào,
  * và chuẩn hóa phản hồi ApiResponse.
  */

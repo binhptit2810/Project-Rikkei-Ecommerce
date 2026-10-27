@@ -6,6 +6,8 @@ import lombok.Data;
 
 /**
  * Request body cho POST /api/v1/auth/login.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Lưu ý bảo mật:
  *   - Không ghi password vào log.
@@ -20,4 +22,11 @@ public class LoginRequest {
 
     @NotBlank(message = "Mật khẩu không được để trống")
     private String password;
+
+    /**
+     * Cổng đăng nhập yêu cầu: "CUSTOMER" hoặc "ADMIN" (tùy chọn).
+     * Dùng để Backend kiểm soát và từ chối tài khoản sai cổng ngay tại tầng xác thực.
+     */
+    private String portal;
 }
+

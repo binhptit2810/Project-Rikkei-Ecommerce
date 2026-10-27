@@ -10,6 +10,8 @@ import lombok.NoArgsConstructor;
 /**
  * Request body cho API Admin khóa tài khoản:
  * PATCH /api/v1/admin/users/{id}/lock
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Yêu cầu:
  * - Lý do khóa là bắt buộc (không được rỗng hoặc chỉ chứa khoảng trắng).

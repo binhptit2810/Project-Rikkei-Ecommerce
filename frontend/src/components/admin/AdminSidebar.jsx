@@ -29,7 +29,7 @@ export const AdminSidebar = ({ onClose }) => {
           label: 'Bảng điều khiển',
           path: '/admin/dashboard',
           icon: LayoutDashboard,
-          isImplemented: false,
+          isImplemented: true,
         },
       ],
     },

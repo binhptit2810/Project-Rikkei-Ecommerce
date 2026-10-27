@@ -26,6 +26,8 @@ import org.springframework.util.StringUtils;
 
 /**
  * Nghiệp vụ xác thực người dùng: đăng ký và đăng nhập.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Nguyên tắc bảo mật:
  *   - Mật khẩu được hash BCrypt (cost=12) trước khi lưu DB.
@@ -35,6 +37,7 @@ import org.springframework.util.StringUtils;
  *   - Tài khoản mới mặc định role=CUSTOMER, active=true.
  *   - Không cho phép client tự gán role ADMIN qua API đăng ký.
  */
+// TSK-AUTH-00
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -135,13 +138,34 @@ public class AuthService {
         }
 
         UserDetails userDetails = (UserDetails) authentication.getPrincipal();
-        String token = jwtUtils.generateToken(userDetails);
 
         if (user == null) {
             user = userRepository.findByEmail(normalizedEmail)
                     .orElseThrow(() -> new BusinessException("Không tìm thấy thông tin người dùng"));
         }
 
+        // 3. Phân tách và kiểm soát cổng đăng nhập phía Backend (Defense in Depth)
+        if (StringUtils.hasText(request.getPortal())) {
+            String portal = request.getPortal().trim();
+            if ("CUSTOMER".equalsIgnoreCase(portal)) {
+                // Chỉ cho phép tài khoản CUSTOMER đăng nhập tại cổng Customer
+                if (user.getRole() != Role.CUSTOMER) {
+                    log.warn("Từ chối truy cập cổng Customer cho tài khoản có vai trò {}: email={}",
+                            user.getRole(), normalizedEmail);
+                    // Thông báo chung tự nhiên, tuyệt đối không tiết lộ vai trò hoặc sự tồn tại của ADMIN
+                    throw new BadCredentialsException("Email hoặc mật khẩu không chính xác.");
+                }
+            } else if ("ADMIN".equalsIgnoreCase(portal)) {
+                // Chỉ cho phép tài khoản ADMIN đăng nhập tại cổng Admin
+                if (user.getRole() != Role.ADMIN) {
+                    log.warn("Từ chối truy cập cổng Admin cho tài khoản không có quyền quản trị: email={}",
+                            normalizedEmail);
+                    throw new BadCredentialsException("Email hoặc mật khẩu không chính xác.");
+                }
+            }
+        }
+
+        String token = jwtUtils.generateToken(userDetails);
         String refreshToken = refreshTokenService.createRefreshToken(user);
 
         log.info("Đăng nhập thành công: {}", normalizedEmail);

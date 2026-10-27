@@ -8,6 +8,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Unit Test cho User Entity.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra các hàm lifecycle JPA callback onCreate và onUpdate.
  */
 class UserTest {

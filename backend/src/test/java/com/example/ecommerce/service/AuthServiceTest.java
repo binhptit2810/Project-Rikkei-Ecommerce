@@ -35,6 +35,8 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit Test cho AuthService.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra các yêu cầu chức năng (Đăng ký, Đăng nhập)
  * và phi chức năng (Bảo mật băm BCrypt, JWT, Bắt lỗi khóa tài khoản).
  */
@@ -305,7 +307,6 @@ class AuthServiceTest {
 
         when(authentication.getPrincipal()).thenReturn(userDetails);
         when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
-        when(jwtUtils.generateToken(userDetails)).thenReturn("mock-token");
 
         assertThatThrownBy(() -> authService.login(loginRequest))
                 .isInstanceOf(BusinessException.class)
@@ -457,6 +458,111 @@ class AuthServiceTest {
         authService.logout("raw-token-to-logout");
 
         verify(refreshTokenService).revokeToken("raw-token-to-logout");
+    }
+
+    @Test
+    @DisplayName("Portal Separation: ADMIN đăng nhập tại cổng CUSTOMER bị từ chối bằng thông báo chung không lộ vai trò")
+    void login_AdminAccount_OnCustomerPortal_ThrowsBadCredentialsException() {
+        loginRequest.setPortal("CUSTOMER");
+        mockUser.setRole(Role.ADMIN);
+
+        Authentication authentication = mock(Authentication.class);
+        UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
+                .username("testuser@example.com")
+                .password("hashed")
+                .authorities("ROLE_ADMIN")
+                .build();
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+
+        assertThatThrownBy(() -> authService.login(loginRequest))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessage("Email hoặc mật khẩu không chính xác.");
+
+        // Tuyệt đối không tạo access token hay refresh token
+        verify(jwtUtils, never()).generateToken(any());
+        verify(refreshTokenService, never()).createRefreshToken(any());
+    }
+
+    @Test
+    @DisplayName("Portal Separation: CUSTOMER đăng nhập tại cổng ADMIN bị từ chối bằng thông báo chung")
+    void login_CustomerAccount_OnAdminPortal_ThrowsBadCredentialsException() {
+        loginRequest.setPortal("ADMIN");
+        mockUser.setRole(Role.CUSTOMER);
+
+        Authentication authentication = mock(Authentication.class);
+        UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
+                .username("testuser@example.com")
+                .password("hashed")
+                .authorities("ROLE_CUSTOMER")
+                .build();
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+
+        assertThatThrownBy(() -> authService.login(loginRequest))
+                .isInstanceOf(BadCredentialsException.class)
+                .hasMessage("Email hoặc mật khẩu không chính xác.");
+
+        verify(jwtUtils, never()).generateToken(any());
+        verify(refreshTokenService, never()).createRefreshToken(any());
+    }
+
+    @Test
+    @DisplayName("Portal Separation: CUSTOMER đăng nhập đúng cổng CUSTOMER thành công")
+    void login_CustomerAccount_OnCustomerPortal_Success() {
+        loginRequest.setPortal("CUSTOMER");
+        mockUser.setRole(Role.CUSTOMER);
+
+        Authentication authentication = mock(Authentication.class);
+        UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
+                .username("testuser@example.com")
+                .password("hashed")
+                .authorities("ROLE_CUSTOMER")
+                .build();
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+        when(jwtUtils.generateToken(userDetails)).thenReturn("mock.jwt.token");
+        when(jwtUtils.getExpirationInSeconds()).thenReturn(900L);
+        when(refreshTokenService.createRefreshToken(mockUser)).thenReturn("mock-refresh-token");
+
+        AuthResponse response = authService.login(loginRequest);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getAccessToken()).isEqualTo("mock.jwt.token");
+        assertThat(response.getUser().getRole()).isEqualTo(Role.CUSTOMER);
+    }
+
+    @Test
+    @DisplayName("Portal Separation: ADMIN đăng nhập đúng cổng ADMIN thành công")
+    void login_AdminAccount_OnAdminPortal_Success() {
+        loginRequest.setPortal("ADMIN");
+        mockUser.setRole(Role.ADMIN);
+
+        Authentication authentication = mock(Authentication.class);
+        UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
+                .username("testuser@example.com")
+                .password("hashed")
+                .authorities("ROLE_ADMIN")
+                .build();
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+        when(jwtUtils.generateToken(userDetails)).thenReturn("mock.admin.jwt.token");
+        when(jwtUtils.getExpirationInSeconds()).thenReturn(900L);
+        when(refreshTokenService.createRefreshToken(mockUser)).thenReturn("mock-admin-refresh-token");
+
+        AuthResponse response = authService.login(loginRequest);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getAccessToken()).isEqualTo("mock.admin.jwt.token");
+        assertThat(response.getUser().getRole()).isEqualTo(Role.ADMIN);
     }
 }
 

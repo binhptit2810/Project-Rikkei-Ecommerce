@@ -14,6 +14,8 @@ import java.util.List;
 
 /**
  * Tích hợp Spring Security với repository người dùng.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Spring Security gọi loadUserByUsername(email) khi:
  *   1. DaoAuthenticationProvider xác thực trong AuthService.login()

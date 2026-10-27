@@ -21,6 +21,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * Unit Test cho CustomUserDetailsService.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra việc ánh xạ quyền (Authorities) và vô hiệu hóa tài khoản bị khóa.
  */
 @ExtendWith(MockitoExtension.class)

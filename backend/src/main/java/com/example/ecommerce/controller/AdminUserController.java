@@ -19,6 +19,8 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * Controller quản lý người dùng dành riêng cho Admin.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Tất cả endpoint yêu cầu quyền ADMIN (được bảo vệ bởi SecurityConfig: /api/v1/admin/**
  * và @PreAuthorize("hasRole('ADMIN')")).

@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 
 /**
  * Response thông tin người dùng — dùng cho mọi API trả user data.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Bảo mật:
  *   - Không chứa trường password, passwordHash hoặc dữ liệu nội bộ.

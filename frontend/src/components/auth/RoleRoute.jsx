@@ -12,7 +12,8 @@ export const RoleRoute = ({ requiredRole = 'ADMIN', children }) => {
   const location = useLocation()
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />
+    const redirectLogin = requiredRole === 'ADMIN' ? '/admin/login' : '/login'
+    return <Navigate to={redirectLogin} state={{ from: location }} replace />
   }
 
   if (user?.role !== requiredRole) {

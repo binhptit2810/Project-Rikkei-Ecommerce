@@ -3,12 +3,17 @@ package com.example.ecommerce.controller;
 import com.example.ecommerce.dto.request.ChangePasswordRequest;
 import com.example.ecommerce.dto.request.UpdateProfileRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
+import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.service.UserService;
 import com.example.ecommerce.util.CookieUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -18,6 +23,8 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * Controller hồ sơ người dùng.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Tất cả endpoint yêu cầu xác thực (Authorization: Bearer <token>).
  * Người dùng chỉ truy cập được hồ sơ của chính mình — không có userId trong path.
@@ -68,6 +75,31 @@ public class UserController {
 
         UserResponse user = userService.getCurrentUser(userDetails);
         return ResponseEntity.ok(ApiResponse.success(user));
+    }
+
+    /**
+     * Lấy danh sách khách hàng dành cho khu vực User (chỉ trả về CUSTOMER, tuyệt đối không lẫn ADMIN).
+     *
+     * GET /api/v1/users?page=0&size=10&keyword=...
+     * Header: Authorization: Bearer <token>
+     *
+     * @param page    số trang (bắt đầu từ 0, mặc định: 0)
+     * @param size    số phần tử trên mỗi trang (mặc định: 10, tối đa: 100)
+     * @param keyword từ khóa tìm kiếm (họ tên, email, sđt) - chỉ tìm trong danh sách CUSTOMER
+     * @return ApiResponse chứa PageResponse<UserResponse>
+     */
+    @GetMapping
+    public ResponseEntity<ApiResponse<PageResponse<UserResponse>>> getCustomers(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String keyword) {
+
+        int pageIndex = Math.max(0, page);
+        int pageSize = size <= 0 ? 10 : Math.min(size, 100);
+        Pageable pageable = PageRequest.of(pageIndex, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        Page<UserResponse> customers = userService.getCustomers(pageable, keyword);
+        return ResponseEntity.ok(ApiResponse.success(PageResponse.from(customers)));
     }
 
     /**
