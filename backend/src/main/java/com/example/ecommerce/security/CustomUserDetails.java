@@ -15,6 +15,7 @@ import java.util.List;
  * Phụ trách: Cao Chí Thiện
  * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  */
+// [TSK-D02-CCT]
 @Getter
 public class CustomUserDetails extends User {
 

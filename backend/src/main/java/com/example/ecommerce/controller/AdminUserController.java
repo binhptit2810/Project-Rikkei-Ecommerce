@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
  * Tất cả endpoint yêu cầu quyền ADMIN (được bảo vệ bởi SecurityConfig: /api/v1/admin/**
  * và @PreAuthorize("hasRole('ADMIN')")).
  */
+// [TSK-D02-CCT]
 @RestController
 @RequestMapping("/api/v1/admin/users")
 @RequiredArgsConstructor

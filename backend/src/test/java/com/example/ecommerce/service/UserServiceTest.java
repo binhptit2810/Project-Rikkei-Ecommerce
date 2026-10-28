@@ -40,6 +40,7 @@ import static org.mockito.Mockito.*;
  * Kiểm tra các tính năng quản lý tài khoản, phân trang,
  * cơ chế khóa/mở khóa bảo mật, ngăn tự khóa, và đổi mật khẩu.
  */
+// [TSK-D02-CCT]
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 

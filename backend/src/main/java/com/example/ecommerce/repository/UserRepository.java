@@ -21,6 +21,7 @@ import java.util.Optional;
  *   - UserService   — lấy thông tin hồ sơ người dùng hiện tại, danh sách khách hàng
  *   - CustomUserDetailsService — Spring Security load UserDetails từ email
  */
+// [TSK-D02-CCT]
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 

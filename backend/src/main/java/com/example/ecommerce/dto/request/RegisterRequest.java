@@ -15,6 +15,7 @@ import lombok.Data;
  *   phone    — tuỳ chọn, chuỗi rỗng hoặc số bắt đầu bằng 0 gồm 10 chữ số
  *   address  — tuỳ chọn, không giới hạn độ dài
  */
+// [TSK-D02-CCT]
 @Data
 public class RegisterRequest {
 

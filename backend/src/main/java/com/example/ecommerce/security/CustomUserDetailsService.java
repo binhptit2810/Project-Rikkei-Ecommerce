@@ -29,6 +29,7 @@ import java.util.List;
  *   @PreAuthorize("hasRole('CUSTOMER')")  — kiểm tra ROLE_CUSTOMER
  *   @PreAuthorize("hasRole('ADMIN')")     — kiểm tra ROLE_ADMIN
  */
+// [TSK-D02-CCT]
 @Service
 @RequiredArgsConstructor
 @Slf4j

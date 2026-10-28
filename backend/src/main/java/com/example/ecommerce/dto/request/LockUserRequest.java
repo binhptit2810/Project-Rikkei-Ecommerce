@@ -17,6 +17,7 @@ import lombok.NoArgsConstructor;
  * - Lý do khóa là bắt buộc (không được rỗng hoặc chỉ chứa khoảng trắng).
  * - Giới hạn tối đa 500 ký tự phù hợp với cột `lock_reason` trong cơ sở dữ liệu.
  */
+// [TSK-D02-CCT]
 @Data
 @Builder
 @NoArgsConstructor

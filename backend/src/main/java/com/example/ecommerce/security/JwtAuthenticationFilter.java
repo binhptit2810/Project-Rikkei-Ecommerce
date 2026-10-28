@@ -39,6 +39,7 @@ import java.util.Date;
  *   - SecurityConfig sẽ từ chối request nếu SecurityContext rỗng.
  *   - Không ghi JWT hoặc thông tin nhạy cảm vào log.
  */
+// [TSK-D02-CCT]
 @Component
 @RequiredArgsConstructor
 @Slf4j

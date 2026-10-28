@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
  *   - Trường password không được trả về trong response (dùng UserResponse DTO).
  *   - Không truyền entity này trực tiếp vào ResponseEntity.
  */
+// [TSK-D02-CCT]
 @Entity
 @Table(name = "users")
 @Data

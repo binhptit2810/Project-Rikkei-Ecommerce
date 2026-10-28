@@ -26,6 +26,7 @@ import java.time.LocalDateTime;
  *   - OrderService cần userId → dùng user.getId()
  *   - Module khác cần role    → dùng user.getRole()
  */
+// [TSK-D02-CCT]
 @Data
 @Builder
 @NoArgsConstructor

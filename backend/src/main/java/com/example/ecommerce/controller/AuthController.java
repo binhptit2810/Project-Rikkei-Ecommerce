@@ -32,6 +32,7 @@ import org.springframework.web.bind.annotation.*;
  *   - Access Token: trả trong response body JSON (Zustand memory store).
  *   - Refresh Token: truyền qua HttpOnly cookie (không trả trong JSON).
  */
+// [TSK-D02-CCT]
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor

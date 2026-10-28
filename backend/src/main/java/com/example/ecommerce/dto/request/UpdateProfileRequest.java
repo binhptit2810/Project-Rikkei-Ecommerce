@@ -19,6 +19,7 @@ import lombok.Data;
  *   - role     (chỉ Admin mới được thay đổi)
  *   - active   (chỉ Admin mới được thay đổi)
  */
+// [TSK-D02-CCT]
 @Data
 public class UpdateProfileRequest {
 

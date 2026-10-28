@@ -30,6 +30,7 @@ import java.util.Date;
  *   - iat:    thời điểm tạo
  *   - exp:    thời điểm hết hạn
  */
+// [TSK-D02-CCT]
 @Component
 @Slf4j
 public class JwtUtils {

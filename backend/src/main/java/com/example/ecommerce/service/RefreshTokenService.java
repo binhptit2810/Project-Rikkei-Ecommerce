@@ -37,6 +37,7 @@ import java.util.concurrent.TimeUnit;
  *    Nếu phát hiện token cũ được sử dụng lại sau grace period, lập tức thu hồi toàn bộ phiên của tài khoản.
  * 5. Fail-Closed: Mọi lỗi kết nối Redis đều được xử lý chặt chẽ, không cấp token không kiểm chứng.
  */
+// [TSK-D02-CCT]
 @Service
 @RequiredArgsConstructor
 @Slf4j

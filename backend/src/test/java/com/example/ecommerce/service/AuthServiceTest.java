@@ -40,6 +40,7 @@ import static org.mockito.Mockito.*;
  * Kiểm tra các yêu cầu chức năng (Đăng ký, Đăng nhập)
  * và phi chức năng (Bảo mật băm BCrypt, JWT, Bắt lỗi khóa tài khoản).
  */
+// [TSK-D02-CCT]
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
 

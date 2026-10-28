@@ -32,6 +32,7 @@ import lombok.ToString;
  *   }
  * }
  */
+// [TSK-D02-CCT]
 @Data
 @Builder
 @NoArgsConstructor

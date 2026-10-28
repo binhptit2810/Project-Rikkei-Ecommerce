@@ -48,6 +48,7 @@ import java.nio.charset.StandardCharsets;
  *   - hasRole('ADMIN')    → kiểm tra authority ROLE_ADMIN
  *   - Dùng @PreAuthorize tại Service hoặc Controller
  */
+// [TSK-D02-CCT]
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity           // Cho phép @PreAuthorize, @PostAuthorize trong Service/Controller

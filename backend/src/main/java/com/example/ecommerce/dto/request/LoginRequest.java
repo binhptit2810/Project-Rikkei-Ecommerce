@@ -13,6 +13,7 @@ import lombok.Data;
  *   - Không ghi password vào log.
  *   - Response không tiết lộ email có tồn tại hay không khi thông tin sai.
  */
+// [TSK-D02-CCT]
 @Data
 public class LoginRequest {
 

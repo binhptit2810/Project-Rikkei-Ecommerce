@@ -38,6 +38,7 @@ import org.springframework.util.StringUtils;
  *   - Không cho phép client tự gán role ADMIN qua API đăng ký.
  */
 // TSK-AUTH-00
+// [TSK-D02-CCT]
 @Service
 @RequiredArgsConstructor
 @Slf4j

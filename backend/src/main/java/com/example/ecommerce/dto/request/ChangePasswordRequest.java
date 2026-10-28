@@ -18,6 +18,7 @@ import lombok.NoArgsConstructor;
  *   - Xác nhận mật khẩu mới phải khớp với mật khẩu mới.
  *   - Không log mật khẩu ra ngoài log server.
  */
+// [TSK-D02-CCT]
 @Data
 @Builder
 @NoArgsConstructor

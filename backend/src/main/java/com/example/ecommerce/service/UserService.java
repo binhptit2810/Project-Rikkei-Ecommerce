@@ -36,6 +36,7 @@ import java.time.LocalDateTime;
  *   - HOẶC đọc JWT claims trong SecurityContext principal
  *   - VD trong OrderService: userRepository.findByEmail(userDetails.getUsername()).getId()
  */
+// [TSK-D02-CCT]
 @Service
 @RequiredArgsConstructor
 @Slf4j
