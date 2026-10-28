@@ -1,2 +1,1 @@
 ﻿# Project-Rikkei-Ecommerce
-hello
