@@ -9,6 +9,7 @@ import com.example.ecommerce.entity.User;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.LockedAccountException;
 import com.example.ecommerce.repository.UserRepository;
+import com.example.ecommerce.security.CustomUserDetails;
 import com.example.ecommerce.security.JwtUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -228,10 +229,12 @@ public class AuthService {
      * Chỉ dùng sau khi đăng ký (trước khi có Authentication từ authenticationManager).
      */
     private UserDetails buildUserDetailsForToken(User user) {
-        return org.springframework.security.core.userdetails.User.builder()
-                .username(user.getEmail())
-                .password(user.getPassword())
-                .roles(user.getRole().name())
-                .build();
+        return new CustomUserDetails(
+                user.getId(),
+                user.getEmail(),
+                user.getPassword(),
+                user.getRole(),
+                Boolean.TRUE.equals(user.getActive())
+        );
     }
 }

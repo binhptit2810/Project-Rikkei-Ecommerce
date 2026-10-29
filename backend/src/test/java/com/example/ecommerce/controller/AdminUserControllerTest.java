@@ -80,7 +80,59 @@ class AdminUserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.content[0].email").value("user1@example.com"));
+                .andExpect(jsonPath("$.data.content[0].email").value("user1@example.com"))
+                .andExpect(jsonPath("$.data.pageNumber").value(0))
+                .andExpect(jsonPath("$.data.pageSize").value(1))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.totalPages").value(1));
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("BR-AUTH-04: Admin tự khóa chính mình bị từ chối bằng BusinessException trả 400 BAD REQUEST")
+    void lockUser_AdminSelfLocking_Returns400() throws Exception {
+        LockUserRequest request = new LockUserRequest("Admin cố tình tự khóa");
+
+        when(userService.lockUser(eq(1L), any(LockUserRequest.class), any()))
+                .thenThrow(new com.example.ecommerce.exception.BusinessException("Bạn không thể tự khóa tài khoản của chính mình"));
+
+        mockMvc.perform(patch("/api/v1/admin/users/1/lock")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Bạn không thể tự khóa tài khoản của chính mình"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("API-ERR: Khóa người dùng không tồn tại trả 404 NOT FOUND")
+    void lockUser_UserNotFound_Returns404() throws Exception {
+        LockUserRequest request = new LockUserRequest("Lý do");
+
+        when(userService.lockUser(eq(999L), any(LockUserRequest.class), any()))
+                .thenThrow(new com.example.ecommerce.exception.ResourceNotFoundException("Người dùng không tồn tại với ID: 999"));
+
+        mockMvc.perform(patch("/api/v1/admin/users/999/lock")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Người dùng không tồn tại với ID: 999"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("API-ERR: Mở khóa người dùng đang hoạt động bình thường trả 400 BAD REQUEST")
+    void unlockUser_AlreadyActive_Returns400() throws Exception {
+        when(userService.unlockUser(eq(2L), any()))
+                .thenThrow(new com.example.ecommerce.exception.BusinessException("Tài khoản này đang hoạt động bình thường, không cần mở khóa"));
+
+        mockMvc.perform(patch("/api/v1/admin/users/2/unlock")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Tài khoản này đang hoạt động bình thường, không cần mở khóa"));
     }
 
     @Test

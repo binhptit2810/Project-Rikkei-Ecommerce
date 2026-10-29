@@ -54,6 +54,44 @@ class UserControllerTest {
     @MockBean
     private com.example.ecommerce.service.RefreshTokenService refreshTokenService;
 
+    @MockBean
+    private com.example.ecommerce.repository.UserRepository userRepository;
+
+    @Autowired
+    private com.example.ecommerce.security.JwtUtils jwtUtils;
+
+    @Test
+    @DisplayName("NFR-SEC-04: Access Token JWT của tài khoản đã bị khóa (active=false) bị từ chối 401 UNAUTHORIZED")
+    void requestWithJwt_LockedUser_Returns401() throws Exception {
+        com.example.ecommerce.entity.User lockedUser = com.example.ecommerce.entity.User.builder()
+                .id(99L)
+                .email("jwt.locked@example.com")
+                .password("$2a$12$someHashedPasswordHere")
+                .fullName("Locked Customer")
+                .active(false)
+                .role(Role.CUSTOMER)
+                .build();
+        when(userRepository.findByEmail("jwt.locked@example.com")).thenReturn(java.util.Optional.of(lockedUser));
+
+        org.springframework.security.core.userdetails.UserDetails userDetails =
+                new org.springframework.security.core.userdetails.User(
+                        "jwt.locked@example.com",
+                        "password",
+                        false,
+                        true, true, true,
+                        java.util.List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_CUSTOMER"))
+                );
+
+        String token = jwtUtils.generateToken(userDetails);
+
+        mockMvc.perform(get("/api/v1/users/me")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Chưa đăng nhập hoặc token hết hạn"));
+    }
+
     @Test
     @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
     @DisplayName("FR-USER-01: Lấy thông tin cá nhân hiện tại GET /api/v1/users/me thành công trả 200 OK")

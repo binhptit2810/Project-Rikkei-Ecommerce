@@ -1,8 +1,10 @@
 package com.example.ecommerce.security;
 
+import com.example.ecommerce.entity.Role;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import io.jsonwebtoken.security.SignatureException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -145,5 +147,68 @@ class JwtUtilsTest {
         assertThatThrownBy(() -> jwtUtils.isTokenExpired(expiredToken))
                 .isInstanceOf(ExpiredJwtException.class);
     }
+
+    @Test
+    @DisplayName("NFR-SEC-JWT-01: Sinh và trích xuất đầy đủ claims userId, email, role từ CustomUserDetails")
+    void generateToken_WithCustomUserDetails_EmbedsAllClaims() {
+        CustomUserDetails customUserDetails = new CustomUserDetails(
+                42L,
+                "customer@example.com",
+                "hashedPassword",
+                Role.CUSTOMER,
+                true
+        );
+
+        String token = jwtUtils.generateToken(customUserDetails);
+
+        assertThat(token).isNotBlank();
+        assertThat(jwtUtils.extractEmail(token)).isEqualTo("customer@example.com");
+        assertThat(jwtUtils.extractUserId(token)).isEqualTo(42L);
+        assertThat(jwtUtils.extractRole(token)).isEqualTo("ROLE_CUSTOMER");
+        assertThat(jwtUtils.validateToken(token, customUserDetails)).isTrue();
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-JWT-02: Sinh token với tham số tường minh (userId, email, role) và trích xuất chính xác")
+    void generateToken_WithExplicitParams_EmbedsAllClaims() {
+        String token = jwtUtils.generateToken(99L, "admin@example.com", "ADMIN");
+
+        assertThat(token).isNotBlank();
+        assertThat(jwtUtils.extractEmail(token)).isEqualTo("admin@example.com");
+        assertThat(jwtUtils.extractUserId(token)).isEqualTo(99L);
+        assertThat(jwtUtils.extractRole(token)).isEqualTo("ROLE_ADMIN");
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-JWT-03: Không thể giả mạo role ADMIN bằng cách sửa payload JWT (bị từ chối bởi chữ ký HMAC-SHA256)")
+    void validateToken_TamperedRolePayload_RejectedBySignature() {
+        // Sinh token hợp lệ cho CUSTOMER
+        CustomUserDetails customer = new CustomUserDetails(10L, "hacker@example.com", "pass", Role.CUSTOMER, true);
+        String validToken = jwtUtils.generateToken(customer);
+
+        // Giả lập kẻ tấn công giải mã payload Base64 và sửa role thành ROLE_ADMIN
+        String[] parts = validToken.split("\\.");
+        assertThat(parts).hasSize(3);
+
+        String payloadJson = new String(java.util.Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8);
+        assertThat(payloadJson).contains("ROLE_CUSTOMER");
+
+        // Thay đổi claim role thành ROLE_ADMIN
+        String forgedPayloadJson = payloadJson.replace("ROLE_CUSTOMER", "ROLE_ADMIN");
+        String forgedPayloadBase64 = java.util.Base64.getUrlEncoder().withoutPadding()
+                .encodeToString(forgedPayloadJson.getBytes(StandardCharsets.UTF_8));
+
+        // Ghép lại token với payload giả mạo nhưng giữ chữ ký cũ
+        String forgedToken = parts[0] + "." + forgedPayloadBase64 + "." + parts[2];
+
+        // Xác minh validateToken từ chối token giả mạo
+        boolean isValid = jwtUtils.validateToken(forgedToken, customer);
+        assertThat(isValid).isFalse();
+
+        // Xác minh parseClaims ném SignatureException
+        assertThatThrownBy(() -> jwtUtils.parseClaims(forgedToken))
+                .isInstanceOf(SignatureException.class);
+    }
 }
+
 

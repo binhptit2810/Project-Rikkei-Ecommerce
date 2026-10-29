@@ -190,5 +190,116 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().isSuccess()).isFalse();
         assertThat(response.getBody().getMessage()).isEqualTo("Dịch vụ xác thực tạm thời không khả dụng, vui lòng thử lại sau");
     }
+
+    @Test
+    @DisplayName("NFR-ERR-VAL-01: MethodArgumentNotValidException trả về 400 BAD_REQUEST với chi tiết lỗi theo trường và timestamp")
+    void handleValidation_MultipleFieldErrors_Returns400WithErrorsAndTimestamp() throws Exception {
+        org.springframework.core.MethodParameter param =
+                new org.springframework.core.MethodParameter(GlobalExceptionHandlerTest.class.getDeclaredMethods()[0], -1);
+        org.springframework.validation.BeanPropertyBindingResult bindingResult =
+                new org.springframework.validation.BeanPropertyBindingResult(new Object(), "testDto");
+
+        bindingResult.addError(new org.springframework.validation.FieldError("testDto", "email", "Email không đúng định dạng"));
+        bindingResult.addError(new org.springframework.validation.FieldError("testDto", "password", "Mật khẩu phải từ 6 đến 100 ký tự"));
+
+        org.springframework.web.bind.MethodArgumentNotValidException ex =
+                new org.springframework.web.bind.MethodArgumentNotValidException(param, bindingResult);
+
+        ResponseEntity<ApiResponse<Map<String, String>>> response = exceptionHandler.handleValidation(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getMessage()).isEqualTo("Dữ liệu không hợp lệ");
+        assertThat(response.getBody().getTimestamp()).isNotNull();
+        assertThat(response.getBody().getData()).containsEntry("email", "Email không đúng định dạng");
+        assertThat(response.getBody().getData()).containsEntry("password", "Mật khẩu phải từ 6 đến 100 ký tự");
+    }
+
+    @Test
+    @DisplayName("NFR-ERR-VAL-02: MethodArgumentNotValidException với ObjectError không gây ClassCastException")
+    void handleValidation_ObjectError_HandledSafelyWithoutClassCastException() throws Exception {
+        org.springframework.core.MethodParameter param =
+                new org.springframework.core.MethodParameter(GlobalExceptionHandlerTest.class.getDeclaredMethods()[0], -1);
+        org.springframework.validation.BeanPropertyBindingResult bindingResult =
+                new org.springframework.validation.BeanPropertyBindingResult(new Object(), "orderRequest");
+
+        bindingResult.addError(new org.springframework.validation.ObjectError("orderRequest", "Tổng tiền không khớp chi tiết đơn"));
+
+        org.springframework.web.bind.MethodArgumentNotValidException ex =
+                new org.springframework.web.bind.MethodArgumentNotValidException(param, bindingResult);
+
+        ResponseEntity<ApiResponse<Map<String, String>>> response = exceptionHandler.handleValidation(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getData()).containsEntry("orderRequest", "Tổng tiền không khớp chi tiết đơn");
+    }
+
+    @Test
+    @DisplayName("NFR-ERR-VAL-03: Nhiều lỗi trên cùng một trường được tổng hợp nhất quán phân tách bằng dấu chấm phẩy")
+    void handleValidation_MultipleErrorsSameField_MergedConsistently() throws Exception {
+        org.springframework.core.MethodParameter param =
+                new org.springframework.core.MethodParameter(GlobalExceptionHandlerTest.class.getDeclaredMethods()[0], -1);
+        org.springframework.validation.BeanPropertyBindingResult bindingResult =
+                new org.springframework.validation.BeanPropertyBindingResult(new Object(), "registerRequest");
+
+        bindingResult.addError(new org.springframework.validation.FieldError("registerRequest", "password", "Mật khẩu không được để trống"));
+        bindingResult.addError(new org.springframework.validation.FieldError("registerRequest", "password", "Mật khẩu phải từ 6 đến 100 ký tự"));
+
+        org.springframework.web.bind.MethodArgumentNotValidException ex =
+                new org.springframework.web.bind.MethodArgumentNotValidException(param, bindingResult);
+
+        ResponseEntity<ApiResponse<Map<String, String>>> response = exceptionHandler.handleValidation(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().getData().get("password"))
+                .isEqualTo("Mật khẩu không được để trống; Mật khẩu phải từ 6 đến 100 ký tự");
+    }
+
+    @Test
+    @DisplayName("NFR-ERR-MISMATCH: MethodArgumentTypeMismatchException trả về 400 BAD_REQUEST")
+    void handleTypeMismatch_Returns400() {
+        org.springframework.web.method.annotation.MethodArgumentTypeMismatchException ex =
+                new org.springframework.web.method.annotation.MethodArgumentTypeMismatchException(
+                        "abc", Long.class, "id", null, null);
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleTypeMismatch(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getMessage()).contains("Tham số 'id' không đúng định dạng");
+    }
+
+    @Test
+    @DisplayName("NFR-ERR-READABLE: HttpMessageNotReadableException trả về 400 BAD_REQUEST")
+    void handleHttpMessageNotReadable_Returns400() {
+        org.springframework.http.converter.HttpMessageNotReadableException ex =
+                new org.springframework.http.converter.HttpMessageNotReadableException(
+                        "JSON parse error: Unexpected character", (org.springframework.http.HttpInputMessage) null);
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleHttpMessageNotReadable(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getMessage()).isEqualTo("Dữ liệu đầu vào không đúng định dạng JSON");
+    }
+
+    @Test
+    @DisplayName("NFR-ERR-AUTH-FALLBACK: AuthenticationException fallback trả về 401 UNAUTHORIZED")
+    void handleAuthentication_Fallback_Returns401() {
+        org.springframework.security.authentication.InsufficientAuthenticationException ex =
+                new org.springframework.security.authentication.InsufficientAuthenticationException("Full authentication is required");
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleAuthentication(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getMessage()).isEqualTo("Chưa đăng nhập hoặc thông tin xác thực không hợp lệ");
+    }
 }
 

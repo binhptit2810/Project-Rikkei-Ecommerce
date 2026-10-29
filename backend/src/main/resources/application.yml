@@ -43,7 +43,7 @@ spring:
 # CORS Configuration
 # =============================================================================
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://localhost:*}
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
 
 # =============================================================================
 # JWT & Refresh Token Authentication
@@ -56,6 +56,8 @@ jwt:
   expiration: ${JWT_EXPIRATION:900000}
   # Thời hạn Refresh Token tính bằng millisecond (mục tiêu: 7 ngày = 604800000ms)
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+  # Thời gian ân hạn xoay vòng Refresh Token tính bằng millisecond (mục tiêu: 10 giây = 10000ms)
+  grace-period: ${JWT_GRACE_PERIOD:10000}
   cookie:
     name: refresh_token
     path: /api/v1/auth

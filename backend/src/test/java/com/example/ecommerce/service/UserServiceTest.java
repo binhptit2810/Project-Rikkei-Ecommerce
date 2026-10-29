@@ -154,10 +154,11 @@ class UserServiceTest {
         assertThat(savedUser.getActive()).isFalse();
         assertThat(savedUser.getLockReason()).isEqualTo("Có dấu hiệu spam đơn hàng và giả mạo thanh toán");
         assertThat(savedUser.getLockedAt()).isNotNull();
+        verify(refreshTokenService).revokeAllUserSessions(2L);
     }
 
     @Test
-    @DisplayName("NFR-SEC-07: Admin không thể tự khóa tài khoản của chính mình (Self-Locking Prevention)")
+    @DisplayName("NFR-SEC-07: Admin không thể tự khóa tài khoản của chính mình (Self-Locking Prevention - Email check)")
     void lockUser_SelfLocking_ThrowsBusinessException() {
         LockUserRequest request = new LockUserRequest("Tự khóa");
         when(userRepository.findById(1L)).thenReturn(Optional.of(adminUser));
@@ -167,6 +168,40 @@ class UserServiceTest {
                 .hasMessage("Bạn không thể tự khóa tài khoản của chính mình");
 
         verify(userRepository, never()).save(any());
+        verify(refreshTokenService, never()).revokeAllUserSessions(anyLong());
+    }
+
+    @Test
+    @DisplayName("BR-AUTH-04: Admin không thể tự khóa tài khoản theo so sánh ID từ CustomUserDetails")
+    void lockUser_SelfLocking_ByCustomUserDetailsId_ThrowsBusinessException() {
+        LockUserRequest request = new LockUserRequest("Tự khóa theo ID");
+        when(userRepository.findById(1L)).thenReturn(Optional.of(adminUser));
+
+        com.example.ecommerce.security.CustomUserDetails customUserDetails =
+                new com.example.ecommerce.security.CustomUserDetails(1L, "different.email@example.com", "password", Role.ADMIN, true);
+
+        assertThatThrownBy(() -> userService.lockUser(1L, request, customUserDetails))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Bạn không thể tự khóa tài khoản của chính mình");
+
+        verify(userRepository, never()).save(any());
+        verify(refreshTokenService, never()).revokeAllUserSessions(anyLong());
+    }
+
+    @Test
+    @DisplayName("BR-AUTH-04: Khóa tài khoản thành công ngay cả khi Redis gặp sự cố (Fail-closed & State reconciliation)")
+    void lockUser_RedisException_StillSucceedsAndSavesDatabase() {
+        LockUserRequest request = new LockUserRequest("Lý do hợp lệ");
+        when(userRepository.findById(2L)).thenReturn(Optional.of(customerUser));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new RuntimeException("Redis connection refused"))
+                .when(refreshTokenService).revokeAllUserSessions(2L);
+
+        UserResponse response = userService.lockUser(2L, request, adminUserDetails);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getActive()).isFalse();
+        verify(userRepository).save(any(User.class));
     }
 
     @Test

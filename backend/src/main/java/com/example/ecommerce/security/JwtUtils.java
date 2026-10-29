@@ -5,6 +5,7 @@ import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
@@ -19,10 +20,13 @@ import java.util.Date;
  *   jwt.secret   — secret >= 32 ký tự (256-bit HMAC-SHA256)
  *   jwt.expiration — thời hạn token (millisecond, mặc định 15 phút = 900000ms)
  *
- * Token payload:
- *   - subject: email của người dùng
- *   - iat:     thời điểm tạo
- *   - exp:     thời điểm hết hạn
+ * Token payload chuẩn theo hợp đồng bảo mật:
+ *   - sub:    email của người dùng (tiêu chuẩn JWT)
+ *   - email:  email của người dùng
+ *   - userId: định danh duy nhất của người dùng
+ *   - role:   vai trò (ROLE_CUSTOMER, ROLE_ADMIN)
+ *   - iat:    thời điểm tạo
+ *   - exp:    thời điểm hết hạn
  */
 @Component
 @Slf4j
@@ -41,7 +45,7 @@ public class JwtUtils {
     }
 
     /**
-     * Tạo JWT access token với subject = email người dùng.
+     * Tạo JWT access token với đầy đủ claims: sub, email, role, userId (nếu có từ CustomUserDetails).
      *
      * @param userDetails đối tượng UserDetails đã xác thực
      * @return JWT token dạng chuỗi compact
@@ -49,13 +53,57 @@ public class JwtUtils {
     public String generateToken(UserDetails userDetails) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + jwtExpiration);
+        String email = userDetails.getUsername();
 
-        return Jwts.builder()
-                .subject(userDetails.getUsername())  // email
+        String role = userDetails.getAuthorities().stream()
+                .findFirst()
+                .map(GrantedAuthority::getAuthority)
+                .orElse("ROLE_CUSTOMER");
+
+        Long userId = null;
+        if (userDetails instanceof CustomUserDetails customUserDetails) {
+            userId = customUserDetails.getId();
+        }
+
+        var builder = Jwts.builder()
+                .subject(email)
+                .claim("email", email)
+                .claim("role", role)
                 .issuedAt(now)
-                .expiration(expiry)
-                .signWith(getSigningKey())
-                .compact();
+                .expiration(expiry);
+
+        if (userId != null) {
+            builder.claim("userId", userId);
+        }
+
+        return builder.signWith(getSigningKey()).compact();
+    }
+
+    /**
+     * Tạo JWT access token với đầy đủ claims userId, email, role chỉ định tường minh.
+     *
+     * @param userId ID người dùng
+     * @param email  email người dùng
+     * @param role   vai trò (tự động chuẩn hóa tiền tố ROLE_)
+     * @return JWT token dạng chuỗi compact
+     */
+    public String generateToken(Long userId, String email, String role) {
+        Date now = new Date();
+        Date expiry = new Date(now.getTime() + jwtExpiration);
+        String formattedRole = (role != null && role.startsWith("ROLE_")) ? role : "ROLE_" + role;
+
+        var builder = Jwts.builder()
+                .subject(email)
+                .claim("email", email)
+                .claim("role", formattedRole)
+                .issuedAt(now)
+                .expiration(expiry);
+
+        if (userId != null) {
+            builder.claim("userId", userId);
+        }
+
+        return builder.signWith(getSigningKey()).compact();
     }
 
     /**
@@ -65,7 +113,35 @@ public class JwtUtils {
      * @return email người dùng
      */
     public String extractEmail(String token) {
-        return parseClaims(token).getSubject();
+        Claims claims = parseClaims(token);
+        String emailClaim = claims.get("email", String.class);
+        return emailClaim != null ? emailClaim : claims.getSubject();
+    }
+
+    /**
+     * Lấy userId từ JWT token claims.
+     *
+     * @param token JWT token hợp lệ
+     * @return userId người dùng hoặc null nếu không tồn tại
+     */
+    public Long extractUserId(String token) {
+        Claims claims = parseClaims(token);
+        Object userIdObj = claims.get("userId");
+        if (userIdObj instanceof Number number) {
+            return number.longValue();
+        }
+        return null;
+    }
+
+    /**
+     * Lấy role từ JWT token claims.
+     *
+     * @param token JWT token hợp lệ
+     * @return role (VD: ROLE_CUSTOMER, ROLE_ADMIN)
+     */
+    public String extractRole(String token) {
+        Claims claims = parseClaims(token);
+        return claims.get("role", String.class);
     }
 
     /**
