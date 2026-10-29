@@ -27,6 +27,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * - Header Authorization và Content-Type được phép.
  * - allowCredentials = true.
  */
+// [TSK-D03-CCT]
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

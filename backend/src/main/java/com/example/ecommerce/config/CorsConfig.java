@@ -22,6 +22,7 @@ import java.util.List;
  * Cấu hình CORS cho phép frontend (http://localhost:3000) gọi API backend.
  * Origins được điều khiển qua cấu hình cors.allowed-origins (biến môi trường CORS_ALLOWED_ORIGINS).
  */
+// [TSK-D03-CCT]
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 

@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Unit Test cho GlobalExceptionHandler.
  * Kiểm tra chuẩn hóa phản hồi ApiResponse cho tất cả các nhóm mã lỗi HTTP (400, 401, 403, 404, 500).
  */
+// [TSK-D03-CCT]
 class GlobalExceptionHandlerTest {
 
     private GlobalExceptionHandler exceptionHandler;
