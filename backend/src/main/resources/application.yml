@@ -30,6 +30,13 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+  # Cấu hình tải lên tệp ảnh (Multipart)
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
+
   # Redis Configuration (cho Refresh Token & Session Management)
   data:
     redis:
@@ -63,6 +70,11 @@ jwt:
     path: /api/v1/auth
     secure: ${JWT_COOKIE_SECURE:false}
     same-site: ${JWT_COOKIE_SAME_SITE:Lax}
+
+# Cấu hình thư mục tải lên ảnh
+app:
+  upload:
+    dir: ${UPLOAD_DIR:uploads}
 
 # Actuator (health check)
 management:
