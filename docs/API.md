@@ -250,18 +250,20 @@ Danh sách danh mục active. **Không cần xác thực.**
 
 ---
 
-## 🛒 Orders (TODO — Vũ Đức Huy Hoàng)
+## 🛒 Orders (Vũ Đức Huy Hoàng)
 
-> **Chưa triển khai.** Sẽ bổ sung khi module Order được phát triển.
+> **Đã triển khai hoàn chỉnh.** Tích hợp kiểm tra tồn kho, trừ kho và hoàn kho trong `@Transactional`.
 
 | Method | Endpoint | Auth | Mô tả |
 |--------|----------|------|-------|
-| POST | `/api/v1/orders` | CUSTOMER | Tạo đơn hàng từ giỏ hàng |
-| GET | `/api/v1/orders/my` | CUSTOMER | Lịch sử đơn hàng của tôi |
-| GET | `/api/v1/orders/{id}` | CUSTOMER | Chi tiết đơn hàng |
-| PATCH | `/api/v1/orders/{id}/cancel` | CUSTOMER | Hủy đơn hàng |
+| POST | `/api/v1/orders` | CUSTOMER, ADMIN | Tạo đơn hàng từ giỏ hàng (tính totalAmount tại Backend, trừ kho) |
+| GET | `/api/v1/orders/my` | CUSTOMER, ADMIN | Lịch sử đơn hàng của tôi |
+| GET | `/api/v1/orders/{id}` | CUSTOMER, ADMIN | Chi tiết đơn hàng |
+| PATCH | `/api/v1/orders/{id}/cancel` | CUSTOMER, ADMIN | Hủy đơn hàng (hoàn kho, hoàn tiền nếu thanh toán trực tuyến) |
+| GET | `/api/v1/admin/orders` | ADMIN | Danh sách tất cả đơn hàng |
+| PATCH | `/api/v1/admin/orders/{id}/status` | ADMIN | Cập nhật trạng thái đơn hàng |
 
-**Request tạo đơn hàng:**
+**Request tạo đơn hàng (`POST /api/v1/orders`):**
 ```json
 {
   "recipientName": "Nguyễn Văn A",
@@ -273,6 +275,43 @@ Danh sách danh mục active. **Không cần xác thực.**
     { "productId": 1, "quantity": 2 },
     { "productId": 5, "quantity": 1 }
   ]
+}
+```
+
+**Response 201:**
+```json
+{
+  "success": true,
+  "message": "Đặt hàng thành công",
+  "data": {
+    "id": 1,
+    "orderCode": "ORD-20261022-8142",
+    "userId": 2,
+    "userEmail": "customer1@example.com",
+    "recipientName": "Nguyễn Văn A",
+    "recipientPhone": "0912345678",
+    "shippingAddress": "123 Đường ABC, TP.HCM",
+    "totalAmount": 1598000.00,
+    "orderStatus": "PENDING",
+    "orderStatusDescription": "Chờ xác nhận",
+    "paymentStatus": "UNPAID",
+    "paymentStatusDescription": "Chưa thanh toán",
+    "paymentMethod": "COD",
+    "paymentMethodDescription": "Thanh toán khi nhận hàng (COD)",
+    "note": "Giao giờ hành chính",
+    "createdAt": "2026-10-22T10:30:00",
+    "items": [
+      {
+        "id": 1,
+        "productId": 1,
+        "productName": "Áo thun nam basic Cotton",
+        "unitPrice": 199000.00,
+        "quantity": 2,
+        "subtotal": 398000.00,
+        "imageUrl": "https://..."
+      }
+    ]
+  }
 }
 ```
 
@@ -387,7 +426,140 @@ Cập nhật thông tin hồ sơ (chỉ cập nhật trường không null).
 | GET | `/api/v1/admin/orders` | Tất cả đơn hàng |
 | PATCH | `/api/v1/admin/orders/{id}/status` | Cập nhật trạng thái đơn |
 | POST | `/api/v1/admin/inventory/{productId}/adjust` | Điều chỉnh tồn kho |
-| GET | `/api/v1/admin/users` | Danh sách người dùng |
+| GET | `/api/v1/admin/users` | Danh sách người dùng (phân trang PageResponse) |
+| PATCH | `/api/v1/admin/users/{id}/lock` | Khóa tài khoản người dùng kèm lý do (BR-AUTH-04) |
+| PATCH | `/api/v1/admin/users/{id}/unlock` | Mở khóa tài khoản người dùng |
+
+### `GET /api/v1/admin/users`
+Lấy danh sách người dùng trong hệ thống có phân trang. **Yêu cầu role ADMIN.**
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Query params:**
+| Tham số | Kiểu | Mặc định | Giới hạn | Mô tả |
+|---------|------|----------|----------|-------|
+| `page` | number | 0 | >= 0 | Số trang (0-indexed) |
+| `size` | number | 10 | 1 - 100 | Số phần tử/trang (tối đa 100) |
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": null,
+  "data": {
+    "content": [
+      {
+        "id": 2,
+        "email": "customer1@example.com",
+        "fullName": "Nguyễn Văn A",
+        "phone": "0912345678",
+        "address": "123 Đường ABC, TP.HCM",
+        "role": "CUSTOMER",
+        "active": true,
+        "lockReason": null,
+        "lockedAt": null,
+        "createdAt": "2024-10-15T10:00:00"
+      }
+    ],
+    "pageNumber": 0,
+    "pageSize": 10,
+    "totalElements": 1,
+    "totalPages": 1,
+    "last": true
+  },
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
+
+### `PATCH /api/v1/admin/users/{id}/lock`
+Khóa tài khoản người dùng kèm lý do bắt buộc. **Yêu cầu role ADMIN.**
+Áp dụng quy tắc **BR-AUTH-04**: Admin không thể tự khóa tài khoản của chính mình.
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Request:**
+```json
+{
+  "reason": "Tài khoản có dấu hiệu gian lận thanh toán"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Khóa tài khoản thành công",
+  "data": {
+    "id": 2,
+    "email": "customer1@example.com",
+    "fullName": "Nguyễn Văn A",
+    "phone": "0912345678",
+    "address": "123 Đường ABC, TP.HCM",
+    "role": "CUSTOMER",
+    "active": false,
+    "lockReason": "Tài khoản có dấu hiệu gian lận thanh toán",
+    "lockedAt": "2024-10-15T10:30:00",
+    "createdAt": "2024-10-15T10:00:00"
+  },
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
+
+**Lỗi 400 (BR-AUTH-04):** Admin tự khóa chính mình:
+```json
+{
+  "success": false,
+  "message": "Bạn không thể tự khóa tài khoản của chính mình",
+  "data": null,
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
+
+**Lỗi 404:** Không tìm thấy người dùng với ID tương ứng:
+```json
+{
+  "success": false,
+  "message": "Người dùng không tồn tại với ID: 999",
+  "data": null,
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
+
+### `PATCH /api/v1/admin/users/{id}/unlock`
+Mở khóa tài khoản người dùng đã bị khóa trước đó. **Yêu cầu role ADMIN.**
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Mở khóa tài khoản thành công",
+  "data": {
+    "id": 2,
+    "email": "customer1@example.com",
+    "fullName": "Nguyễn Văn A",
+    "phone": "0912345678",
+    "address": "123 Đường ABC, TP.HCM",
+    "role": "CUSTOMER",
+    "active": true,
+    "lockReason": null,
+    "lockedAt": null,
+    "createdAt": "2024-10-15T10:00:00"
+  },
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
+
+**Lỗi 400:** Tài khoản đang hoạt động bình thường, không cần mở khóa:
+```json
+{
+  "success": false,
+  "message": "Tài khoản này đang hoạt động bình thường, không cần mở khóa",
+  "data": null,
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
 
 ---
 

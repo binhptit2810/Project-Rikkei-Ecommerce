@@ -1,17 +1,20 @@
 import React from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, Navigate } from 'react-router-dom'
+import { useAuthStore } from '../../store/useAuthStore'
 import Navbar from './Navbar'
 import Footer from './Footer'
 
 /**
  * Layout dành riêng cho khu vực khách hàng (Customer Layout).
- * 
- * Bố cục:
- * 1. Navbar: Thanh điều hướng chung cho khách hàng.
- * 2. Main Content: Khu vực hiển thị các trang công khai, đăng nhập/đăng ký, và hồ sơ cá nhân.
- * 3. Footer: Chân trang thương mại điện tử.
+ * Nếu tài khoản đăng nhập là ADMIN, chặn truy cập khu vực mua sắm và chuyển hướng về /admin/dashboard
  */
 export const CustomerLayout = () => {
+  const { user } = useAuthStore()
+
+  if (user?.role === 'ADMIN') {
+    return <Navigate to="/admin/dashboard" replace />
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col justify-between antialiased">
       <Navbar />

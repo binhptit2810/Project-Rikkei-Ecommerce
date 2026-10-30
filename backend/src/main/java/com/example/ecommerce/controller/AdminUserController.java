@@ -6,6 +6,7 @@ import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import com.example.ecommerce.dto.response.PageResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -41,11 +42,11 @@ public class AdminUserController {
      *
      * @param page số trang (bắt đầu từ 0, mặc định: 0)
      * @param size số phần tử trên mỗi trang (mặc định: 10, tối đa: 100)
-     * @return ApiResponse chứa Page<UserResponse> có đầy đủ thông tin phân trang
+     * @return ApiResponse chứa PageResponse<UserResponse> có đầy đủ thông tin phân trang chuẩn
      */
     @GetMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<Page<UserResponse>>> getUsers(
+    public ResponseEntity<ApiResponse<PageResponse<UserResponse>>> getUsers(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
@@ -59,7 +60,7 @@ public class AdminUserController {
         Pageable pageable = PageRequest.of(pageIndex, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         Page<UserResponse> users = userService.getAllUsers(pageable);
-        return ResponseEntity.ok(ApiResponse.success(users));
+        return ResponseEntity.ok(ApiResponse.success(PageResponse.from(users)));
     }
 
     /**

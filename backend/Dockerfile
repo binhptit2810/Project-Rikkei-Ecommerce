@@ -24,8 +24,9 @@ RUN ./gradlew bootJar --no-daemon -x test
 FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
 
-# Tạo user không phải root để chạy ứng dụng
-RUN addgroup -g 1001 spring && adduser -u 1001 -G spring -s /bin/sh -D spring
+# Tạo user không phải root để chạy ứng dụng và chuẩn bị thư mục uploads
+RUN addgroup -g 1001 spring && adduser -u 1001 -G spring -s /bin/sh -D spring && \
+    mkdir -p /app/uploads && chown -R spring:spring /app/uploads
 USER spring:spring
 
 # Copy JAR từ stage build
@@ -34,7 +35,4 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 EXPOSE 8080
 
 # Chờ database sẵn sàng qua healthcheck của Docker Compose
-ENTRYPOINT ["java", \
-  "-Djava.security.egd=file:/dev/./urandom", \
-  "-Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:docker}", \
-  "-jar", "app.jar"]
+ENTRYPOINT ["sh", "-c", "exec java -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-docker} -jar app.jar"]

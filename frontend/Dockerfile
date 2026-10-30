@@ -13,7 +13,7 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 # Tải dependencies trước để cache layer
 COPY package*.json ./
-RUN npm ci --silent
+RUN npm ci --silent || npm install --no-audit --no-fund
 
 # Copy source và build
 COPY . .

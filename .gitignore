@@ -53,3 +53,10 @@ logs/
 .DS_Store
 ehthumbs.db
 Desktop.ini
+
+# ---- Scratch ----
+scratch/
+
+# ---- Uploads ----
+uploads/*
+!uploads/.gitkeep

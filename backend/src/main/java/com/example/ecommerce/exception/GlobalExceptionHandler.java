@@ -14,8 +14,13 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.core.AuthenticationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -118,16 +123,35 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("Bạn không có quyền thực hiện thao tác này"));
     }
 
-    /** Lỗi validation Bean Validation */
+    /**
+     * Fallback cho các ngoại lệ xác thực Spring Security khác trong Controller/Service.
+     */
+    @ExceptionHandler(AuthenticationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAuthentication(AuthenticationException ex) {
+        log.warn("Authentication exception fallback: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error("Chưa đăng nhập hoặc thông tin xác thực không hợp lệ"));
+    }
+
+    /**
+     * Lỗi validation Bean Validation (@Valid).
+     * Trả HTTP 400 kèm chi tiết lỗi từng trường; xử lý an toàn FieldError và ObjectError,
+     * không làm phát sinh ClassCastException, có timestamp đầy đủ.
+     */
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Map<String, String>>> handleValidation(
             MethodArgumentNotValidException ex) {
 
-        Map<String, String> errors = new HashMap<>();
+        Map<String, String> errors = new LinkedHashMap<>();
         ex.getBindingResult().getAllErrors().forEach(error -> {
-            String fieldName = ((FieldError) error).getField();
-            String message = error.getDefaultMessage();
-            errors.put(fieldName, message);
+            String fieldName = (error instanceof FieldError fieldError)
+                    ? fieldError.getField()
+                    : error.getObjectName();
+            String message = error.getDefaultMessage() != null ? error.getDefaultMessage() : "Không hợp lệ";
+
+            // Nếu có nhiều lỗi trên cùng một trường, nối bằng dấu "; " một cách nhất quán
+            errors.merge(fieldName, message, (existing, incoming) ->
+                    existing.contains(incoming) ? existing : existing + "; " + incoming);
         });
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
@@ -135,7 +159,29 @@ public class GlobalExceptionHandler {
                         .success(false)
                         .message("Dữ liệu không hợp lệ")
                         .data(errors)
+                        .timestamp(LocalDateTime.now())
                         .build());
+    }
+
+    /**
+     * Lỗi sai kiểu dữ liệu tham số trên URL hoặc query param (VD: /admin/users/abc/lock).
+     */
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+        log.warn("Parameter type mismatch: name={}, value={}", ex.getName(), ex.getValue());
+        String message = String.format("Tham số '%s' không đúng định dạng", ex.getName());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error(message));
+    }
+
+    /**
+     * Lỗi body request không đọc được hoặc JSON sai cú pháp.
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadable(HttpMessageNotReadableException ex) {
+        log.warn("HTTP message not readable (malformed JSON): {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("Dữ liệu đầu vào không đúng định dạng JSON"));
     }
 
     /**
@@ -152,7 +198,7 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error("Dịch vụ xác thực tạm thời không khả dụng, vui lòng thử lại sau"));
     }
 
-    /** Lỗi không xác định — ghi log và trả về 500 */
+    /** Lỗi không xác định — ghi log và trả về 500 (không lộ stack trace) */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneral(Exception ex) {
         log.error("Unexpected error: ", ex);

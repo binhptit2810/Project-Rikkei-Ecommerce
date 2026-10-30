@@ -30,6 +30,13 @@ spring:
     serialization:
       write-dates-as-timestamps: false
 
+  # Cấu hình tải lên tệp ảnh (Multipart)
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 10MB
+
   # Redis Configuration (cho Refresh Token & Session Management)
   data:
     redis:
@@ -43,7 +50,7 @@ spring:
 # CORS Configuration
 # =============================================================================
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000,http://localhost:*}
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
 
 # =============================================================================
 # JWT & Refresh Token Authentication
@@ -56,11 +63,18 @@ jwt:
   expiration: ${JWT_EXPIRATION:900000}
   # Thời hạn Refresh Token tính bằng millisecond (mục tiêu: 7 ngày = 604800000ms)
   refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+  # Thời gian ân hạn xoay vòng Refresh Token tính bằng millisecond (mục tiêu: 10 giây = 10000ms)
+  grace-period: ${JWT_GRACE_PERIOD:10000}
   cookie:
     name: refresh_token
     path: /api/v1/auth
     secure: ${JWT_COOKIE_SECURE:false}
     same-site: ${JWT_COOKIE_SAME_SITE:Lax}
+
+# Cấu hình thư mục tải lên ảnh
+app:
+  upload:
+    dir: ${UPLOAD_DIR:uploads}
 
 # Actuator (health check)
 management:

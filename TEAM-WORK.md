@@ -8,7 +8,7 @@
 
 | STT | Thành viên | Vai trò chính | Module phụ trách |
 |-----|-----------|--------------|-----------------|
-| 1 | **Cao Chí Thiện** | Team Lead / Backend Core | Auth, User Profile, Tích hợp |
+| 1 | **Cao Chí Thiện** | Backend + Frontend | Auth, User Profile, Tích hợp |
 | 2 | **Đỗ Đức Mạnh** | Backend + Frontend | Product, Category, Search |
 | 3 | **Vũ Đức Huy Hoàng** | Backend + Frontend | Cart, Order, Checkout |
 | 4 | **Đặng Thanh Bình** | Backend + Frontend | Inventory, Payment, Admin UI |
@@ -20,7 +20,7 @@
 
 ---
 
-### 👤 Thành viên 1: Cao Chí Thiện — Team Lead / Backend Core / Auth
+### 👤 Thành viên 1: Cao Chí Thiện — Backend Core / Auth
 
 **Vai trò:** Quản lý kỹ thuật tổng thể, xây dựng lớp nền backend.
 
@@ -122,32 +122,32 @@
 
 - [x] Entity Order, OrderItem (đã tạo)
 - [x] OrderRepository (đã tạo)
-- [x] Frontend CartPage (đã tạo)
-- [x] Frontend CheckoutPage (đã tạo — cần test với API thật)
-- [x] Frontend OrderHistoryPage, OrderDetailPage (đã tạo)
-- [ ] OrderService: tạo đơn hàng với kiểm tra tồn kho
-- [ ] OrderService: hủy đơn hàng (với điều kiện PENDING/CONFIRMED)
-- [ ] Đảm bảo tính nhất quán: trừ kho + tạo đơn trong 1 @Transactional
-- [ ] API `POST /orders` — tạo đơn hàng
-- [ ] API `GET /orders/my` — lịch sử đơn hàng
-- [ ] API `GET /orders/{id}` — chi tiết đơn hàng
-- [ ] API `PATCH /orders/{id}/cancel` — hủy đơn
-- [ ] Validate: số lượng đặt không vượt tồn kho
-- [ ] Tính totalAmount ở backend, không tin frontend
+- [x] Frontend CartPage (đã kết nối /checkout)
+- [x] Frontend CheckoutPage (đã hoàn thiện, kết nối API thật)
+- [x] Frontend OrderHistoryPage, OrderDetailPage (đã hoàn thiện, kết nối API thật)
+- [x] OrderService: tạo đơn hàng với kiểm tra tồn kho
+- [x] OrderService: hủy đơn hàng (với điều kiện PENDING/CONFIRMED)
+- [x] Đảm bảo tính nhất quán: trừ kho + tạo đơn trong 1 @Transactional
+- [x] API `POST /orders` — tạo đơn hàng
+- [x] API `GET /orders/my` — lịch sử đơn hàng
+- [x] API `GET /orders/{id}` — chi tiết đơn hàng
+- [x] API `PATCH /orders/{id}/cancel` — hủy đơn
+- [x] Validate: số lượng đặt không vượt tồn kho
+- [x] Tính totalAmount ở backend, không tin frontend
 
 #### Sản phẩm bàn giao
 - Luồng đặt hàng hoàn chỉnh từ checkout → tạo đơn → xem lịch sử
-- Xử lý hủy đơn hàng
+- Xử lý hủy đơn hàng hoàn tiền & hoàn kho
 
 #### Tiêu chí hoàn thành
-- [ ] Đặt hàng thành công → đơn có status PENDING, kho bị trừ đúng
-- [ ] Đặt hàng khi hết hàng → trả lỗi 400 rõ ràng
-- [ ] Hủy đơn PENDING → kho được hoàn lại
-- [ ] Không thể hủy đơn đang SHIPPING
+- [x] Đặt hàng thành công → đơn có status PENDING, kho bị trừ đúng
+- [x] Đặt hàng khi hết hàng → trả lỗi 400 rõ ràng
+- [x] Hủy đơn PENDING → kho được hoàn lại
+- [x] Không thể hủy đơn đang SHIPPING
 
 #### Phối hợp
-- **Đặng Thanh Bình**: phối hợp trừ tồn kho trong OrderService (hoặc InventoryService)
-- **Cao Chí Thiện**: dùng @PreAuthorize("hasRole('CUSTOMER')") cho API orders
+- **Đặng Thanh Bình**: Đã thống nhất kiến trúc trừ kho và hoàn kho qua `InventoryService` (`deductStockForOrder`, `restoreStockForOrder`) ghi nhật ký `InventoryTransaction` (`ORDER_PLACED`, `ORDER_CANCELLED`), bọc trong transaction an toàn.
+- **Cao Chí Thiện**: Dùng `@PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")` cho API orders.
 
 ---
 
