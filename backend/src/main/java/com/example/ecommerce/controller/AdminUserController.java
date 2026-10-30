@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.*;
  * và @PreAuthorize("hasRole('ADMIN')")).
  */
 // [TSK-D02-CCT]
+// [TSK-D04-CCT]
 @RestController
 @RequestMapping("/api/v1/admin/users")
 @RequiredArgsConstructor
@@ -78,6 +79,7 @@ public class AdminUserController {
      * @param adminUserDetails tài khoản admin đang đăng nhập (lấy từ SecurityContext)
      * @return ApiResponse chứa UserResponse đã cập nhật trạng thái
      */
+    // [TSK-D04-CCT]
     @PatchMapping("/{id}/lock")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<UserResponse>> lockUser(
@@ -99,6 +101,7 @@ public class AdminUserController {
      * @param adminUserDetails tài khoản admin đang đăng nhập (lấy từ SecurityContext)
      * @return ApiResponse chứa UserResponse đã cập nhật trạng thái
      */
+    // [TSK-D04-CCT]
     @PatchMapping("/{id}/unlock")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<UserResponse>> unlockUser(

@@ -34,6 +34,7 @@ import org.springframework.web.bind.annotation.*;
  *   - Đỗ Hoàng Anh: hiển thị tên người dùng trên header sau đăng nhập
  */
 // [TSK-D02-CCT]
+// [TSK-D04-CCT]
 @RestController
 @RequestMapping("/api/v1/users")
 @RequiredArgsConstructor
@@ -70,6 +71,7 @@ public class UserController {
      *
      * Response 401: chưa đăng nhập hoặc token hết hạn
      */
+    // [TSK-D04-CCT]
     @GetMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> getCurrentUser(
             @AuthenticationPrincipal UserDetails userDetails) {
@@ -122,6 +124,7 @@ public class UserController {
      *
      * Lưu ý: email, password, role KHÔNG thể thay đổi qua endpoint này.
      */
+    // [TSK-D04-CCT]
     @PutMapping("/me")
     public ResponseEntity<ApiResponse<UserResponse>> updateProfile(
             @AuthenticationPrincipal UserDetails userDetails,
@@ -154,6 +157,7 @@ public class UserController {
      * Response 400: validation lỗi (thiếu field, độ dài sai) hoặc mật khẩu cũ sai / xác nhận không khớp
      * Response 401: chưa đăng nhập hoặc token hết hạn
      */
+    // [TSK-D04-CCT]
     @PutMapping("/me/password")
     public ResponseEntity<ApiResponse<Void>> changePassword(
             @AuthenticationPrincipal UserDetails userDetails,

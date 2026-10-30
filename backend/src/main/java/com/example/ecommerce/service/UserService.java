@@ -53,6 +53,7 @@ public class UserService {
      * @return UserResponse không chứa password
      * @throws ResourceNotFoundException nếu user không tồn tại trong DB
      */
+    // [TSK-D04-CCT]
     @Transactional(readOnly = true)
     public UserResponse getCurrentUser(UserDetails userDetails) {
         User user = findUserByDetails(userDetails);
@@ -105,7 +106,7 @@ public class UserService {
         User targetUser = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với ID: " + id));
 
-        // BR-AUTH-04: Ngăn chặn Admin tự khóa tài khoản của chính mình dựa trên ID xác thực phía server
+        // [TSK-D04-CCT] - BR-AUTH-04: Ngăn chặn Admin tự khóa tài khoản của chính mình dựa trên ID xác thực phía server
         if (adminUserDetails != null) {
             boolean isSelf = false;
             if (adminUserDetails instanceof com.example.ecommerce.security.CustomUserDetails customUserDetails
@@ -166,6 +167,7 @@ public class UserService {
      * @throws ResourceNotFoundException nếu không tìm thấy người dùng
      * @throws BusinessException        nếu tài khoản đang hoạt động
      */
+    // [TSK-D04-CCT]
     @Transactional
     public UserResponse unlockUser(Long id, UserDetails adminUserDetails) {
         User targetUser = userRepository.findById(id)
@@ -199,6 +201,7 @@ public class UserService {
      * @param request     dữ liệu cập nhật đã được validate
      * @return UserResponse sau khi cập nhật
      */
+    // [TSK-D04-CCT]
     @Transactional
     public UserResponse updateProfile(UserDetails userDetails, UpdateProfileRequest request) {
         User user = findUserByDetails(userDetails);
@@ -232,6 +235,7 @@ public class UserService {
      * @param request     dữ liệu đổi mật khẩu
      * @throws BusinessException nếu mật khẩu xác nhận không khớp, mật khẩu cũ sai, hoặc mật khẩu mới trùng mật khẩu cũ
      */
+    // [TSK-D04-CCT]
     @Transactional
     public void changePassword(UserDetails userDetails, ChangePasswordRequest request) {
         if (!request.getNewPassword().equals(request.getConfirmPassword())) {

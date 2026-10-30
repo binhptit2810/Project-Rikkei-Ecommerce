@@ -37,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Kiểm tra RBAC (Phân quyền Admin vs Customer), Validation dữ liệu đầu vào,
  * và chuẩn hóa phản hồi ApiResponse.
  */
+// [TSK-D04-CCT]
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")

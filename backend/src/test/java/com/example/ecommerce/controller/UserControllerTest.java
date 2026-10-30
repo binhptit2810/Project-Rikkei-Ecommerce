@@ -35,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra các endpoint quản lý hồ sơ cá nhân, đổi mật khẩu và bảo mật xác thực người dùng.
  */
+// [TSK-D04-CCT]
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
