@@ -1,28 +1,56 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Search,
-  SlidersHorizontal,
   ArrowUpDown,
   PackageOpen,
   X,
   ChevronLeft,
   ChevronRight,
-  ArrowRight,
-  ShoppingBag,
   Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
 } from 'lucide-react'
 import productService from '../../services/productService'
 import categoryService from '../../services/categoryService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import ProductCard from '../../components/common/ProductCard'
+import { useCartStore } from '../../store/useCartStore'
+
+// Skeleton card cho hiệu ứng tải sản phẩm
+const ProductCardSkeleton = () => (
+  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden flex flex-col justify-between animate-pulse">
+    <div>
+      <div className="aspect-square w-full bg-slate-200" />
+      <div className="p-4 space-y-2.5">
+        <div className="h-4 bg-slate-200 rounded-md w-3/4" />
+        <div className="h-3 bg-slate-100 rounded-md w-full" />
+        <div className="h-3 bg-slate-100 rounded-md w-1/2" />
+      </div>
+    </div>
+    <div className="p-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-auto">
+      <div className="space-y-1">
+        <div className="h-2.5 bg-slate-100 rounded w-10" />
+        <div className="h-4 bg-slate-200 rounded w-20" />
+      </div>
+      <div className="h-8 w-24 bg-slate-200 rounded-xl" />
+    </div>
+  </div>
+)
 
 export const ProductListPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
+  const addToCart = useCartStore((state) => state.addToCart)
 
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // Toast Notification state
+  const [toast, setToast] = useState(null)
+  const toastTimeoutRef = useRef(null)
 
   // Pagination state
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '0', 10))
@@ -36,6 +64,41 @@ export const ProductListPage = () => {
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('categoryId') || '')
   const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'createdAt')
   const [sortDir, setSortDir] = useState(searchParams.get('sortDir') || 'desc')
+
+  // Hiển thị Toast Notification và tự động ẩn sau 3 giây
+  const showToast = (message, type = 'success') => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current)
+    }
+    setToast({ message, type })
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null)
+    }, 3000)
+  }
+
+  // Cleanup timeout khi unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Xử lý thêm vào giỏ hàng
+  const handleAddToCart = async (product) => {
+    try {
+      const res = await addToCart(product, 1)
+      if (res && res.success === false) {
+        showToast(res.message || 'Sản phẩm đã hết hàng', 'error')
+      } else {
+        showToast(`Đã thêm "${product.name}" vào giỏ hàng!`, 'success')
+      }
+    } catch (err) {
+      console.error('Lỗi khi thêm giỏ hàng:', err)
+      showToast('Có lỗi xảy ra khi thêm vào giỏ hàng', 'error')
+    }
+  }
 
   // Load active categories for filter
   useEffect(() => {
@@ -147,14 +210,45 @@ export const ProductListPage = () => {
     setSearchParams({})
   }
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0)
-  }
-
   const activeCategoryObj = categories.find((c) => c.id.toString() === selectedCategory)
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full relative">
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full animate-bounce-subtle">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200/90 p-4 flex items-start gap-3 backdrop-blur-md">
+            {toast.type === 'error' ? (
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-slate-900 leading-snug">
+                {toast.message}
+              </p>
+              {toast.type === 'success' && (
+                <Link
+                  to="/cart"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-orange-600 hover:text-orange-700 mt-1 transition-colors"
+                >
+                  <span>Xem giỏ hàng</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+              aria-label="Đóng thông báo"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Page Header */}
       <div className="mb-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-slate-200">
@@ -280,15 +374,23 @@ export const ProductListPage = () => {
 
       {/* Product Content Area */}
       {loading ? (
-        <div className="py-24 flex justify-center">
-          <LoadingSpinner />
+        <div className="space-y-6">
+          <div className="flex items-center justify-center gap-3 py-4 text-sm font-semibold text-slate-600 bg-white/70 backdrop-blur-xs rounded-2xl border border-slate-200/60 shadow-2xs">
+            <LoadingSpinner size="md" className="text-orange-600" />
+            <span>Đang tải danh sách sản phẩm...</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {Array.from({ length: 8 }).map((_, idx) => (
+              <ProductCardSkeleton key={idx} />
+            ))}
+          </div>
         </div>
       ) : error ? (
         <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl text-center text-sm my-8">
           <p className="font-semibold">{error}</p>
           <button
             onClick={fetchProducts}
-            className="mt-3 px-4 py-2 bg-white border border-red-200 text-red-700 text-xs font-bold rounded-xl hover:bg-red-100 transition-colors"
+            className="mt-3 px-4 py-2 bg-white border border-red-200 text-red-700 text-xs font-bold rounded-xl hover:bg-red-100 transition-colors cursor-pointer"
           >
             Thử tải lại
           </button>
@@ -300,92 +402,29 @@ export const ProductListPage = () => {
           </div>
           <h3 className="text-lg font-bold text-slate-900 mb-1">Không tìm thấy sản phẩm nào</h3>
           <p className="text-slate-500 text-sm max-w-md mx-auto mb-6">
-            Thử thay đổi từ khóa tìm kiếm, điều chỉnh bộ lọc hoặc chọn danh mục khác.
+            {keyword || selectedCategory
+              ? 'Không có sản phẩm nào phù hợp với bộ lọc hiện tại. Thử thay đổi từ khóa tìm kiếm hoặc chọn danh mục khác.'
+              : 'Hiện tại chưa có sản phẩm nào trong hệ thống.'}
           </p>
           <button
+            type="button"
             onClick={handleClearFilters}
-            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl shadow-2xs transition-colors cursor-pointer"
+            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl shadow-2xs transition-colors cursor-pointer inline-flex items-center gap-2"
           >
-            Xem tất cả sản phẩm
+            <span>Xóa bộ lọc / Xem tất cả sản phẩm</span>
           </button>
         </div>
       ) : (
         <>
           {/* Products Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {products.map((item) => {
-              const isOutOfStock = item.stockQuantity <= 0
-              return (
-                <Link
-                  key={item.id}
-                  to={`/products/${item.id}`}
-                  className="group bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-card hover:border-orange-300 transition-all duration-200 overflow-hidden flex flex-col"
-                >
-                  {/* Product Image */}
-                  <div className="aspect-square w-full bg-slate-50 relative overflow-hidden flex items-center justify-center">
-                    {item.imageUrl ? (
-                      <img
-                        src={item.imageUrl}
-                        alt={item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => {
-                          e.target.onerror = null
-                          e.target.src = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=80'
-                        }}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-slate-300">
-                        <ShoppingBag className="w-12 h-12 stroke-[1.25] text-slate-300 mb-1" />
-                        <span className="text-xs text-slate-400">Hình ảnh minh họa</span>
-                      </div>
-                    )}
-
-                    {/* Category Badge */}
-                    {item.categoryName && (
-                      <span className="absolute top-3 left-3 bg-white/90 text-slate-800 text-[11px] font-semibold px-2.5 py-1 rounded-lg backdrop-blur-xs border border-slate-200/60 shadow-2xs">
-                        {item.categoryName}
-                      </span>
-                    )}
-
-                    {/* Stock Status Badge */}
-                    {isOutOfStock ? (
-                      <span className="absolute top-3 right-3 bg-red-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-2xs">
-                        Hết hàng
-                      </span>
-                    ) : (
-                      <span className="absolute top-3 right-3 bg-emerald-600 text-white text-[10px] font-semibold px-2.5 py-1 rounded-lg shadow-2xs">
-                        Còn {item.stockQuantity}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Product Info */}
-                  <div className="p-4 flex flex-col flex-1 justify-between">
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-sm group-hover:text-orange-600 transition-colors line-clamp-2 mb-1.5 leading-snug">
-                        {item.name}
-                      </h3>
-                      <p className="text-slate-500 text-xs line-clamp-2 mb-3 leading-relaxed">
-                        {item.description || 'Sản phẩm chính hãng với tiêu chuẩn chất lượng cao.'}
-                      </p>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between mt-auto">
-                      <div>
-                        <span className="text-[11px] text-slate-400 block font-medium">Giá bán</span>
-                        <span className="text-base font-extrabold text-orange-600 tabular-nums">
-                          {formatPrice(item.price)}
-                        </span>
-                      </div>
-
-                      <span className="text-xs font-semibold text-orange-600 group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                        Chi tiết <ArrowRight className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              )
-            })}
+            {products.map((item) => (
+              <ProductCard
+                key={item.id}
+                product={item}
+                onAddToCart={handleAddToCart}
+              />
+            ))}
           </div>
 
           {/* Pagination Controls */}
@@ -394,7 +433,7 @@ export const ProductListPage = () => {
               <button
                 onClick={() => handlePageChange(page - 1)}
                 disabled={page === 0}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors bg-white shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors bg-white shadow-2xs cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
                 <span>Trước</span>
@@ -422,7 +461,7 @@ export const ProductListPage = () => {
               <button
                 onClick={() => handlePageChange(page + 1)}
                 disabled={page >= totalPages - 1}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors bg-white shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors bg-white shadow-2xs cursor-pointer"
               >
                 <span>Sau</span>
                 <ChevronRight className="w-4 h-4" />
