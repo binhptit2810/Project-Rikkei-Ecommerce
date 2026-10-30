@@ -104,7 +104,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // --- Public: không cần token ---
                 .requestMatchers("/api/health", "/api/v1/health").permitAll()
-                .requestMatchers("/actuator/**").permitAll()
+                .requestMatchers("/actuator/health", "/actuator/info").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/register").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/refresh").permitAll()

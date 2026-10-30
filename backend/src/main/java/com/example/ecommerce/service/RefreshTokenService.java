@@ -46,10 +46,12 @@ public class RefreshTokenService {
     @Value("${jwt.refresh-expiration:604800000}")
     private long refreshExpirationMs; // 7 ngày = 604800000ms
 
+    @Value("${jwt.grace-period:10000}")
+    private long gracePeriodMs = 10000L; // 10 giây grace period chống mạng chập chờn
+
     private static final String REFRESH_KEY_PREFIX = "auth:refresh:";
     private static final String USER_SESSIONS_PREFIX = "auth:user_sessions:";
     private static final long TOMBSTONE_TTL_SECONDS = 120L; // 2 phút tombstone
-    private static final long CONCURRENT_GRACE_PERIOD_MS = 10000L; // 10 giây grace period chống mạng chập chờn
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -392,7 +394,7 @@ public class RefreshTokenService {
     private void handleTokenReuse(RefreshTokenData data, long now) {
         Long rotatedAt = data.getRotatedAt();
         // Nếu trong grace period (10 giây) do chập chờn mạng hoặc nhiều tab refresh song song
-        if (rotatedAt != null && (now - rotatedAt) >= 0 && (now - rotatedAt) < CONCURRENT_GRACE_PERIOD_MS) {
+        if (rotatedAt != null && (now - rotatedAt) >= 0 && (now - rotatedAt) < gracePeriodMs) {
             log.warn("Phát hiện request refresh đồng thời trong grace period ({}ms): userId={}", now - rotatedAt, data.getUserId());
             throw new BadCredentialsException("Phiên đăng nhập đang được cập nhật từ thiết bị khác, vui lòng thử lại");
         }

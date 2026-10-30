@@ -426,7 +426,140 @@ Cập nhật thông tin hồ sơ (chỉ cập nhật trường không null).
 | GET | `/api/v1/admin/orders` | Tất cả đơn hàng |
 | PATCH | `/api/v1/admin/orders/{id}/status` | Cập nhật trạng thái đơn |
 | POST | `/api/v1/admin/inventory/{productId}/adjust` | Điều chỉnh tồn kho |
-| GET | `/api/v1/admin/users` | Danh sách người dùng |
+| GET | `/api/v1/admin/users` | Danh sách người dùng (phân trang PageResponse) |
+| PATCH | `/api/v1/admin/users/{id}/lock` | Khóa tài khoản người dùng kèm lý do (BR-AUTH-04) |
+| PATCH | `/api/v1/admin/users/{id}/unlock` | Mở khóa tài khoản người dùng |
+
+### `GET /api/v1/admin/users`
+Lấy danh sách người dùng trong hệ thống có phân trang. **Yêu cầu role ADMIN.**
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Query params:**
+| Tham số | Kiểu | Mặc định | Giới hạn | Mô tả |
+|---------|------|----------|----------|-------|
+| `page` | number | 0 | >= 0 | Số trang (0-indexed) |
+| `size` | number | 10 | 1 - 100 | Số phần tử/trang (tối đa 100) |
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": null,
+  "data": {
+    "content": [
+      {
+        "id": 2,
+        "email": "customer1@example.com",
+        "fullName": "Nguyễn Văn A",
+        "phone": "0912345678",
+        "address": "123 Đường ABC, TP.HCM",
+        "role": "CUSTOMER",
+        "active": true,
+        "lockReason": null,
+        "lockedAt": null,
+        "createdAt": "2024-10-15T10:00:00"
+      }
+    ],
+    "pageNumber": 0,
+    "pageSize": 10,
+    "totalElements": 1,
+    "totalPages": 1,
+    "last": true
+  },
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
+
+### `PATCH /api/v1/admin/users/{id}/lock`
+Khóa tài khoản người dùng kèm lý do bắt buộc. **Yêu cầu role ADMIN.**
+Áp dụng quy tắc **BR-AUTH-04**: Admin không thể tự khóa tài khoản của chính mình.
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Request:**
+```json
+{
+  "reason": "Tài khoản có dấu hiệu gian lận thanh toán"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Khóa tài khoản thành công",
+  "data": {
+    "id": 2,
+    "email": "customer1@example.com",
+    "fullName": "Nguyễn Văn A",
+    "phone": "0912345678",
+    "address": "123 Đường ABC, TP.HCM",
+    "role": "CUSTOMER",
+    "active": false,
+    "lockReason": "Tài khoản có dấu hiệu gian lận thanh toán",
+    "lockedAt": "2024-10-15T10:30:00",
+    "createdAt": "2024-10-15T10:00:00"
+  },
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
+
+**Lỗi 400 (BR-AUTH-04):** Admin tự khóa chính mình:
+```json
+{
+  "success": false,
+  "message": "Bạn không thể tự khóa tài khoản của chính mình",
+  "data": null,
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
+
+**Lỗi 404:** Không tìm thấy người dùng với ID tương ứng:
+```json
+{
+  "success": false,
+  "message": "Người dùng không tồn tại với ID: 999",
+  "data": null,
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
+
+### `PATCH /api/v1/admin/users/{id}/unlock`
+Mở khóa tài khoản người dùng đã bị khóa trước đó. **Yêu cầu role ADMIN.**
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Mở khóa tài khoản thành công",
+  "data": {
+    "id": 2,
+    "email": "customer1@example.com",
+    "fullName": "Nguyễn Văn A",
+    "phone": "0912345678",
+    "address": "123 Đường ABC, TP.HCM",
+    "role": "CUSTOMER",
+    "active": true,
+    "lockReason": null,
+    "lockedAt": null,
+    "createdAt": "2024-10-15T10:00:00"
+  },
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
+
+**Lỗi 400:** Tài khoản đang hoạt động bình thường, không cần mở khóa:
+```json
+{
+  "success": false,
+  "message": "Tài khoản này đang hoạt động bình thường, không cần mở khóa",
+  "data": null,
+  "timestamp": "2024-10-15T10:30:00"
+}
+```
 
 ---
 

@@ -8,7 +8,7 @@
 
 | STT | Thành viên | Vai trò chính | Module phụ trách |
 |-----|-----------|--------------|-----------------|
-| 1 | **Cao Chí Thiện** | Team Lead / Backend Core | Auth, User Profile, Tích hợp |
+| 1 | **Cao Chí Thiện** | Backend Core | Auth, User Profile, Tích hợp |
 | 2 | **Đỗ Đức Mạnh** | Backend + Frontend | Product, Category, Search |
 | 3 | **Vũ Đức Huy Hoàng** | Backend + Frontend | Cart, Order, Checkout |
 | 4 | **Đặng Thanh Bình** | Backend + Frontend | Inventory, Payment, Admin UI |
@@ -20,7 +20,7 @@
 
 ---
 
-### 👤 Thành viên 1: Cao Chí Thiện — Team Lead / Backend Core / Auth
+### 👤 Thành viên 1: Cao Chí Thiện — Backend Core / Auth
 
 **Vai trò:** Quản lý kỹ thuật tổng thể, xây dựng lớp nền backend.
 

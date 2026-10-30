@@ -48,11 +48,12 @@ public class CustomUserDetailsService implements UserDetailsService {
             log.warn("Tài khoản đã bị vô hiệu hóa: {}", email);
         }
 
-        return org.springframework.security.core.userdetails.User.builder()
-                .username(user.getEmail())
-                .password(user.getPassword())
-                .disabled(!isEnabled)
-                .authorities(List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name())))
-                .build();
+        return new CustomUserDetails(
+                user.getId(),
+                user.getEmail(),
+                user.getPassword(),
+                user.getRole(),
+                isEnabled
+        );
     }
 }

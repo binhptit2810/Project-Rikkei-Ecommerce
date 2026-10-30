@@ -82,9 +82,20 @@ public class UserService {
         User targetUser = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với ID: " + id));
 
-        // Không cho phép Admin tự khóa tài khoản đang sử dụng
-        if (adminUserDetails != null && targetUser.getEmail().equalsIgnoreCase(adminUserDetails.getUsername())) {
-            throw new BusinessException("Bạn không thể tự khóa tài khoản của chính mình");
+        // BR-AUTH-04: Ngăn chặn Admin tự khóa tài khoản của chính mình dựa trên ID xác thực phía server
+        if (adminUserDetails != null) {
+            boolean isSelf = false;
+            if (adminUserDetails instanceof com.example.ecommerce.security.CustomUserDetails customUserDetails
+                    && customUserDetails.getUserId() != null) {
+                isSelf = targetUser.getId().equals(customUserDetails.getUserId());
+            }
+            // Điều kiện tương thích phụ khi principal dùng username/email (ví dụ WithMockUser trong test)
+            if (!isSelf && StringUtils.hasText(adminUserDetails.getUsername())) {
+                isSelf = targetUser.getEmail().equalsIgnoreCase(adminUserDetails.getUsername().trim());
+            }
+            if (isSelf) {
+                throw new BusinessException("Bạn không thể tự khóa tài khoản của chính mình");
+            }
         }
 
         // Kiểm tra nếu tài khoản đã bị khóa trước đó
@@ -108,6 +119,17 @@ public class UserService {
         log.info("Admin [{}] đã khóa tài khoản ID={} ({}), lý do: {}",
                 adminUserDetails != null ? adminUserDetails.getUsername() : "UNKNOWN",
                 targetUser.getId(), targetUser.getEmail(), reason);
+
+        // Thu hồi toàn bộ phiên đăng nhập / refresh tokens hiện có trong Redis cho tài khoản bị khóa
+        try {
+            refreshTokenService.revokeAllUserSessions(targetUser.getId());
+            log.info("Đã thu hồi tất cả phiên đăng nhập Redis cho tài khoản bị khóa ID={}", targetUser.getId());
+        } catch (Exception ex) {
+            log.warn("Cảnh báo: Đã lưu trạng thái khóa vào DB nhưng gặp lỗi thu hồi phiên Redis cho user ID={}: {}",
+                    targetUser.getId(), ex.getMessage());
+            // Lưu ý: Không che giấu lỗi, nhưng đảm bảo tính nhất quán qua cơ chế hòa giải trạng thái fail-closed:
+            // AuthService.refreshToken luôn kiểm tra user.getActive() từ MySQL trước khi cấp token mới.
+        }
 
         return UserResponse.fromEntity(targetUser);
     }
