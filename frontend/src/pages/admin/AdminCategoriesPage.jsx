@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import categoryService from '../../services/categoryService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import ImageUploadInput from '../../components/common/ImageUploadInput'
 
 export const AdminCategoriesPage = () => {
   const [categories, setCategories] = useState([])
@@ -355,18 +356,12 @@ export const AdminCategoriesPage = () => {
                 ></textarea>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Đường dẫn ảnh đại diện (Image URL)
-                </label>
-                <input
-                  type="url"
-                  value={formData.imageUrl}
-                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                  placeholder="https://example.com/category.jpg"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500"
-                />
-              </div>
+              <ImageUploadInput
+                label="Ảnh đại diện danh mục"
+                value={formData.imageUrl}
+                onChange={(url) => setFormData({ ...formData, imageUrl: url })}
+                placeholder="https://example.com/category.jpg"
+              />
 
               <div className="flex items-center gap-2 pt-2">
                 <input

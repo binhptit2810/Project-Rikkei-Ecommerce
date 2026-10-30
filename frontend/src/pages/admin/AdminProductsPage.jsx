@@ -13,6 +13,7 @@ import {
 import productService from '../../services/productService'
 import categoryService from '../../services/categoryService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import ImageUploadInput from '../../components/common/ImageUploadInput'
 
 export const AdminProductsPage = () => {
   const [products, setProducts] = useState([])
@@ -584,19 +585,13 @@ export const AdminProductsPage = () => {
                 </div>
               </div>
 
-              {/* Đường dẫn ảnh */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Đường dẫn ảnh (Image URL)
-                </label>
-                <input
-                  type="url"
-                  value={formData.imageUrl}
-                  onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-                  placeholder="https://example.com/image.jpg"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
-              </div>
+              {/* Ảnh sản phẩm (tải từ máy tính hoặc link URL) */}
+              <ImageUploadInput
+                label="Ảnh sản phẩm"
+                value={formData.imageUrl}
+                onChange={(url) => setFormData({ ...formData, imageUrl: url })}
+                placeholder="https://example.com/image.jpg"
+              />
 
               {/* Mô tả */}
               <div>
