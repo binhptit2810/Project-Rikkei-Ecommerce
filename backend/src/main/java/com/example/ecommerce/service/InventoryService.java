@@ -15,7 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
  * Phụ trách: Đặng Thanh Bình (Thành viên 4 - DTB)
  *
  * Chức năng Sprint 1:
- * - Trừ kho an toàn có khóa bi quan (PESSIMISTIC_WRITE) khi tạo đơn hàng, chống bán vượt tồn kho.
+ * - Trừ kho an toàn có khóa bi quan (PESSIMISTIC_WRITE) khi tạo đơn hàng, chống
+ * bán vượt tồn kho.
  * - Hoàn lại số lượng tồn kho khi hủy đơn hàng.
  * - Ghi nhận lịch sử giao dịch biến động kho (ORDER_PLACED, ORDER_CANCELLED).
  *
@@ -34,7 +35,8 @@ public class InventoryService {
     /**
      * Trừ tồn kho khi đơn hàng được tạo (Order Placed).
      * Áp dụng Khóa Bi Quan (Pessimistic Write Lock) trên từng bản ghi sản phẩm
-     * để chống tranh chấp dữ liệu (Race Condition) và ngăn chặn bán vượt tồn kho (Overselling).
+     * để chống tranh chấp dữ liệu (Race Condition) và ngăn chặn bán vượt tồn kho
+     * (Overselling).
      *
      * @param order Đơn hàng vừa tạo chứa danh sách sản phẩm và số lượng mua
      */
@@ -55,8 +57,7 @@ public class InventoryService {
                         productId, product.getName(), currentStock, buyQuantity);
                 throw new BusinessException(String.format(
                         "Sản phẩm '%s' (mã #%d) không đủ số lượng tồn kho (hiện còn: %d, yêu cầu mua: %d)",
-                        product.getName(), productId, currentStock, buyQuantity
-                ));
+                        product.getName(), productId, currentStock, buyQuantity));
             }
 
             int stockAfter = currentStock - buyQuantity;
