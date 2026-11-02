@@ -3,8 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { 
   ShoppingBag, 
   ShoppingCart, 
-  User as UserIcon, 
-  Package, 
+  User as UserIcon,
   Shield, 
   LogOut, 
   Menu, 

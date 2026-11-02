@@ -11,11 +11,8 @@ import {
   Package,
   Boxes,
   ClipboardList,
-  Sparkles,
   RefreshCw,
   User,
-  KeyRound,
-  ExternalLink,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 import adminUserService from '../../services/adminUserService'
@@ -145,11 +142,12 @@ export const AdminDashboardPage = () => {
     {
       name: 'Sản phẩm & Danh mục',
       desc: 'Quản lý danh mục hàng hóa, thuộc tính và hình ảnh',
-      sprint: 'Sprint 2',
+      sprint: 'Sprint 2 (Hoàn thành)',
       icon: Package,
-      badgeText: 'Đang triển khai',
-      badgeClass: 'bg-amber-100 text-amber-700 border-amber-200',
-      isReady: false,
+      badgeText: 'Đã sẵn sàng',
+      badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+      link: '/admin/products',
+      isReady: true,
     },
     {
       name: 'Đơn hàng & Tồn kho',

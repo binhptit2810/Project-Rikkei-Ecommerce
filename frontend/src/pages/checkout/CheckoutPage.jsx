@@ -6,13 +6,11 @@ import {
   ShieldCheck,
   ShoppingBag,
   AlertCircle,
-  Truck,
   User,
   Phone,
   MapPin,
   FileText,
   Lock,
-  ArrowLeft,
   CheckCircle2,
 } from 'lucide-react'
 import { useCartStore } from '../../store/useCartStore'
@@ -31,7 +29,7 @@ export const CheckoutPage = () => {
     note: '',
   })
 
-  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
   const [successInfo, setSuccessInfo] = useState(null)
 

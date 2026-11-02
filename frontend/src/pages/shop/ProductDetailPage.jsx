@@ -12,7 +12,6 @@ import {
   ArrowLeft,
   Minus,
   Plus,
-  Share2,
 } from 'lucide-react'
 import productService from '../../services/productService'
 import { useCartStore } from '../../store/useCartStore'
