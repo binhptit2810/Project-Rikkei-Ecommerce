@@ -12,7 +12,6 @@ import {
   ShieldCheck,
   Truck,
   RotateCcw,
-  AlertCircle,
   Info,
 } from 'lucide-react'
 import { useCartStore } from '../../store/useCartStore'

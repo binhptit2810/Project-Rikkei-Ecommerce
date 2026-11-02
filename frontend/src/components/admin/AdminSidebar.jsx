@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
   Users,
@@ -12,12 +12,10 @@ import {
   Settings,
   X,
   Store,
-  Shield,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 
 export const AdminSidebar = ({ onClose }) => {
-  const location = useLocation()
   const { user } = useAuthStore()
 
   const navigationGroups = [
@@ -48,14 +46,14 @@ export const AdminSidebar = ({ onClose }) => {
           label: 'Quản lý sản phẩm',
           path: '/admin/products',
           icon: Package,
-          isImplemented: false,
+          isImplemented: true,
         },
         {
           key: 'categories',
           label: 'Quản lý danh mục',
           path: '/admin/categories',
           icon: Tags,
-          isImplemented: false,
+          isImplemented: true,
         },
         {
           key: 'orders',
@@ -112,7 +110,7 @@ export const AdminSidebar = ({ onClose }) => {
         {/* 1. Brand Logo */}
         <div className="h-16 px-5 border-b border-slate-850 flex items-center justify-between">
           <Link
-            to="/admin/users"
+            to="/admin/dashboard"
             onClick={onClose}
             className="flex items-center gap-3 group"
           >
@@ -152,28 +150,39 @@ export const AdminSidebar = ({ onClose }) => {
               <ul className="space-y-1">
                 {group.items.map((item) => {
                   const Icon = item.icon
-                  const isActive = location.pathname === item.path
 
                   if (item.isImplemented) {
                     return (
                       <li key={item.key}>
-                        <Link
+                        <NavLink
                           to={item.path}
                           onClick={onClose}
-                          className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
-                            isActive
-                              ? 'bg-orange-600 text-white shadow-2xs'
-                              : 'text-slate-300 hover:bg-slate-900 hover:text-white'
-                          }`}
+                          className={({ isActive }) =>
+                            `flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
+                              isActive
+                                ? 'bg-orange-600 text-white shadow-2xs'
+                                : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                            }`
+                          }
                         >
-                          <div className="flex items-center gap-3">
-                            <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-orange-400 transition-colors'}`} />
-                            <span>{item.label}</span>
-                          </div>
-                          {isActive && (
-                            <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                          {({ isActive }) => (
+                            <>
+                              <div className="flex items-center gap-3">
+                                <Icon
+                                  className={`w-4 h-4 ${
+                                    isActive
+                                      ? 'text-white'
+                                      : 'text-slate-400 group-hover:text-orange-400 transition-colors'
+                                  }`}
+                                />
+                                <span>{item.label}</span>
+                              </div>
+                              {isActive && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                              )}
+                            </>
                           )}
-                        </Link>
+                        </NavLink>
                       </li>
                     )
                   }

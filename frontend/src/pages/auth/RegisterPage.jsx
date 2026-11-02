@@ -10,7 +10,6 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  ArrowRight,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'

@@ -10,10 +10,7 @@ import {
   Database, 
   Users, 
   Activity, 
-  Plus, 
-  ShieldCheck, 
-  Truck, 
-  RotateCcw,
+  Plus,
   ChevronRight
 } from 'lucide-react'
 import productService from '../services/productService'
@@ -23,7 +20,7 @@ import { useAuthStore } from '../store/useAuthStore'
 import { useCartStore } from '../store/useCartStore'
 
 export const HomePage = () => {
-  const { isAuthenticated, user } = useAuthStore()
+  const { isAuthenticated } = useAuthStore()
   const addToCart = useCartStore((state) => state.addToCart)
 
   const [categories, setCategories] = useState([])
