@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * Controller xác thực người dùng.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Tất cả endpoint trong controller này là PUBLIC (không cần Bearer token).
  * Cấu hình mở trong SecurityConfig:
@@ -30,6 +32,7 @@ import org.springframework.web.bind.annotation.*;
  *   - Access Token: trả trong response body JSON (Zustand memory store).
  *   - Refresh Token: truyền qua HttpOnly cookie (không trả trong JSON).
  */
+// [TSK-D02-CCT]
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor

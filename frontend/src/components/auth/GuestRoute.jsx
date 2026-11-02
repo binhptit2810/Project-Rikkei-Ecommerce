@@ -4,7 +4,7 @@ import { useAuthStore } from '../../store/useAuthStore'
 
 /**
  * Route guard dành cho khách vãng lai (chưa đăng nhập).
- * Nếu đã đăng nhập, tự động chuyển hướng về /profile.
+ * Nếu đã đăng nhập, tự động chuyển hướng về trang phù hợp với vai trò.
  */
 export const GuestRoute = ({ children }) => {
   const { isAuthenticated, user } = useAuthStore()

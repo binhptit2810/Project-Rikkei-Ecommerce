@@ -24,8 +24,9 @@ RUN ./gradlew bootJar --no-daemon -x test
 FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
 
-# Tạo user không phải root để chạy ứng dụng
-RUN addgroup -g 1001 spring && adduser -u 1001 -G spring -s /bin/sh -D spring
+# Tạo user không phải root để chạy ứng dụng và chuẩn bị thư mục uploads
+RUN addgroup -g 1001 spring && adduser -u 1001 -G spring -s /bin/sh -D spring && \
+    mkdir -p /app/uploads && chown -R spring:spring /app/uploads
 USER spring:spring
 
 # Copy JAR từ stage build

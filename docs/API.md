@@ -317,13 +317,15 @@ Danh sách danh mục active. **Không cần xác thực.**
 
 ---
 
-## 💳 Payments (TODO — Đặng Thanh Bình)
+## 💳 Payments (Đặng Thanh Bình)
 
-> **Chưa triển khai.** Chỉ mô phỏng, không tích hợp cổng thanh toán thật.
+> Module thanh toán mô phỏng (COD và SIMULATED). Mọi giao dịch đều được cấp mã giao dịch duy nhất định dạng `PAY-YYYYMMDD-XXXXXXXX`.
 
 | Method | Endpoint | Auth | Mô tả |
 |--------|----------|------|-------|
-| POST | `/api/v1/payments/order/{orderId}` | CUSTOMER | Xử lý thanh toán mô phỏng |
+| POST | `/api/v1/payments/{orderId}/pay` | CUSTOMER, ADMIN | Xử lý thanh toán đơn hàng (COD hoặc SIMULATED) |
+| GET | `/api/v1/payments/order/{orderId}` | CUSTOMER, ADMIN | Tra cứu thông tin thanh toán theo ID đơn hàng |
+| GET | `/api/v1/payments/transaction/{transactionCode}` | CUSTOMER, ADMIN | Tra cứu thông tin thanh toán theo mã giao dịch PAY-* |
 
 ---
 

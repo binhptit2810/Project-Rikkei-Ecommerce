@@ -5,6 +5,8 @@ import lombok.Data;
 
 /**
  * Request body cho POST /api/v1/auth/register.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Validation rules:
  *   fullName — bắt buộc, tối đa 100 ký tự
@@ -13,6 +15,7 @@ import lombok.Data;
  *   phone    — tuỳ chọn, chuỗi rỗng hoặc số bắt đầu bằng 0 gồm 10 chữ số
  *   address  — tuỳ chọn, không giới hạn độ dài
  */
+// [TSK-D02-CCT]
 @Data
 public class RegisterRequest {
 

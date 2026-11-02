@@ -56,3 +56,7 @@ Desktop.ini
 
 # ---- Scratch ----
 scratch/
+
+# ---- Uploads ----
+uploads/*
+!uploads/.gitkeep

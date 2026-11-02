@@ -4,7 +4,10 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.UUID;
 
 /**
  * Entity ánh xạ bảng `payments` trong MySQL.
@@ -30,6 +33,9 @@ public class Payment {
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_method", nullable = false, length = 20)
     private PaymentMethod paymentMethod;
+
+    @Column(name = "transaction_code", length = 64, unique = true)
+    private String transactionCode;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -59,6 +65,19 @@ public class Payment {
         if (this.status == null) {
             this.status = PaymentStatus.UNPAID;
         }
+        if (this.transactionCode == null || this.transactionCode.trim().isEmpty()) {
+            this.transactionCode = generateTransactionCode();
+        }
+    }
+
+    /**
+     * Sinh mã giao dịch thanh toán duy nhất với tiền tố PAY-:
+     * Định dạng: PAY-YYYYMMDD-XXXXXXXX (ví dụ: PAY-20261102-A8B9C1D2)
+     */
+    public static String generateTransactionCode() {
+        String datePart = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String randomPart = UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        return "PAY-" + datePart + "-" + randomPart;
     }
 
     @PreUpdate

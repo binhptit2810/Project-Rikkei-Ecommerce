@@ -4,6 +4,8 @@ import org.springframework.http.ResponseCookie;
 
 /**
  * Tiện ích tạo và quản lý ResponseCookie an toàn cho Refresh Token.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Nguyên tắc bảo mật:
  * - HttpOnly: true (ngăn JavaScript độc hại đọc token qua XSS).

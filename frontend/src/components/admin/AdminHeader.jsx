@@ -54,7 +54,7 @@ export const AdminHeader = ({ onToggleSidebar }) => {
 
   const handleLogout = () => {
     logout()
-    navigate('/login')
+    navigate('/admin/login')
   }
 
   const getInitial = (name) => {

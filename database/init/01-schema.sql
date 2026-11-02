@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS order_items (
 CREATE TABLE IF NOT EXISTS payments (
     id                BIGINT AUTO_INCREMENT PRIMARY KEY,
     order_id          BIGINT NOT NULL UNIQUE,
+    transaction_code  VARCHAR(64) UNIQUE,        -- Mã giao dịch định dạng PAY-YYYYMMDD-XXXX
     payment_method    ENUM('COD', 'SIMULATED') NOT NULL,
     status            ENUM('UNPAID','PAID','FAILED','REFUNDED') NOT NULL DEFAULT 'UNPAID',
     amount            DECIMAL(15, 2) NOT NULL CHECK (amount >= 0),
@@ -137,7 +138,8 @@ CREATE TABLE IF NOT EXISTS payments (
     updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-    INDEX idx_payments_order (order_id)
+    INDEX idx_payments_order (order_id),
+    INDEX idx_payments_transaction_code (transaction_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================

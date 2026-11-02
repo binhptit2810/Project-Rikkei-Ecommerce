@@ -26,6 +26,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Service quản lý Refresh Token trong Redis.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Nguyên tắc kiến trúc & bảo mật:
  * 1. Opaque Token: Tạo bằng SecureRandom (64 bytes), Base64 URL-safe, không chứa thông tin người dùng.
@@ -35,6 +37,7 @@ import java.util.concurrent.TimeUnit;
  *    Nếu phát hiện token cũ được sử dụng lại sau grace period, lập tức thu hồi toàn bộ phiên của tài khoản.
  * 5. Fail-Closed: Mọi lỗi kết nối Redis đều được xử lý chặt chẽ, không cấp token không kiểm chứng.
  */
+// [TSK-D02-CCT]
 @Service
 @RequiredArgsConstructor
 @Slf4j

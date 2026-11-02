@@ -23,6 +23,15 @@ export const paymentService = {
     const response = await apiClient.get(`/payments/order/${orderId}`)
     return response.data
   },
+
+  /**
+   * Tra cứu thông tin thanh toán theo mã giao dịch PAY-*
+   * @param {string} transactionCode
+   */
+  getPaymentByTransactionCode: async (transactionCode) => {
+    const response = await apiClient.get(`/payments/transaction/${transactionCode}`)
+    return response.data
+  },
 }
 
 export default paymentService

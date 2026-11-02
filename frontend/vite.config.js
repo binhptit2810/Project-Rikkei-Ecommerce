@@ -9,7 +9,7 @@ export default defineConfig({
     // Proxy API calls để tránh CORS khi chạy local
     proxy: {
       '/api': {
-        target: process.env.VITE_API_BASE_URL || 'http://localhost:8080',
+        target: process.env.BACKEND_URL || 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (path) => path, // giữ nguyên path /api/v1/...
       }

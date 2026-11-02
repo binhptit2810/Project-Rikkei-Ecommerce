@@ -28,6 +28,8 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * Cấu hình Spring Security cho toàn bộ ứng dụng.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Kiến trúc xác thực:
  *   - Stateless: KHÔNG sử dụng session (SessionCreationPolicy.STATELESS)
@@ -46,6 +48,7 @@ import java.nio.charset.StandardCharsets;
  *   - hasRole('ADMIN')    → kiểm tra authority ROLE_ADMIN
  *   - Dùng @PreAuthorize tại Service hoặc Controller
  */
+// [TSK-D02-CCT]
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity           // Cho phép @PreAuthorize, @PostAuthorize trong Service/Controller
@@ -112,6 +115,7 @@ public class SecurityConfig {
                 // GET sản phẩm và danh mục: khách vãng lai được xem
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/uploads/**").permitAll()
 
                 // --- Admin only ---
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")

@@ -22,6 +22,8 @@ import java.util.Date;
 
 /**
  * Filter xác thực JWT — chạy một lần cho mỗi HTTP request.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Luồng xử lý:
  *   1. Đọc header Authorization: Bearer <token>
@@ -37,6 +39,7 @@ import java.util.Date;
  *   - SecurityConfig sẽ từ chối request nếu SecurityContext rỗng.
  *   - Không ghi JWT hoặc thông tin nhạy cảm vào log.
  */
+// [TSK-D02-CCT]
 @Component
 @RequiredArgsConstructor
 @Slf4j
