@@ -139,7 +139,7 @@ export const useAuthStore = create((set, get) => ({
       const message =
         err.response?.data?.message || err.message || 'Đăng ký không thành công'
       set({ isLoading: false, error: message })
-      throw new Error(message)
+      throw err
     }
   },
 

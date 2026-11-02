@@ -12,7 +12,7 @@ import lombok.Data;
  *   fullName — bắt buộc, tối đa 100 ký tự
  *   email    — bắt buộc, đúng định dạng email, tối đa 100 ký tự
  *   password — bắt buộc, 6–100 ký tự
- *   phone    — tuỳ chọn, chuỗi rỗng hoặc số bắt đầu bằng 0 gồm 10 chữ số
+ *   phone    — bắt buộc, 10 chữ số bắt đầu bằng 0 (VD: 0912345678)
  *   address  — tuỳ chọn, không giới hạn độ dài
  */
 // [TSK-D02-CCT]
@@ -32,8 +32,9 @@ public class RegisterRequest {
     @Size(min = 6, max = 100, message = "Mật khẩu phải từ 6 đến 100 ký tự")
     private String password;
 
-    /** Số điện thoại Việt Nam: bắt đầu bằng 0, tổng cộng 10 chữ số. Cho phép để trống. */
-    @Pattern(regexp = "^(|0\\d{9})$", message = "Số điện thoại không hợp lệ (VD: 0912345678)")
+    /** Số điện thoại Việt Nam: bắt buộc, bắt đầu bằng 0, tổng cộng 10 chữ số. */
+    @NotBlank(message = "Số điện thoại không được để trống")
+    @Pattern(regexp = "^0\\d{9}$", message = "Số điện thoại không hợp lệ (gồm 10 số, bắt đầu bằng số 0)")
     private String phone;
 
     private String address;
