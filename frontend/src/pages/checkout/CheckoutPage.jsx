@@ -17,10 +17,11 @@ import {
 } from 'lucide-react'
 import { useCartStore } from '../../store/useCartStore'
 import { useAuthStore } from '../../store/useAuthStore'
+import orderService from '../../services/orderService'
 
 export const CheckoutPage = () => {
   const navigate = useNavigate()
-  const { items, getTotalPrice, getTotalCount } = useCartStore()
+  const { items, getTotalPrice, getTotalCount, clearCart } = useCartStore()
   const { user } = useAuthStore()
 
   const [formData, setFormData] = useState({
@@ -49,10 +50,10 @@ export const CheckoutPage = () => {
 
   // Nếu giỏ hàng rỗng, điều hướng về trang giỏ hàng
   useEffect(() => {
-    if (items.length === 0) {
+    if (items.length === 0 && !successInfo) {
       navigate('/cart')
     }
-  }, [items, navigate])
+  }, [items, successInfo, navigate])
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0)
@@ -64,7 +65,7 @@ export const CheckoutPage = () => {
     if (errorMessage) setErrorMessage(null)
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
 
     if (!formData.recipientName.trim()) {
@@ -131,16 +132,28 @@ export const CheckoutPage = () => {
     }
 
     setErrorMessage(null)
-    setSuccessInfo({
-      message: 'Thông tin đặt hàng hợp lệ! Đã sẵn sàng kết nối API Đặt hàng backend (POST /api/v1/orders) trong Sprint 2 (TSK-D06-VDHH).',
-      payload: orderPayload,
-    })
+    setIsSubmitting(true)
+    try {
+      const response = await orderService.createOrder(orderPayload)
+      const createdOrder = response?.data || response
+      clearCart()
+      setSuccessInfo({
+        message: 'Đặt hàng thành công! Đơn hàng của bạn đã được ghi nhận vào hệ thống.',
+        order: createdOrder,
+        payload: orderPayload,
+      })
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Không thể tạo đơn hàng. Vui lòng thử lại.'
+      setErrorMessage(msg)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const totalPrice = getTotalPrice()
   const totalCount = getTotalCount()
 
-  if (items.length === 0) {
+  if (items.length === 0 && !successInfo) {
     return null
   }
 
@@ -197,8 +210,13 @@ export const CheckoutPage = () => {
               <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold text-sm">{successInfo.message}</p>
+                {successInfo.order && (
+                  <p className="text-xs text-emerald-800 font-semibold mt-1">
+                    Mã đơn hàng: <span className="underline">{successInfo.order.orderCode}</span> — Tổng thanh toán: {formatPrice(successInfo.order.totalAmount)}
+                  </p>
+                )}
                 <p className="text-xs text-emerald-700 mt-1">
-                  Người nhận: <strong>{successInfo.payload.recipientName}</strong> ({successInfo.payload.recipientPhone}) - Địa chỉ: <strong>{successInfo.payload.shippingAddress}</strong>
+                  Người nhận: <strong>{successInfo.payload?.recipientName}</strong> ({successInfo.payload?.recipientPhone}) - Địa chỉ: <strong>{successInfo.payload?.shippingAddress}</strong>
                 </p>
               </div>
             </div>
