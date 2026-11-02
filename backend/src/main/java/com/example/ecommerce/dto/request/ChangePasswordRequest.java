@@ -9,6 +9,8 @@ import lombok.NoArgsConstructor;
 
 /**
  * Request body cho PUT /api/v1/users/me/password.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Nguyên tắc bảo mật:
  *   - Bắt buộc xác minh mật khẩu hiện tại trước khi đổi.
@@ -16,6 +18,7 @@ import lombok.NoArgsConstructor;
  *   - Xác nhận mật khẩu mới phải khớp với mật khẩu mới.
  *   - Không log mật khẩu ra ngoài log server.
  */
+// [TSK-D02-CCT]
 @Data
 @Builder
 @NoArgsConstructor

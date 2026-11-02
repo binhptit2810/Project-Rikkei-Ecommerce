@@ -5,10 +5,13 @@ import CustomerLayout from './components/common/CustomerLayout'
 import AdminLayout from './components/admin/AdminLayout'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import GuestRoute from './components/auth/GuestRoute'
+import AdminGuestRoute from './components/auth/AdminGuestRoute'
 import RoleRoute from './components/auth/RoleRoute'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
+import AdminLoginPage from './pages/admin/AdminLoginPage'
+import AdminDashboardPage from './pages/admin/AdminDashboardPage'
 import ProfilePage from './pages/user/ProfilePage'
 import ProductListPage from './pages/shop/ProductListPage'
 import ProductDetailPage from './pages/shop/ProductDetailPage'
@@ -43,7 +46,17 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* 1. Admin Area Routes (Bảo vệ bởi RoleRoute requiredRole="ADMIN" & dùng AdminLayout riêng) */}
+        {/* 1. Trang Đăng nhập Quản trị viên (Độc lập, không chứa Navbar/Footer mua sắm) */}
+        <Route
+          path="/admin/login"
+          element={
+            <AdminGuestRoute>
+              <AdminLoginPage />
+            </AdminGuestRoute>
+          }
+        />
+
+        {/* 2. Khu vực Quản trị Admin (Bảo vệ bởi RoleRoute requiredRole="ADMIN" & dùng AdminLayout riêng) */}
         <Route
           path="/admin"
           element={
@@ -52,9 +65,9 @@ function App() {
             </RoleRoute>
           }
         >
-          {/* Mặc định chuyển hướng /admin hoặc /admin/dashboard sang /admin/users (Quản lý người dùng hoàn thành trong Sprint 1 - TSK-D04-CCT) */}
-          <Route index element={<Navigate to="/admin/users" replace />} />
-          <Route path="dashboard" element={<Navigate to="/admin/users" replace />} />
+          {/* Trang tổng quan Dashboard & Quản lý người dùng */}
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="dashboard" element={<AdminDashboardPage />} />
           <Route path="users" element={<UserManagementPage />} />
         </Route>
 

@@ -22,6 +22,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Unit Test cho JwtUtils.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra các yêu cầu phi chức năng về Bảo mật JWT (NFR-SEC):
  *   - Tạo token có chữ ký HMAC-SHA256 hợp lệ.
  *   - Xác thực tính toàn vẹn và thời hạn của token.

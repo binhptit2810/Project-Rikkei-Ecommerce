@@ -35,9 +35,12 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit Test cho UserService.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra các tính năng quản lý tài khoản, phân trang,
  * cơ chế khóa/mở khóa bảo mật, ngăn tự khóa, và đổi mật khẩu.
  */
+// [TSK-D02-CCT]
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
 
@@ -131,6 +134,40 @@ class UserServiceTest {
         assertThat(result.getContent()).hasSize(2);
         assertThat(result.getContent().get(0).getEmail()).isEqualTo("admin@example.com");
         assertThat(result.getContent().get(1).getEmail()).isEqualTo("customer@example.com");
+    }
+
+    @Test
+    @DisplayName("FR-USER-04: Lấy danh sách khách hàng getCustomers chỉ trả về Role CUSTOMER, không chứa ADMIN")
+    void getCustomers_WithoutKeyword_ReturnsOnlyCustomers() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<User> mockPage = new PageImpl<>(List.of(customerUser), pageable, 1);
+
+        when(userRepository.findByRole(Role.CUSTOMER, pageable)).thenReturn(mockPage);
+
+        Page<UserResponse> result = userService.getCustomers(pageable, null);
+
+        assertThat(result).isNotNull();
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getEmail()).isEqualTo("customer@example.com");
+        assertThat(result.getContent().get(0).getRole()).isEqualTo(Role.CUSTOMER);
+        // Đảm bảo không chứa bất kỳ tài khoản ADMIN nào
+        assertThat(result.getContent()).noneMatch(u -> Role.ADMIN.equals(u.getRole()));
+    }
+
+    @Test
+    @DisplayName("FR-USER-05: Tìm kiếm danh sách khách hàng theo keyword chỉ tìm kiếm trong Role CUSTOMER")
+    void getCustomers_WithKeyword_SearchesOnlyCustomers() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Page<User> mockPage = new PageImpl<>(List.of(customerUser), pageable, 1);
+
+        when(userRepository.searchByRoleAndKeyword(Role.CUSTOMER, "customer", pageable)).thenReturn(mockPage);
+
+        Page<UserResponse> result = userService.getCustomers(pageable, "customer");
+
+        assertThat(result).isNotNull();
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent().get(0).getEmail()).isEqualTo("customer@example.com");
     }
 
     @Test

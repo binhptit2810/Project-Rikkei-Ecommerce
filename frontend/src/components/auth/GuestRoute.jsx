@@ -11,7 +11,7 @@ export const GuestRoute = ({ children }) => {
 
   if (isAuthenticated) {
     if (user?.role === 'ADMIN') {
-      return <Navigate to="/admin/users" replace />
+      return <Navigate to="/admin/dashboard" replace />
     }
     return <Navigate to="/" replace />
   }

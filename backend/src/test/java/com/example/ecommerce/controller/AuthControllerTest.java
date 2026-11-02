@@ -28,6 +28,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Integration Test cho AuthController.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra xác thực (Authentication), Bean Validation,
  * Xử lý lỗi tập trung khi sai thông tin (401) hoặc tài khoản bị khóa (403).
  */

@@ -15,6 +15,8 @@ import java.util.Date;
 
 /**
  * Tiện ích tạo và xác thực JWT Access Token.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Cấu hình qua biến môi trường (application.yml):
  *   jwt.secret   — secret >= 32 ký tự (256-bit HMAC-SHA256)
@@ -28,6 +30,7 @@ import java.util.Date;
  *   - iat:    thời điểm tạo
  *   - exp:    thời điểm hết hạn
  */
+// [TSK-D02-CCT]
 @Component
 @Slf4j
 public class JwtUtils {

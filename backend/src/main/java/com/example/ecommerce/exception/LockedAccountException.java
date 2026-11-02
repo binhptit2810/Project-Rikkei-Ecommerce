@@ -7,6 +7,8 @@ import org.springframework.security.authentication.DisabledException;
  * Ngoại lệ ném ra khi tài khoản đã bị Admin khóa và người dùng cố gắng đăng nhập.
  * Kế thừa DisabledException để tương thích với kiến trúc xác thực của Spring Security,
  * đồng thời mang theo lý do khóa (reason) lấy từ database để trả về cho client.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  */
 @Getter
 public class LockedAccountException extends DisabledException {

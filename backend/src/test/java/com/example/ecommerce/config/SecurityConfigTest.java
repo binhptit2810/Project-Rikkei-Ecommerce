@@ -9,6 +9,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Unit Test xác minh cấu hình SecurityConfig và PasswordEncoder BCrypt cost factor 12.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  */
 class SecurityConfigTest {
 

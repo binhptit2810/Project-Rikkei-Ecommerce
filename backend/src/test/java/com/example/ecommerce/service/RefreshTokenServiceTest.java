@@ -28,6 +28,8 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit Test cho RefreshTokenService (Giai đoạn 2.2).
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra việc sinh Opaque Token, mã hóa SHA-256, xoay vòng nguyên tử (Lua script),
  * xử lý Grace Period, phát hiện tái sử dụng (Reuse Detection), va chạm khóa và thu hồi phiên người dùng.
  */

@@ -28,6 +28,7 @@ import java.util.Map;
  *
  * Thứ tự ưu tiên handler: từ cụ thể nhất đến tổng quát nhất.
  */
+// [TSK-D03-CCT]
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {

@@ -8,7 +8,6 @@ import {
   AlertCircle,
   CheckCircle2,
   ShieldAlert,
-  ArrowRight,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -60,26 +59,23 @@ export const LoginPage = () => {
     if (!validate()) return
 
     try {
-      const result = await login({
-        email: formData.email.trim().toLowerCase(),
-        password: formData.password,
-      })
+      await login(
+        {
+          email: formData.email.trim().toLowerCase(),
+          password: formData.password,
+        },
+        'CUSTOMER'
+      )
 
-      const loggedInUser = result?.user
-      if (loggedInUser?.role === 'ADMIN') {
-        const adminDest = location.state?.from?.pathname?.startsWith('/admin')
+      // Đăng nhập CUSTOMER thành công -> chuyển về trang chủ hoặc trang khách hàng trước đó
+      const customerDest =
+        location.state?.from?.pathname &&
+        !location.state?.from?.pathname?.startsWith('/admin')
           ? location.state.from.pathname
-          : '/admin/users'
-        navigate(adminDest, { replace: true })
-      } else {
-        const customerDest =
-          location.state?.from?.pathname && !location.state?.from?.pathname?.startsWith('/admin')
-            ? location.state.from.pathname
-            : '/'
-        navigate(customerDest, { replace: true })
-      }
+          : '/'
+      navigate(customerDest, { replace: true })
     } catch (err) {
-      // Store already sets error state
+      // Store xử lý thiết lập thông báo lỗi và thu hồi phiên sai quyền
     }
   }
 
@@ -94,10 +90,10 @@ export const LoginPage = () => {
               <Lock className="w-6 h-6 stroke-[1.75]" />
             </div>
             <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-              Đăng nhập tài khoản
+              Đăng nhập khách hàng
             </h1>
             <p className="text-xs text-slate-500 mt-1">
-              Nhập email và mật khẩu của bạn để tiếp tục
+              Đăng nhập tài khoản mua sắm để tiếp tục trải nghiệm tại RikkeiStore
             </p>
           </div>
 
@@ -130,8 +126,10 @@ export const LoginPage = () => {
                   </>
                 ) : (
                   <>
-                    <span className="font-bold block text-red-900">Xác thực không thành công:</span>
-                    <span className="text-red-700 leading-relaxed">{typeof error === 'object' ? error.message : error}</span>
+                    <span className="font-bold block text-red-900">Thông báo xác thực:</span>
+                    <span className="text-red-700 leading-relaxed">
+                      {typeof error === 'object' ? error.message : error}
+                    </span>
                   </>
                 )}
               </div>

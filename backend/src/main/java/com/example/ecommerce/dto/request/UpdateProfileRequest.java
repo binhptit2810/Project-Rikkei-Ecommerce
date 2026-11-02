@@ -6,6 +6,8 @@ import lombok.Data;
 
 /**
  * Request body cho PUT /api/v1/users/me.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Hỗ trợ cập nhật từng phần (partial update):
  *   - null nghĩa là không thay đổi trường đó.
@@ -17,6 +19,7 @@ import lombok.Data;
  *   - role     (chỉ Admin mới được thay đổi)
  *   - active   (chỉ Admin mới được thay đổi)
  */
+// [TSK-D02-CCT]
 @Data
 public class UpdateProfileRequest {
 

@@ -45,13 +45,46 @@ export const useAuthStore = create((set, get) => ({
 
   /**
    * Đăng nhập bằng email & mật khẩu.
+   * Hỗ trợ đối chiếu expectedRole ('CUSTOMER' hoặc 'ADMIN') để ngăn chặn đăng nhập sai cổng.
    * Access Token được lưu thuần in-memory (không lưu localStorage).
    */
-  login: async (credentials) => {
+  login: async (credentials, expectedRole = null) => {
     set({ isLoading: true, error: null, lockReason: null })
     try {
-      const res = await authService.login(credentials)
+      // Gửi portal lên Backend để kiểm soát bảo mật chặt chẽ ngay từ server
+      const payload = {
+        ...credentials,
+        portal: expectedRole || credentials.portal || undefined,
+      }
+      const res = await authService.login(payload)
       const { accessToken, user } = res.data
+
+      // Đối chiếu role thực tế từ Backend phản hồi với portal mong đợi (phòng thủ đa lớp)
+      if (expectedRole && user?.role !== expectedRole) {
+        // Thu hồi token ngay lập tức ở frontend và backend để ngăn phiên sai quyền
+        setInMemoryToken(null)
+        try {
+          await authService.logout()
+        } catch (_) {}
+
+        // Nếu ở cổng CUSTOMER mà tài khoản là ADMIN: trả về thông báo chung, tự nhiên, tuyệt đối KHÔNG tiết lộ role
+        let errorMessage = 'Email hoặc mật khẩu không chính xác.'
+        if (expectedRole === 'ADMIN') {
+          errorMessage = 'Tài khoản không có quyền truy cập khu vực Quản trị.'
+        }
+
+        set({
+          user: null,
+          accessToken: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: errorMessage,
+          lockReason: null,
+        })
+        const roleError = new Error(errorMessage)
+        roleError.isRoleMismatch = true
+        throw roleError
+      }
 
       setInMemoryToken(accessToken)
 
@@ -65,6 +98,9 @@ export const useAuthStore = create((set, get) => ({
       })
       return { success: true, user }
     } catch (err) {
+      if (err.isRoleMismatch) {
+        throw err
+      }
       const errResponse = err.response?.data
       const message =
         errResponse?.message || err.message || 'Đăng nhập không thành công'
