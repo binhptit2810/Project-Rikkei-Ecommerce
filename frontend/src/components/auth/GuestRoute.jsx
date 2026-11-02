@@ -4,14 +4,14 @@ import { useAuthStore } from '../../store/useAuthStore'
 
 /**
  * Route guard dành cho khách vãng lai (chưa đăng nhập).
- * Nếu đã đăng nhập, tự động chuyển hướng về /profile.
+ * Nếu đã đăng nhập, tự động chuyển hướng về trang phù hợp với vai trò.
  */
 export const GuestRoute = ({ children }) => {
   const { isAuthenticated, user } = useAuthStore()
 
   if (isAuthenticated) {
     if (user?.role === 'ADMIN') {
-      return <Navigate to="/admin/dashboard" replace />
+      return <Navigate to="/admin/users" replace />
     }
     return <Navigate to="/" replace />
   }

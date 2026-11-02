@@ -52,8 +52,9 @@ function App() {
             </RoleRoute>
           }
         >
-          {/* Mặc định chuyển hướng /admin sang /admin/users (Quản lý người dùng hoàn thành trong Sprint 1 - TSK-D04-CCT) */}
+          {/* Mặc định chuyển hướng /admin hoặc /admin/dashboard sang /admin/users (Quản lý người dùng hoàn thành trong Sprint 1 - TSK-D04-CCT) */}
           <Route index element={<Navigate to="/admin/users" replace />} />
+          <Route path="dashboard" element={<Navigate to="/admin/users" replace />} />
           <Route path="users" element={<UserManagementPage />} />
         </Route>
 

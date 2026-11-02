@@ -69,7 +69,7 @@ export const LoginPage = () => {
       if (loggedInUser?.role === 'ADMIN') {
         const adminDest = location.state?.from?.pathname?.startsWith('/admin')
           ? location.state.from.pathname
-          : '/admin/dashboard'
+          : '/admin/users'
         navigate(adminDest, { replace: true })
       } else {
         const customerDest =
