@@ -8,7 +8,7 @@
 
 | STT | Thành viên | Vai trò chính | Module phụ trách |
 |-----|-----------|--------------|-----------------|
-| 1 | **Cao Chí Thiện** | Backend Core | Auth, User Profile, Tích hợp |
+| 1 | **Cao Chí Thiện** | Backend + Frontend | Auth, User Profile, Tích hợp |
 | 2 | **Đỗ Đức Mạnh** | Backend + Frontend | Product, Category, Search |
 | 3 | **Vũ Đức Huy Hoàng** | Backend + Frontend | Cart, Order, Checkout |
 | 4 | **Đặng Thanh Bình** | Backend + Frontend | Inventory, Payment, Admin UI |
@@ -170,14 +170,16 @@
 - [x] InventoryTransactionRepository, PaymentRepository (đã tạo)
 - [x] Frontend AdminInventoryPage (đã tạo)
 - [x] Frontend AdminOrdersPage (đã tạo)
-- [ ] InventoryService: trừ kho khi đặt hàng, hoàn kho khi hủy
-- [ ] InventoryService: admin điều chỉnh kho thủ công
-- [ ] Đảm bảo không cho stockQuantity âm (constraint DB + logic)
-- [ ] PaymentService: xử lý thanh toán mô phỏng (COD/SIMULATED)
-- [ ] API Admin: `POST /admin/inventory/{id}/adjust`
-- [ ] API Admin: `PATCH /admin/orders/{id}/status`
-- [ ] Validate chuyển trạng thái đơn hàng (PENDING→CONFIRMED, không được bỏ bước)
-- [ ] API thống kê cơ bản cho dashboard: tổng đơn, doanh thu (tuỳ chọn)
+- [x] InventoryService: trừ kho khi đặt hàng, hoàn kho khi hủy
+- [x] InventoryService: admin điều chỉnh kho thủ công
+- [x] Đảm bảo không cho stockQuantity âm (constraint DB + logic + khóa bi quan PESSIMISTIC_WRITE)
+- [x] PaymentService: xử lý thanh toán mô phỏng (COD/SIMULATED) và sinh mã giao dịch PAY-
+- [x] API Admin: `POST /admin/inventory/{id}/adjust`
+- [x] API Admin: `PATCH /admin/orders/{id}/status`
+- [x] Validate chuyển trạng thái đơn hàng (PENDING→CONFIRMED, không được bỏ bước)
+- [x] Bổ sung mã giao dịch duy nhất định dạng `PAY-YYYYMMDD-XXXXXXXX` cho mọi giao dịch thanh toán
+- [x] Viết test đồng thời (Concurrency Test) cho kho chống race condition và bán âm (InventoryConcurrencyTest)
+- [x] API thống kê cơ bản cho dashboard: tổng đơn, doanh thu (tuỳ chọn)
 
 #### Sản phẩm bàn giao
 - InventoryService hoàn chỉnh
@@ -185,12 +187,13 @@
 - Admin UI quản lý đơn hàng và tồn kho hoạt động với API thật
 
 #### Tiêu chí hoàn thành
-- [ ] Đặt hàng → stockQuantity giảm đúng số lượng
-- [ ] Hủy đơn → stockQuantity hoàn về
-- [ ] Không thể đặt hàng âm tồn kho (lỗi 400)
-- [ ] Admin điều chỉnh kho → lưu lịch sử InventoryTransaction
-- [ ] Thanh toán COD → paymentStatus = UNPAID, paymentMethod = COD
-- [ ] Thanh toán SIMULATED → mô phỏng thành công/thất bại
+- [x] Đặt hàng → stockQuantity giảm đúng số lượng
+- [x] Hủy đơn → stockQuantity hoàn về
+- [x] Không thể đặt hàng âm tồn kho (lỗi 400 + test đồng thời)
+- [x] Admin điều chỉnh kho → lưu lịch sử InventoryTransaction
+- [x] Thanh toán COD → paymentStatus = UNPAID, paymentMethod = COD, sinh mã giao dịch `PAY-`
+- [x] Thanh toán SIMULATED → mô phỏng thành công/thất bại, sinh mã giao dịch `PAY-`
+- [x] Kiểm thử đồng thời (Concurrency Test): 30 luồng tranh mua 10 sản phẩm ngăn chặn overselling tuyệt đối
 
 #### Phối hợp
 - **Vũ Đức Huy Hoàng**: tích hợp InventoryService vào OrderService

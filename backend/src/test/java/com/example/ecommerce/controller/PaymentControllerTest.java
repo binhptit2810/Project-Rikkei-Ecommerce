@@ -119,4 +119,29 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.paymentMethod").value("COD"));
     }
+
+    @Test
+    @DisplayName("GET /api/v1/payments/transaction/{transactionCode}: Tra cứu theo mã giao dịch PAY-* thành công")
+    @WithMockUser(username = "customer1@example.com", roles = "CUSTOMER")
+    void getPaymentByTransactionCode_Authenticated_Returns200() throws Exception {
+        String txCode = "PAY-20261102-ABC12345";
+        PaymentResponse response = PaymentResponse.builder()
+                .id(1L)
+                .transactionCode(txCode)
+                .orderId(10L)
+                .paymentMethod(PaymentMethod.SIMULATED)
+                .status(PaymentStatus.PAID)
+                .amount(BigDecimal.valueOf(500000))
+                .build();
+
+        when(paymentService.getPaymentByTransactionCode(txCode, "customer1@example.com"))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/payments/transaction/" + txCode)
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.transactionCode").value(txCode))
+                .andExpect(jsonPath("$.data.status").value("PAID"));
+    }
 }

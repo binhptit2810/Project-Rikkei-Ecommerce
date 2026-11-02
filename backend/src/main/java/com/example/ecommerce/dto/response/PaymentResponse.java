@@ -20,6 +20,7 @@ import java.time.LocalDateTime;
 public class PaymentResponse {
 
     private Long id;
+    private String transactionCode;
     private Long orderId;
     private String orderCode;
     private PaymentMethod paymentMethod;

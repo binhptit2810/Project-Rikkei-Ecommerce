@@ -377,6 +377,14 @@ export const OrderDetailPage = () => {
                 <span className="text-slate-500">Hình thức:</span>
                 <span className="font-bold text-slate-800">{order.paymentMethodDescription || order.paymentMethod}</span>
               </div>
+              {order.transactionCode && (
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-500">Mã giao dịch:</span>
+                  <span className="font-mono font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded border border-orange-200/60">
+                    {order.transactionCode}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-500">Trạng thái:</span>
                 <span className="font-bold text-slate-800">

@@ -131,6 +131,7 @@ public class OrderService {
         // 5. Tạo bản ghi Payment gắn liền với đơn hàng
         Payment payment = Payment.builder()
                 .order(savedOrder)
+                .transactionCode(Payment.generateTransactionCode())
                 .paymentMethod(request.getPaymentMethod())
                 .status(initialPaymentStatus)
                 .amount(totalAmount)
@@ -434,6 +435,7 @@ public class OrderService {
                 .paymentStatusDescription(order.getPaymentStatus() != null ? order.getPaymentStatus().getDescription() : null)
                 .paymentMethod(method)
                 .paymentMethodDescription(method != null ? method.getDescription() : null)
+                .transactionCode(order.getPayment() != null ? order.getPayment().getTransactionCode() : null)
                 .note(order.getNote())
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())

@@ -77,6 +77,7 @@ class PaymentServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(PaymentStatus.UNPAID);
         assertThat(response.getPaymentMethod()).isEqualTo(PaymentMethod.COD);
+        assertThat(response.getTransactionCode()).isNotNull().startsWith("PAY-");
         assertThat(testOrder.getPaymentStatus()).isEqualTo(PaymentStatus.UNPAID);
         verify(paymentRepository).save(any(Payment.class));
     }
@@ -99,6 +100,7 @@ class PaymentServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(response.getPaymentMethod()).isEqualTo(PaymentMethod.SIMULATED);
+        assertThat(response.getTransactionCode()).isNotNull().startsWith("PAY-");
         assertThat(response.getPaidAt()).isNotNull();
         assertThat(testOrder.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
     }
@@ -177,5 +179,92 @@ class PaymentServiceTest {
         assertThatThrownBy(() -> paymentService.processPayment(100L, "other@example.com", request))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Bạn không có quyền thực hiện");
+    }
+
+    @Test
+    @DisplayName("Tra cứu thanh toán theo transactionCode thành công - Chủ đơn hàng")
+    void getPaymentByTransactionCode_Success_Owner() {
+        String txCode = "PAY-20261102-TEST1234";
+        Payment payment = Payment.builder()
+                .id(1L)
+                .transactionCode(txCode)
+                .order(testOrder)
+                .paymentMethod(PaymentMethod.SIMULATED)
+                .status(PaymentStatus.PAID)
+                .amount(BigDecimal.valueOf(500000))
+                .build();
+
+        when(paymentRepository.findByTransactionCode(txCode)).thenReturn(Optional.of(payment));
+        when(userRepository.findByEmail("customer1@example.com")).thenReturn(Optional.of(testUser));
+
+        PaymentResponse response = paymentService.getPaymentByTransactionCode(txCode, "customer1@example.com");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getTransactionCode()).isEqualTo(txCode);
+        assertThat(response.getAmount()).isEqualByComparingTo(BigDecimal.valueOf(500000));
+        assertThat(response.getStatus()).isEqualTo(PaymentStatus.PAID);
+    }
+
+    @Test
+    @DisplayName("Tra cứu thanh toán theo transactionCode thành công - ADMIN được xem của mọi đơn")
+    void getPaymentByTransactionCode_Success_Admin() {
+        String txCode = "PAY-20261102-ADMIN999";
+        Payment payment = Payment.builder()
+                .id(2L)
+                .transactionCode(txCode)
+                .order(testOrder)
+                .paymentMethod(PaymentMethod.COD)
+                .status(PaymentStatus.UNPAID)
+                .amount(BigDecimal.valueOf(300000))
+                .build();
+
+        User adminUser = User.builder()
+                .id(99L)
+                .email("admin@eshop.com")
+                .role(Role.ADMIN)
+                .build();
+
+        when(paymentRepository.findByTransactionCode(txCode)).thenReturn(Optional.of(payment));
+        when(userRepository.findByEmail("admin@eshop.com")).thenReturn(Optional.of(adminUser));
+
+        PaymentResponse response = paymentService.getPaymentByTransactionCode(txCode, "admin@eshop.com");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getTransactionCode()).isEqualTo(txCode);
+        assertThat(response.getStatus()).isEqualTo(PaymentStatus.UNPAID);
+    }
+
+    @Test
+    @DisplayName("Tra cứu thanh toán thất bại khi không tìm thấy mã giao dịch PAY-*")
+    void getPaymentByTransactionCode_ThrowsException_WhenNotFound() {
+        when(paymentRepository.findByTransactionCode("PAY-NOT-EXIST")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> paymentService.getPaymentByTransactionCode("PAY-NOT-EXIST", "customer1@example.com"))
+                .isInstanceOf(com.example.ecommerce.exception.ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy giao dịch thanh toán");
+    }
+
+    @Test
+    @DisplayName("Tra cứu thanh toán thất bại khi người dùng khác cố xem giao dịch không phải của mình")
+    void getPaymentByTransactionCode_ThrowsException_WhenNotOwner() {
+        String txCode = "PAY-20261102-FORBIDDEN";
+        Payment payment = Payment.builder()
+                .id(3L)
+                .transactionCode(txCode)
+                .order(testOrder)
+                .build();
+
+        User anotherUser = User.builder()
+                .id(2L)
+                .email("intruder@example.com")
+                .role(Role.CUSTOMER)
+                .build();
+
+        when(paymentRepository.findByTransactionCode(txCode)).thenReturn(Optional.of(payment));
+        when(userRepository.findByEmail("intruder@example.com")).thenReturn(Optional.of(anotherUser));
+
+        assertThatThrownBy(() -> paymentService.getPaymentByTransactionCode(txCode, "intruder@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Bạn không có quyền xem thông tin của giao dịch này");
     }
 }

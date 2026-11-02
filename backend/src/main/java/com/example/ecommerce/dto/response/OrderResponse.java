@@ -32,6 +32,7 @@ public class OrderResponse {
     private String paymentStatusDescription;
     private PaymentMethod paymentMethod;
     private String paymentMethodDescription;
+    private String transactionCode;
     private String note;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
