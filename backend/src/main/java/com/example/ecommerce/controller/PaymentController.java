@@ -52,4 +52,18 @@ public class PaymentController {
         PaymentResponse response = paymentService.getPaymentByOrderId(orderId, userEmail);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
+
+    /**
+     * Tra cứu thông tin thanh toán theo mã giao dịch PAY-*.
+     * GET /api/v1/payments/transaction/{transactionCode}
+     */
+    @GetMapping("/transaction/{transactionCode}")
+    public ResponseEntity<ApiResponse<PaymentResponse>> getPaymentByTransactionCode(
+            @PathVariable String transactionCode,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        String userEmail = userDetails != null ? userDetails.getUsername() : null;
+        PaymentResponse response = paymentService.getPaymentByTransactionCode(transactionCode, userEmail);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 }

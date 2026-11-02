@@ -70,10 +70,15 @@ public class PaymentService {
         Payment payment = paymentRepository.findByOrderId(orderId)
                 .orElseGet(() -> Payment.builder()
                         .order(order)
+                        .transactionCode(Payment.generateTransactionCode())
                         .amount(order.getTotalAmount())
                         .status(PaymentStatus.UNPAID)
                         .paymentMethod(request.getPaymentMethod())
                         .build());
+
+        if (payment.getTransactionCode() == null || payment.getTransactionCode().trim().isEmpty()) {
+            payment.setTransactionCode(Payment.generateTransactionCode());
+        }
 
         payment.setPaymentMethod(request.getPaymentMethod());
         payment.setAmount(order.getTotalAmount());
@@ -136,11 +141,36 @@ public class PaymentService {
     }
 
     /**
+     * Tra cứu thông tin thanh toán theo mã giao dịch duy nhất có tiền tố PAY-.
+     */
+    @Transactional(readOnly = true)
+    public PaymentResponse getPaymentByTransactionCode(String transactionCode, String userEmail) {
+        if (transactionCode == null || transactionCode.trim().isEmpty()) {
+            throw new BusinessException("Mã giao dịch không được để trống");
+        }
+
+        Payment payment = paymentRepository.findByTransactionCode(transactionCode.trim())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giao dịch thanh toán với mã: " + transactionCode));
+
+        if (userEmail != null) {
+            User user = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
+
+            if (user.getRole() != Role.ADMIN && (payment.getOrder() == null || !payment.getOrder().getUser().getId().equals(user.getId()))) {
+                throw new BusinessException("Bạn không có quyền xem thông tin của giao dịch này");
+            }
+        }
+
+        return mapToPaymentResponse(payment);
+    }
+
+    /**
      * Chuyển đổi Payment Entity sang PaymentResponse DTO.
      */
     public PaymentResponse mapToPaymentResponse(Payment payment) {
         return PaymentResponse.builder()
                 .id(payment.getId())
+                .transactionCode(payment.getTransactionCode())
                 .orderId(payment.getOrder() != null ? payment.getOrder().getId() : null)
                 .orderCode(payment.getOrder() != null ? payment.getOrder().getOrderCode() : null)
                 .paymentMethod(payment.getPaymentMethod())

@@ -288,6 +288,9 @@ export const AdminOrdersPage = () => {
                       </td>
                       <td className="py-3.5 px-4">
                         <div className="font-semibold text-slate-800">{order.paymentMethod}</div>
+                        {order.transactionCode && (
+                          <div className="font-mono text-[10px] text-orange-600 font-bold">{order.transactionCode}</div>
+                        )}
                         <div className="text-[10px] text-slate-500">
                           {order.paymentStatus === 'PAID' ? 'Đã thanh toán' : order.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : 'Chưa thanh toán'}
                         </div>
@@ -417,6 +420,11 @@ export const AdminOrdersPage = () => {
                       {selectedOrder.paymentStatus === 'PAID' ? 'Đã thanh toán' : selectedOrder.paymentStatus === 'REFUNDED' ? 'Đã hoàn tiền' : 'Chưa thanh toán'}
                     </span>
                   </div>
+                  {selectedOrder.transactionCode && (
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      Mã GD: <span className="font-mono font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded border border-orange-200/60">{selectedOrder.transactionCode}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
