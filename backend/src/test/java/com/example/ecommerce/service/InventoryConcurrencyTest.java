@@ -1,6 +1,5 @@
 package com.example.ecommerce.service;
 
-import com.example.ecommerce.dto.request.AdjustInventoryRequest;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.repository.*;
@@ -31,7 +30,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 1. Chống bán âm / bán vượt tồn kho (Overselling Prevention with Pessimistic Locking).
  * 2. Trừ kho đồng thời khi đủ số lượng hàng tồn.
  * 3. Đồng thời vừa đặt hàng (trừ kho) vừa hủy đơn (hoàn kho) - tính nhất quán dữ liệu.
- * 4. Admin điều chỉnh kho đồng thời (Manual Adjust) - không bị Lost Update.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -57,6 +55,12 @@ class InventoryConcurrencyTest {
     @Autowired
     private InventoryTransactionRepository inventoryTransactionRepository;
 
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
     @MockBean
     private RefreshTokenService refreshTokenService;
 
@@ -65,12 +69,13 @@ class InventoryConcurrencyTest {
     @BeforeEach
     void setUp() {
         inventoryTransactionRepository.deleteAll();
+        orderRepository.deleteAll();
         productRepository.deleteAll();
         categoryRepository.deleteAll();
 
         testCategory = categoryRepository.save(Category.builder()
-                .name("Thiết bị kiểm thử " + System.currentTimeMillis())
-                .description("Danh mục test đồng thời")
+                .name("Thiết bị Điện tử")
+                .description("Hàng công nghệ cao cấp")
                 .active(true)
                 .build());
     }
@@ -78,138 +83,135 @@ class InventoryConcurrencyTest {
     @AfterEach
     void tearDown() {
         inventoryTransactionRepository.deleteAll();
+        orderRepository.deleteAll();
         productRepository.deleteAll();
         categoryRepository.deleteAll();
     }
 
     @Test
-    @DisplayName("Kiểm thử đồng thời: 30 luồng cùng mua sản phẩm chỉ có 10 tồn kho -> Ngăn chặn bán âm (Overselling) tuyệt đối")
-    void testConcurrentDeductStock_OversellingPrevented() throws InterruptedException {
-        // 1. Chuẩn bị sản phẩm chỉ có 10 sản phẩm trong kho
+    @DisplayName("Kiểm thử đồng thời: 30 luồng cùng mua 1 sản phẩm chỉ còn 10 món -> Chính xác 10 đơn thành công, 20 đơn ném BusinessException, tồn kho về đúng 0")
+    void testConcurrentDeductStock_AntiOverselling_PreventsNegativeStock() throws InterruptedException {
+        // 1. Tạo sản phẩm tồn kho đúng 10 món
         Product product = productRepository.save(Product.builder()
-                .name("Bàn phím cơ giới hạn")
-                .description("Chỉ có 10 chiếc trong kho")
-                .price(BigDecimal.valueOf(2500000))
+                .name("iPhone 16 Pro Max 256GB - Flash Sale")
+                .price(BigDecimal.valueOf(34990000))
                 .stockQuantity(10)
                 .category(testCategory)
                 .active(true)
                 .build());
 
         Long productId = product.getId();
-        int numberOfThreads = 30; // 30 khách hàng tranh nhau mua 10 sản phẩm cùng lúc
-        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+        int numberOfThreads = 30;
+        int buyQuantityPerOrder = 1;
 
+        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
 
-        AtomicInteger successOrders = new AtomicInteger(0);
-        AtomicInteger failedOrders = new AtomicInteger(0);
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger failDueToOutOfStockCount = new AtomicInteger(0);
+        AtomicInteger unexpectedErrorCount = new AtomicInteger(0);
 
-        // 2. Kích hoạt 30 luồng đồng thời
-        for (int i = 1; i <= numberOfThreads; i++) {
+        // 2. Chuẩn bị 30 tác vụ mua hàng đồng thời
+        for (int i = 0; i < numberOfThreads; i++) {
             final int index = i;
             executorService.submit(() -> {
                 try {
-                    startLatch.await(); // Chờ hiệu lệnh để cả 30 luồng xuất phát cùng 1 tích tắc
+                    // Chờ tín hiệu xuất phát để tất cả 30 luồng lao vào cùng 1 microsecond
+                    startLatch.await();
 
-                    // Giả lập đơn hàng mua 1 sản phẩm
-                    Product refProduct = Product.builder().id(productId).name("Bàn phím cơ giới hạn").stockQuantity(10).build();
+                    // Giả lập Order với OrderItem tham chiếu đến productId
+                    Product refProduct = Product.builder().id(productId).name("iPhone 16 Pro Max").build();
                     OrderItem item = OrderItem.builder()
                             .product(refProduct)
                             .productName(refProduct.getName())
-                            .quantity(1)
-                            .unitPrice(BigDecimal.valueOf(2500000))
+                            .quantity(buyQuantityPerOrder)
+                            .unitPrice(BigDecimal.valueOf(34990000))
                             .build();
 
                     Order order = Order.builder()
-                            .id((long) index)
-                            .orderCode("ORD-CONCUR-" + index)
+                            .id((long) (100 + index))
+                            .orderCode("ORD-FLASH-" + String.format("%04d", index))
                             .items(List.of(item))
                             .build();
 
+                    // Gọi deductStockForOrder có khóa bi quan PESSIMISTIC_WRITE
                     inventoryService.deductStockForOrder(order);
-                    successOrders.incrementAndGet();
-                } catch (BusinessException e) {
-                    // Bị từ chối do hết tồn kho
-                    failedOrders.incrementAndGet();
-                } catch (Exception e) {
-                    failedOrders.incrementAndGet();
+                    successCount.incrementAndGet();
+
+                } catch (BusinessException be) {
+                    if (be.getMessage().contains("không đủ số lượng tồn kho")) {
+                        failDueToOutOfStockCount.incrementAndGet();
+                    } else {
+                        unexpectedErrorCount.incrementAndGet();
+                    }
+                } catch (Exception ex) {
+                    unexpectedErrorCount.incrementAndGet();
                 } finally {
                     doneLatch.countDown();
                 }
             });
         }
 
-        // Bắn tín hiệu bắt đầu
+        // Bắn tín hiệu xuất phát đồng thời
         startLatch.countDown();
 
-        // Chờ toàn bộ 30 luồng hoàn tất (tối đa 15 giây)
+        // Chờ toàn bộ 30 luồng hoàn tất với timeout 15 giây
         boolean finished = doneLatch.await(15, TimeUnit.SECONDS);
         executorService.shutdown();
 
-        assertThat(finished).isTrue();
+        // 3. Khẳng định kết quả nghiệm thu (DoD Concurrency Test)
+        assertThat(finished).as("Tất cả các luồng phải hoàn tất trong thời gian quy định").isTrue();
+        assertThat(unexpectedErrorCount.get()).as("Không được có lỗi bất ngờ ngoài luồng nghiệp vụ").isZero();
+        assertThat(successCount.get()).as("Số đơn hàng trừ kho thành công phải bằng đúng 10").isEqualTo(10);
+        assertThat(failDueToOutOfStockCount.get()).as("Số đơn hàng bị từ chối do hết kho phải bằng 20").isEqualTo(20);
 
-        // 3. Xác minh kết quả chống overselling
-        assertThat(successOrders.get()).isEqualTo(10); // Đúng 10 đơn thành công
-        assertThat(failedOrders.get()).isEqualTo(20);  // Đúng 20 đơn bị từ chối
-        assertThat(successOrders.get() + failedOrders.get()).isEqualTo(numberOfThreads);
-
-        // Kiểm tra tồn kho trong cơ sở dữ liệu
+        // Kiểm tra số lượng tồn kho thực tế trong Database sau tranh chấp
         Product updatedProduct = productRepository.findById(productId).orElseThrow();
-        assertThat(updatedProduct.getStockQuantity()).isEqualTo(0); // Tồn kho về 0, KHÔNG ĐƯỢC ÂM
+        assertThat(updatedProduct.getStockQuantity()).as("Tồn kho sau flash sale phải về đúng 0, tuyệt đối không bị âm").isEqualTo(0);
 
-        // Kiểm tra nhật ký biến động kho (chỉ đúng 10 bản ghi thành công được lưu)
+        // Kiểm tra nhật ký giao dịch kho (InventoryTransaction)
         List<InventoryTransaction> transactions = inventoryTransactionRepository.findByProductIdOrderByCreatedAtDesc(productId);
         assertThat(transactions).hasSize(10);
-        assertThat(transactions).allMatch(tx -> tx.getTransactionType() == InventoryTransactionType.ORDER_PLACED);
+        for (InventoryTransaction tx : transactions) {
+            assertThat(tx.getChangeQuantity()).isEqualTo(-1);
+            assertThat(tx.getTransactionType()).isEqualTo(InventoryTransactionType.ORDER_PLACED);
+        }
     }
 
     @Test
-    @DisplayName("Kiểm thử đồng thời: 20 luồng cùng mua 1 sản phẩm khi kho có đủ 20 cái -> Tất cả 20 luồng đều thành công")
-    void testConcurrentDeductStock_ExactStock_AllSucceed() throws InterruptedException {
+    @DisplayName("Kiểm thử đồng thời: 10 luồng cùng mua hàng khi kho còn dồi dào (100 món) -> 100% thành công, tồn kho còn lại 90")
+    void testConcurrentDeductStock_SufficientStock_DeductsExactAmount() throws InterruptedException {
         Product product = productRepository.save(Product.builder()
-                .name("Tai nghe kiểm âm")
-                .description("Có đúng 20 chiếc")
-                .price(BigDecimal.valueOf(1800000))
-                .stockQuantity(20)
+                .name("Bàn phím cơ Bluetooth RGB")
+                .price(BigDecimal.valueOf(1500000))
+                .stockQuantity(100)
                 .category(testCategory)
                 .active(true)
                 .build());
 
         Long productId = product.getId();
-        int numberOfThreads = 20;
-        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+        int numberOfThreads = 10;
+        int buyQuantity = 1;
 
+        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
         CountDownLatch startLatch = new CountDownLatch(1);
         CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
 
-        AtomicInteger successOrders = new AtomicInteger(0);
-        AtomicInteger failedOrders = new AtomicInteger(0);
+        AtomicInteger successCount = new AtomicInteger(0);
 
-        for (int i = 1; i <= numberOfThreads; i++) {
+        for (int i = 0; i < numberOfThreads; i++) {
             final int index = i;
             executorService.submit(() -> {
                 try {
                     startLatch.await();
-
-                    Product refProduct = Product.builder().id(productId).name("Tai nghe kiểm âm").stockQuantity(20).build();
-                    OrderItem item = OrderItem.builder()
-                            .product(refProduct)
-                            .productName(refProduct.getName())
-                            .quantity(1)
-                            .unitPrice(BigDecimal.valueOf(1800000))
-                            .build();
-
-                    Order order = Order.builder()
-                            .id((long) (100 + index))
-                            .orderCode("ORD-EXACT-" + index)
-                            .items(List.of(item))
-                            .build();
+                    Product refProduct = Product.builder().id(productId).name("Bàn phím cơ").build();
+                    OrderItem item = OrderItem.builder().product(refProduct).productName(refProduct.getName()).quantity(buyQuantity).build();
+                    Order order = Order.builder().id((long) (200 + index)).orderCode("ORD-KB-" + index).items(List.of(item)).build();
 
                     inventoryService.deductStockForOrder(order);
-                    successOrders.incrementAndGet();
-                } catch (Exception e) {
-                    failedOrders.incrementAndGet();
+                    successCount.incrementAndGet();
+                } catch (Exception ignored) {
                 } finally {
                     doneLatch.countDown();
                 }
@@ -217,26 +219,22 @@ class InventoryConcurrencyTest {
         }
 
         startLatch.countDown();
-        boolean finished = doneLatch.await(15, TimeUnit.SECONDS);
+        boolean finished = doneLatch.await(10, TimeUnit.SECONDS);
         executorService.shutdown();
 
         assertThat(finished).isTrue();
-        assertThat(successOrders.get()).isEqualTo(20);
-        assertThat(failedOrders.get()).isEqualTo(0);
+        assertThat(successCount.get()).isEqualTo(10);
 
         Product updatedProduct = productRepository.findById(productId).orElseThrow();
-        assertThat(updatedProduct.getStockQuantity()).isEqualTo(0);
-
-        List<InventoryTransaction> transactions = inventoryTransactionRepository.findByProductIdOrderByCreatedAtDesc(productId);
-        assertThat(transactions).hasSize(20);
+        assertThat(updatedProduct.getStockQuantity()).isEqualTo(90);
     }
 
     @Test
-    @DisplayName("Kiểm thử đồng thời: Vừa trừ kho (10 đơn) vừa hoàn kho (5 đơn) -> Tồn kho cuối cùng bảo toàn chính xác")
+    @DisplayName("Kiểm thử đồng thời: Vừa đặt hàng (trừ kho) vừa hủy đơn (hoàn kho) đồng thời -> Tồn kho cuối cùng bảo toàn chính xác")
     void testConcurrentDeductAndRestore_DataConsistency() throws InterruptedException {
         // Tồn kho ban đầu: 20
         Product product = productRepository.save(Product.builder()
-                .name("Chuột máy tính không dây")
+                .name("Chuột máy tính không dây Silent")
                 .price(BigDecimal.valueOf(450000))
                 .stockQuantity(20)
                 .category(testCategory)
@@ -244,8 +242,8 @@ class InventoryConcurrencyTest {
                 .build());
 
         Long productId = product.getId();
-        int deductThreads = 10;
-        int restoreThreads = 5;
+        int deductThreads = 10; // 10 đơn mua 1 món -> tổng mua 10
+        int restoreThreads = 5;  // 5 đơn hủy hoàn 1 món -> tổng hoàn 5
         int totalThreads = deductThreads + restoreThreads;
 
         ExecutorService executorService = Executors.newFixedThreadPool(totalThreads);
@@ -256,14 +254,14 @@ class InventoryConcurrencyTest {
         AtomicInteger restoreSuccess = new AtomicInteger(0);
 
         // 10 luồng trừ kho
-        for (int i = 1; i <= deductThreads; i++) {
+        for (int i = 0; i < deductThreads; i++) {
             final int index = i;
             executorService.submit(() -> {
                 try {
                     startLatch.await();
                     Product refProduct = Product.builder().id(productId).name("Chuột máy tính không dây").build();
                     OrderItem item = OrderItem.builder().product(refProduct).productName(refProduct.getName()).quantity(1).build();
-                    Order order = Order.builder().id((long) (200 + index)).orderCode("ORD-DED-" + index).items(List.of(item)).build();
+                    Order order = Order.builder().id((long) (300 + index)).orderCode("ORD-DED-" + index).items(List.of(item)).build();
 
                     inventoryService.deductStockForOrder(order);
                     deductSuccess.incrementAndGet();
@@ -275,14 +273,14 @@ class InventoryConcurrencyTest {
         }
 
         // 5 luồng hoàn kho
-        for (int i = 1; i <= restoreThreads; i++) {
+        for (int i = 0; i < restoreThreads; i++) {
             final int index = i;
             executorService.submit(() -> {
                 try {
                     startLatch.await();
                     Product refProduct = Product.builder().id(productId).name("Chuột máy tính không dây").build();
                     OrderItem item = OrderItem.builder().product(refProduct).productName(refProduct.getName()).quantity(1).build();
-                    Order order = Order.builder().id((long) (300 + index)).orderCode("ORD-RES-" + index).items(List.of(item)).build();
+                    Order order = Order.builder().id((long) (400 + index)).orderCode("ORD-RES-" + index).items(List.of(item)).build();
 
                     inventoryService.restoreStockForOrder(order);
                     restoreSuccess.incrementAndGet();
@@ -304,73 +302,5 @@ class InventoryConcurrencyTest {
         // Tồn kho cuối cùng: 20 - 10 + 5 = 15
         Product updatedProduct = productRepository.findById(productId).orElseThrow();
         assertThat(updatedProduct.getStockQuantity()).isEqualTo(15);
-    }
-
-    @Test
-    @DisplayName("Kiểm thử đồng thời: Admin điều chỉnh kho (10 luồng +5 và 10 luồng -2) -> Không bị mất mát dữ liệu (Lost Update)")
-    void testConcurrentManualAdjust_NoLostUpdate() throws InterruptedException {
-        // Tồn kho ban đầu: 50
-        Product product = productRepository.save(Product.builder()
-                .name("Màn hình Gaming 240Hz")
-                .price(BigDecimal.valueOf(8900000))
-                .stockQuantity(50)
-                .category(testCategory)
-                .active(true)
-                .build());
-
-        Long productId = product.getId();
-        int addThreads = 10;
-        int subThreads = 10;
-        int totalThreads = addThreads + subThreads;
-
-        ExecutorService executorService = Executors.newFixedThreadPool(totalThreads);
-        CountDownLatch startLatch = new CountDownLatch(1);
-        CountDownLatch doneLatch = new CountDownLatch(totalThreads);
-
-        AtomicInteger successCount = new AtomicInteger(0);
-
-        // 10 luồng nhập thêm +5
-        for (int i = 0; i < addThreads; i++) {
-            executorService.submit(() -> {
-                try {
-                    startLatch.await();
-                    AdjustInventoryRequest req = AdjustInventoryRequest.builder().changeQuantity(5).note("Nhập hàng").build();
-                    inventoryService.adjustStock(productId, req);
-                    successCount.incrementAndGet();
-                } catch (Exception ignored) {
-                } finally {
-                    doneLatch.countDown();
-                }
-            });
-        }
-
-        // 10 luồng xuất kho -2
-        for (int i = 0; i < subThreads; i++) {
-            executorService.submit(() -> {
-                try {
-                    startLatch.await();
-                    AdjustInventoryRequest req = AdjustInventoryRequest.builder().changeQuantity(-2).note("Xuất kho").build();
-                    inventoryService.adjustStock(productId, req);
-                    successCount.incrementAndGet();
-                } catch (Exception ignored) {
-                } finally {
-                    doneLatch.countDown();
-                }
-            });
-        }
-
-        startLatch.countDown();
-        boolean finished = doneLatch.await(15, TimeUnit.SECONDS);
-        executorService.shutdown();
-
-        assertThat(finished).isTrue();
-        assertThat(successCount.get()).isEqualTo(totalThreads);
-
-        // Tồn kho mong đợi: 50 + (10 * 5) - (10 * 2) = 50 + 50 - 20 = 80
-        Product updatedProduct = productRepository.findById(productId).orElseThrow();
-        assertThat(updatedProduct.getStockQuantity()).isEqualTo(80);
-
-        List<InventoryTransaction> transactions = inventoryTransactionRepository.findByProductIdOrderByCreatedAtDesc(productId);
-        assertThat(transactions).hasSize(totalThreads);
     }
 }

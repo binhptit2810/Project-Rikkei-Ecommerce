@@ -14,14 +14,7 @@ import ProductListPage from './pages/shop/ProductListPage'
 import ProductDetailPage from './pages/shop/ProductDetailPage'
 import CartPage from './pages/shop/CartPage'
 import CheckoutPage from './pages/checkout/CheckoutPage'
-import OrderHistoryPage from './pages/orders/OrderHistoryPage'
-import OrderDetailPage from './pages/orders/OrderDetailPage'
-import AdminDashboardPage from './pages/admin/AdminDashboardPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
-import AdminProductsPage from './pages/admin/AdminProductsPage'
-import AdminCategoriesPage from './pages/admin/AdminCategoriesPage'
-import AdminOrdersPage from './pages/admin/AdminOrdersPage'
-import AdminInventoryPage from './pages/admin/AdminInventoryPage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -59,14 +52,9 @@ function App() {
             </RoleRoute>
           }
         >
-          {/* Mặc định chuyển hướng /admin sang /admin/dashboard */}
-          <Route index element={<Navigate to="/admin/dashboard" replace />} />
-          <Route path="dashboard" element={<AdminDashboardPage />} />
+          {/* Mặc định chuyển hướng /admin sang /admin/users (Quản lý người dùng hoàn thành trong Sprint 1 - TSK-D04-CCT) */}
+          <Route index element={<Navigate to="/admin/users" replace />} />
           <Route path="users" element={<UserManagementPage />} />
-          <Route path="products" element={<AdminProductsPage />} />
-          <Route path="categories" element={<AdminCategoriesPage />} />
-          <Route path="orders" element={<AdminOrdersPage />} />
-          <Route path="inventory" element={<AdminInventoryPage />} />
         </Route>
 
         {/* 2. Customer Area Routes (Sử dụng CustomerLayout riêng với Navbar và Footer) */}
@@ -109,22 +97,6 @@ function App() {
             element={
               <ProtectedRoute>
                 <CheckoutPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/orders"
-            element={
-              <ProtectedRoute>
-                <OrderHistoryPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/orders/:id"
-            element={
-              <ProtectedRoute>
-                <OrderDetailPage />
               </ProtectedRoute>
             }
           />

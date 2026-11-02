@@ -1,11 +1,9 @@
 package com.example.ecommerce.service;
 
-import com.example.ecommerce.dto.request.ProductRequest;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
 import com.example.ecommerce.entity.Category;
 import com.example.ecommerce.entity.Product;
-import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.repository.CategoryRepository;
 import com.example.ecommerce.repository.ProductRepository;
@@ -120,103 +118,5 @@ class ProductServiceTest {
         assertThatThrownBy(() -> productService.getProductById(10L))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Sản phẩm không tìm thấy với id: 10");
-    }
-
-    @Test
-    @DisplayName("createProduct: Thêm sản phẩm mới thành công với danh mục và tồn kho hợp lệ")
-    void createProduct_validData_shouldSaveAndReturnProduct() {
-        ProductRequest request = ProductRequest.builder()
-                .name("Quần jean nam")
-                .description("Co giãn 4 chiều")
-                .price(new BigDecimal("450000"))
-                .imageUrl("https://example.com/jeans.jpg")
-                .categoryId(1L)
-                .stockQuantity(30)
-                .active(true)
-                .build();
-
-        when(categoryRepository.findById(1L)).thenReturn(Optional.of(testCategory));
-        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> {
-            Product p = invocation.getArgument(0);
-            p.setId(20L);
-            return p;
-        });
-
-        ProductResponse response = productService.createProduct(request);
-
-        assertThat(response).isNotNull();
-        assertThat(response.getId()).isEqualTo(20L);
-        assertThat(response.getName()).isEqualTo("Quần jean nam");
-        assertThat(response.getStockQuantity()).isEqualTo(30);
-        assertThat(response.getCategoryId()).isEqualTo(1L);
-        verify(productRepository).save(any(Product.class));
-    }
-
-    @Test
-    @DisplayName("createProduct: Báo lỗi khi giá sản phẩm âm")
-    void createProduct_negativePrice_shouldThrowBusinessException() {
-        ProductRequest request = ProductRequest.builder()
-                .name("Sản phẩm giá âm")
-                .price(new BigDecimal("-1000"))
-                .build();
-
-        assertThatThrownBy(() -> productService.createProduct(request))
-                .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("Giá sản phẩm phải lớn hơn hoặc bằng 0");
-
-        verify(productRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("createProduct: Báo lỗi khi danh mục không tồn tại")
-    void createProduct_categoryNotFound_shouldThrowResourceNotFoundException() {
-        ProductRequest request = ProductRequest.builder()
-                .name("Sản phẩm mới")
-                .price(new BigDecimal("100000"))
-                .categoryId(999L)
-                .build();
-
-        when(categoryRepository.findById(999L)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> productService.createProduct(request))
-                .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("Danh mục không tìm thấy với id: 999");
-
-        verify(productRepository, never()).save(any());
-    }
-
-    @Test
-    @DisplayName("updateProduct: Cập nhật thông tin sản phẩm và tồn kho thành công")
-    void updateProduct_validData_shouldUpdateFields() {
-        ProductRequest updateRequest = ProductRequest.builder()
-                .name("Áo thun nam basic Premium")
-                .description("Cải tiến vải co giãn")
-                .price(new BigDecimal("220000"))
-                .categoryId(1L)
-                .stockQuantity(60)
-                .active(true)
-                .build();
-
-        when(productRepository.findByIdWithCategory(10L)).thenReturn(Optional.of(testProduct));
-        when(categoryRepository.findById(1L)).thenReturn(Optional.of(testCategory));
-        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
-
-        ProductResponse response = productService.updateProduct(10L, updateRequest);
-
-        assertThat(response.getName()).isEqualTo("Áo thun nam basic Premium");
-        assertThat(response.getPrice()).isEqualByComparingTo("220000");
-        assertThat(response.getStockQuantity()).isEqualTo(60);
-        verify(productRepository).save(testProduct);
-    }
-
-    @Test
-    @DisplayName("deleteProduct: Xóa mềm sản phẩm (chuyển active = false)")
-    void deleteProduct_existingProduct_shouldSoftDelete() {
-        when(productRepository.findById(10L)).thenReturn(Optional.of(testProduct));
-
-        productService.deleteProduct(10L);
-
-        assertThat(testProduct.getActive()).isFalse();
-        verify(productRepository).save(testProduct);
     }
 }

@@ -29,7 +29,7 @@ export const AdminSidebar = ({ onClose }) => {
           label: 'Bảng điều khiển',
           path: '/admin/dashboard',
           icon: LayoutDashboard,
-          isImplemented: true,
+          isImplemented: false,
         },
       ],
     },
@@ -48,28 +48,28 @@ export const AdminSidebar = ({ onClose }) => {
           label: 'Quản lý sản phẩm',
           path: '/admin/products',
           icon: Package,
-          isImplemented: true,
+          isImplemented: false,
         },
         {
           key: 'categories',
           label: 'Quản lý danh mục',
           path: '/admin/categories',
           icon: Tags,
-          isImplemented: true,
+          isImplemented: false,
         },
         {
           key: 'orders',
           label: 'Quản lý đơn hàng',
           path: '/admin/orders',
           icon: ClipboardList,
-          isImplemented: true,
+          isImplemented: false,
         },
         {
           key: 'inventory',
           label: 'Quản lý tồn kho',
           path: '/admin/inventory',
           icon: Boxes,
-          isImplemented: true,
+          isImplemented: false,
         },
         {
           key: 'reviews',
@@ -78,18 +78,18 @@ export const AdminSidebar = ({ onClose }) => {
           icon: Star,
           isImplemented: false,
         },
-        {
-          key: 'promotions',
-          label: 'Quản lý khuyến mãi',
-          path: '/admin/promotions',
-          icon: Percent,
-          isImplemented: false,
-        },
       ],
     },
     {
-      groupTitle: 'HỆ THỐNG',
+      groupTitle: 'TIẾP THỊ & HỆ THỐNG',
       items: [
+        {
+          key: 'coupons',
+          label: 'Mã giảm giá',
+          path: '/admin/coupons',
+          icon: Percent,
+          isImplemented: false,
+        },
         {
           key: 'settings',
           label: 'Cài đặt hệ thống',
@@ -103,17 +103,16 @@ export const AdminSidebar = ({ onClose }) => {
 
   const getInitial = (name) => {
     if (!name) return 'A'
-    const parts = name.trim().split(' ')
-    return parts[parts.length - 1].charAt(0).toUpperCase()
+    return name.trim().charAt(0).toUpperCase()
   }
 
   return (
-    <aside className="w-64 h-full bg-slate-950 text-slate-300 flex flex-col justify-between border-r border-slate-800 select-none">
-      {/* 1. Brand Logo & Title */}
+    <aside className="w-64 h-screen bg-slate-950 border-r border-slate-850 flex flex-col justify-between select-none">
       <div>
-        <div className="h-16 px-5 flex items-center justify-between border-b border-slate-800/80 bg-slate-950">
+        {/* 1. Brand Logo */}
+        <div className="h-16 px-5 border-b border-slate-850 flex items-center justify-between">
           <Link
-            to="/admin/dashboard"
+            to="/admin/users"
             onClick={onClose}
             className="flex items-center gap-3 group"
           >
@@ -184,14 +183,14 @@ export const AdminSidebar = ({ onClose }) => {
                     <li key={item.key}>
                       <div
                         className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-500 cursor-not-allowed hover:bg-slate-900/40 transition-colors group"
-                        title="Chức năng đang phát triển — Sắp ra mắt"
+                        title="Chức năng đang phát triển trong Sprint 2"
                       >
                         <div className="flex items-center gap-3">
                           <Icon className="w-4 h-4 text-slate-600 group-hover:text-slate-500 transition-colors" />
                           <span className="text-slate-400">{item.label}</span>
                         </div>
                         <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-900 text-slate-500 border border-slate-800 shrink-0">
-                          Sắp tới
+                          Sprint 2
                         </span>
                       </div>
                     </li>
@@ -209,17 +208,21 @@ export const AdminSidebar = ({ onClose }) => {
           <div className="w-8 h-8 rounded-lg bg-orange-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
             {getInitial(user?.fullName)}
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="flex-1 min-w-0">
             <div className="text-xs font-bold text-white truncate">
               {user?.fullName || 'Quản trị viên'}
             </div>
             <div className="text-[10px] text-slate-400 truncate">
-              {user?.email || 'admin@rikkei.vn'}
+              {user?.email || 'admin@ecommerce.com'}
             </div>
           </div>
-          <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-slate-800 text-orange-400 border border-slate-700 uppercase tracking-wider shrink-0">
-            ADMIN
-          </span>
+          <Link
+            to="/"
+            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            title="Về trang mua sắm"
+          >
+            <Store className="w-4 h-4" />
+          </Link>
         </div>
       </div>
     </aside>
