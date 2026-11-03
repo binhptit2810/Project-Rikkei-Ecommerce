@@ -1,5 +1,6 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.dto.request.AdjustInventoryRequest;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.repository.*;
@@ -14,7 +15,6 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 
 import java.math.BigDecimal;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -30,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
  * 1. Chống bán âm / bán vượt tồn kho (Overselling Prevention with Pessimistic Locking).
  * 2. Trừ kho đồng thời khi đủ số lượng hàng tồn.
  * 3. Đồng thời vừa đặt hàng (trừ kho) vừa hủy đơn (hoàn kho) - tính nhất quán dữ liệu.
+ * 4. Điều chỉnh kho thủ công đồng thời (MANUAL_IMPORT & MANUAL_EXPORT) - bảo toàn số liệu.
+ * 5. Xuất kho thủ công đồng thời khi số lượng yêu cầu vượt quá tồn kho hiện có.
  */
 @SpringBootTest
 @ActiveProfiles("test")
@@ -57,9 +59,6 @@ class InventoryConcurrencyTest {
 
     @Autowired
     private OrderRepository orderRepository;
-
-    @Autowired
-    private UserRepository userRepository;
 
     @MockBean
     private RefreshTokenService refreshTokenService;
@@ -117,7 +116,7 @@ class InventoryConcurrencyTest {
             final int index = i;
             executorService.submit(() -> {
                 try {
-                    // Chờ tín hiệu xuất phát để tất cả 30 luồng lao vào cùng 1 microsecond
+                    // Chờ tín hiệu xuất phát để tất cả 30 luồng lao vào cùng 1 thời điểm
                     startLatch.await();
 
                     // Giả lập Order với OrderItem tham chiếu đến productId
@@ -302,5 +301,136 @@ class InventoryConcurrencyTest {
         // Tồn kho cuối cùng: 20 - 10 + 5 = 15
         Product updatedProduct = productRepository.findById(productId).orElseThrow();
         assertThat(updatedProduct.getStockQuantity()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("Kiểm thử đồng thời: 10 luồng nhập kho (+5 món) và 10 luồng xuất kho (-2 món) cùng lúc -> Tồn kho cuối cùng bảo toàn đúng số học")
+    void testConcurrentManualAdjust_DataConsistency() throws InterruptedException {
+        // Tồn kho ban đầu: 20 món
+        Product product = productRepository.save(Product.builder()
+                .name("Tai nghe Sony WH-1000XM5")
+                .price(BigDecimal.valueOf(8490000))
+                .stockQuantity(20)
+                .category(testCategory)
+                .active(true)
+                .build());
+
+        Long productId = product.getId();
+        int importThreads = 10;
+        int exportThreads = 10;
+        int totalThreads = importThreads + exportThreads;
+
+        ExecutorService executorService = Executors.newFixedThreadPool(totalThreads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(totalThreads);
+
+        AtomicInteger importSuccess = new AtomicInteger(0);
+        AtomicInteger exportSuccess = new AtomicInteger(0);
+
+        // 10 luồng nhập kho: mỗi luồng +5 món -> tổng cộng +50
+        for (int i = 0; i < importThreads; i++) {
+            executorService.submit(() -> {
+                try {
+                    startLatch.await();
+                    AdjustInventoryRequest request = AdjustInventoryRequest.builder()
+                            .changeQuantity(5)
+                            .type(InventoryTransactionType.MANUAL_IMPORT)
+                            .reason("Nhập kho lô mới")
+                            .build();
+                    inventoryService.adjustStock(productId, request);
+                    importSuccess.incrementAndGet();
+                } catch (Exception ignored) {
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        // 10 luồng xuất kho: mỗi luồng -2 món -> tổng cộng -20
+        for (int i = 0; i < exportThreads; i++) {
+            executorService.submit(() -> {
+                try {
+                    startLatch.await();
+                    AdjustInventoryRequest request = AdjustInventoryRequest.builder()
+                            .changeQuantity(2)
+                            .type(InventoryTransactionType.MANUAL_EXPORT)
+                            .reason("Xuất kho chuyển chi nhánh")
+                            .build();
+                    inventoryService.adjustStock(productId, request);
+                    exportSuccess.incrementAndGet();
+                } catch (Exception ignored) {
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        startLatch.countDown();
+        boolean finished = doneLatch.await(15, TimeUnit.SECONDS);
+        executorService.shutdown();
+
+        assertThat(finished).isTrue();
+        assertThat(importSuccess.get()).isEqualTo(importThreads);
+        assertThat(exportSuccess.get()).isEqualTo(exportThreads);
+
+        // Tồn kho cuối cùng: 20 + (10 * 5) - (10 * 2) = 20 + 50 - 20 = 50
+        Product updatedProduct = productRepository.findById(productId).orElseThrow();
+        assertThat(updatedProduct.getStockQuantity()).isEqualTo(50);
+    }
+
+    @Test
+    @DisplayName("Kiểm thử đồng thời: 20 luồng cùng xuất kho 2 món khi kho chỉ còn 10 món -> Đúng 5 luồng thành công, 15 luồng bị chặn, tồn kho về đúng 0")
+    void testConcurrentManualExport_AntiOverselling_PreventsNegativeStock() throws InterruptedException {
+        // Tồn kho ban đầu: đúng 10 món
+        Product product = productRepository.save(Product.builder()
+                .name("Máy ảnh mirrorless Fujifilm X-T5")
+                .price(BigDecimal.valueOf(42990000))
+                .stockQuantity(10)
+                .category(testCategory)
+                .active(true)
+                .build());
+
+        Long productId = product.getId();
+        int numberOfThreads = 20;
+
+        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
+        CountDownLatch startLatch = new CountDownLatch(1);
+        CountDownLatch doneLatch = new CountDownLatch(numberOfThreads);
+
+        AtomicInteger successCount = new AtomicInteger(0);
+        AtomicInteger failCount = new AtomicInteger(0);
+
+        for (int i = 0; i < numberOfThreads; i++) {
+            executorService.submit(() -> {
+                try {
+                    startLatch.await();
+                    AdjustInventoryRequest request = AdjustInventoryRequest.builder()
+                            .changeQuantity(2)
+                            .type(InventoryTransactionType.MANUAL_EXPORT)
+                            .reason("Xuất kho kiểm kê định kỳ")
+                            .build();
+                    inventoryService.adjustStock(productId, request);
+                    successCount.incrementAndGet();
+                } catch (BusinessException be) {
+                    if (be.getMessage().contains("Không thể xuất kho vượt quá số lượng tồn")) {
+                        failCount.incrementAndGet();
+                    }
+                } catch (Exception ignored) {
+                } finally {
+                    doneLatch.countDown();
+                }
+            });
+        }
+
+        startLatch.countDown();
+        boolean finished = doneLatch.await(15, TimeUnit.SECONDS);
+        executorService.shutdown();
+
+        assertThat(finished).isTrue();
+        assertThat(successCount.get()).as("Chỉ có đúng 5 yêu cầu xuất kho 2 món thành công (tổng 10 món)").isEqualTo(5);
+        assertThat(failCount.get()).as("15 yêu cầu còn lại phải bị chặn và ném ngoại lệ").isEqualTo(15);
+
+        Product updatedProduct = productRepository.findById(productId).orElseThrow();
+        assertThat(updatedProduct.getStockQuantity()).as("Tồn kho phải về đúng 0, tuyệt đối không bị âm").isEqualTo(0);
     }
 }
