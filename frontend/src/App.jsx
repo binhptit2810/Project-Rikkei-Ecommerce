@@ -17,6 +17,8 @@ import ProductListPage from './pages/shop/ProductListPage'
 import ProductDetailPage from './pages/shop/ProductDetailPage'
 import CartPage from './pages/shop/CartPage'
 import CheckoutPage from './pages/checkout/CheckoutPage'
+import OrderHistoryPage from './pages/orders/OrderHistoryPage'
+import OrderDetailPage from './pages/orders/OrderDetailPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
 import AdminProductsPage from './pages/admin/AdminProductsPage'
 import AdminCategoriesPage from './pages/admin/AdminCategoriesPage'
@@ -115,6 +117,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <CheckoutPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/orders"
+            element={
+              <ProtectedRoute>
+                <OrderHistoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/orders/:id"
+            element={
+              <ProtectedRoute>
+                <OrderDetailPage />
               </ProtectedRoute>
             }
           />

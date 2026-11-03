@@ -30,7 +30,7 @@ export const CheckoutPage = () => {
     note: '',
   })
 
-  const [isSubmitting] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
   const [successInfo, setSuccessInfo] = useState(null)
 
