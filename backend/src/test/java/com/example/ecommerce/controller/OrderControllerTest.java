@@ -214,7 +214,7 @@ class OrderControllerTest {
                 .orderStatus(OrderStatus.PENDING)
                 .build();
 
-        when(orderService.getOrderById(eq(1L), eq("customer@example.com"))).thenReturn(response);
+        when(orderService.getOrderDetail(eq(1L), eq("customer@example.com"))).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/orders/1"))
                 .andExpect(status().isOk())
@@ -227,7 +227,7 @@ class OrderControllerTest {
     @DisplayName("GET /api/v1/orders/{id}: Từ chối 403 FORBIDDEN khi truy cập đơn của người khác (IDOR Protection)")
     @WithMockUser(username = "other@example.com", roles = {"CUSTOMER"})
     void getOrderById_AccessDenied_Returns403() throws Exception {
-        when(orderService.getOrderById(eq(1L), eq("other@example.com")))
+        when(orderService.getOrderDetail(eq(1L), eq("other@example.com")))
                 .thenThrow(new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này"));
 
         mockMvc.perform(get("/api/v1/orders/1"))
