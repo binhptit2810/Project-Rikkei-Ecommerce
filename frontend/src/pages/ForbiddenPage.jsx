@@ -18,7 +18,7 @@ export const ForbiddenPage = () => {
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Link
             to="/"
-            className="inline-flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-bold py-2.5 px-5 rounded-xl shadow-2xs transition-all text-xs"
+            className="inline-flex items-center justify-center gap-2 btn-primary text-xs"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>Về trang chủ</span>

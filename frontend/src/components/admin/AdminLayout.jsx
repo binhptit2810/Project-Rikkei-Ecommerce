@@ -5,19 +5,13 @@ import AdminHeader from './AdminHeader'
 
 /**
  * Layout gốc dành riêng cho khu vực quản trị Admin (Admin Layout).
- * 
- * Đặc điểm:
- * 1. Tách biệt hoàn toàn với layout của Customer (không có Navbar & Footer chung).
- * 2. Cố định Sidebar bên trái (chiều rộng 256px trên Desktop).
- * 3. Hỗ trợ Drawer Sidebar đóng/mở mượt mà trên Mobile & Tablet.
- * 4. Header nằm trên cùng của khu vực nội dung bên phải.
- * 5. Khu vực nội dung chính hiển thị các trang con thông qua React Router Outlet.
+ * Thiết kế theo chuẩn shadcn/ui New York Style (Neutral/Zinc Palette).
  */
 export const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-slate-100/70 text-slate-800 antialiased flex flex-col">
+    <div className="min-h-screen bg-zinc-50/50 text-zinc-950 antialiased flex flex-col">
       {/* 1. Sidebar Desktop (Cố định bên trái) */}
       <div className="hidden lg:block fixed inset-y-0 left-0 z-30 w-64">
         <AdminSidebar />
@@ -28,13 +22,13 @@ export const AdminLayout = () => {
         <div className="fixed inset-0 z-40 lg:hidden">
           {/* Lớp phủ mờ (Backdrop) */}
           <div
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity duration-300"
+            className="fixed inset-0 bg-black/50 backdrop-blur-xs transition-opacity duration-200"
             onClick={() => setSidebarOpen(false)}
             aria-hidden="true"
           />
 
           {/* Drawer Sidebar */}
-          <div className="fixed inset-y-0 left-0 z-50 w-64 max-w-full shadow-2xl animate-in slide-in-from-left duration-300">
+          <div className="fixed inset-y-0 left-0 z-50 w-64 max-w-full shadow-lg animate-in slide-in-from-left duration-200">
             <AdminSidebar onClose={() => setSidebarOpen(false)} />
           </div>
         </div>
@@ -46,7 +40,7 @@ export const AdminLayout = () => {
         <AdminHeader onToggleSidebar={() => setSidebarOpen(true)} />
 
         {/* Nội dung trang quản trị (Render qua Outlet) */}
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
           <Outlet />
         </main>
       </div>

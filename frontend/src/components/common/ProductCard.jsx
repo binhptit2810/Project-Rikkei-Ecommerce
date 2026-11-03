@@ -6,11 +6,7 @@ const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1505740420928-5e560c06
 
 /**
  * Component hiển thị thẻ sản phẩm (ProductCard)
- * Hoàn thành thẻ [TSK-D04-DHA]: Xây dựng Component ProductCard & Tích hợp Trang Shop với API thật
- *
- * Props:
- * - product: Thông tin sản phẩm { id, name, description, price, imageUrl, categoryName, stockQuantity }
- * - onAddToCart: Callback khi bấm nút thêm vào giỏ hàng
+ * Phong cách: shadcn/ui New York - Neutral/Zinc Palette
  */
 export const ProductCard = ({ product, onAddToCart }) => {
   const [imgError, setImgError] = useState(false)
@@ -23,7 +19,7 @@ export const ProductCard = ({ product, onAddToCart }) => {
     Number(product.stockQuantity) <= 0
   const stockCount = Number(product.stockQuantity) || 0
 
-  // Định dạng giá chuẩn VNĐ theo yêu cầu
+  // Định dạng giá chuẩn VNĐ
   const formattedPrice = new Intl.NumberFormat('vi-VN', {
     style: 'currency',
     currency: 'VND',
@@ -50,60 +46,60 @@ export const ProductCard = ({ product, onAddToCart }) => {
   return (
     <Link
       to={`/products/${product.id}`}
-      className="group bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-card hover:border-orange-300 transition-all duration-200 overflow-hidden flex flex-col justify-between"
+      className="group relative flex flex-col justify-between overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition-all hover:border-zinc-300 hover:shadow-md"
     >
       <div>
         {/* Khung ảnh sản phẩm & các Badge */}
-        <div className="aspect-square w-full bg-slate-50 relative overflow-hidden flex items-center justify-center">
+        <div className="aspect-square w-full bg-zinc-50 relative overflow-hidden flex items-center justify-center border-b border-zinc-100">
           {product.imageUrl ? (
             <img
               src={product.imageUrl}
               alt={product.name || 'Sản phẩm'}
               onError={handleImageError}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (
-            <div className="flex flex-col items-center justify-center text-slate-300 w-full h-full">
-              <ShoppingBag className="w-12 h-12 stroke-[1.25] text-slate-300 mb-1" />
-              <span className="text-xs text-slate-400 font-medium">Hình ảnh sản phẩm</span>
+            <div className="flex flex-col items-center justify-center text-zinc-300 w-full h-full">
+              <ShoppingBag className="w-10 h-10 stroke-[1.25] text-zinc-300 mb-1" />
+              <span className="text-xs text-zinc-400 font-medium">Hình ảnh sản phẩm</span>
             </div>
           )}
 
           {/* Badge tên danh mục */}
           {product.categoryName && (
-            <span className="absolute top-3 left-3 bg-white/90 text-slate-800 text-[11px] font-semibold px-2.5 py-1 rounded-lg backdrop-blur-xs border border-slate-200/60 shadow-2xs">
+            <span className="absolute top-2.5 left-2.5 bg-white/95 text-zinc-700 text-[11px] font-medium px-2 py-0.5 rounded-md backdrop-blur-xs border border-zinc-200 shadow-2xs">
               {product.categoryName}
             </span>
           )}
 
           {/* Badge trạng thái tồn kho */}
           {isOutOfStock ? (
-            <span className="absolute top-3 right-3 bg-red-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-2xs">
+            <span className="absolute top-2.5 right-2.5 bg-zinc-900 text-zinc-50 text-[10px] font-medium px-2 py-0.5 rounded-md uppercase tracking-wider">
               Hết hàng
             </span>
           ) : (
-            <span className="absolute top-3 right-3 bg-emerald-600 text-white text-[10px] font-semibold px-2.5 py-1 rounded-lg shadow-2xs">
+            <span className="absolute top-2.5 right-2.5 bg-zinc-100 text-zinc-700 text-[10px] font-medium px-2 py-0.5 rounded-md border border-zinc-200">
               Còn {stockCount}
             </span>
           )}
         </div>
 
         {/* Thông tin sản phẩm: Tên & Mô tả ngắn */}
-        <div className="p-4">
-          <h3 className="font-bold text-slate-900 text-sm group-hover:text-orange-600 transition-colors line-clamp-2 mb-1.5 leading-snug">
+        <div className="p-4 space-y-1">
+          <h3 className="font-semibold text-zinc-900 text-sm group-hover:underline line-clamp-2 leading-snug">
             {product.name}
           </h3>
-          <p className="text-slate-500 text-xs line-clamp-2 leading-relaxed">
+          <p className="text-zinc-500 text-xs line-clamp-2 leading-relaxed">
             {product.description || 'Sản phẩm chính hãng với tiêu chuẩn chất lượng cao.'}
           </p>
         </div>
       </div>
 
       {/* Footer: Giá bán & Nút Thêm vào giỏ hàng */}
-      <div className="p-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2 mt-auto">
+      <div className="p-4 pt-3 border-t border-zinc-100 flex items-center justify-between gap-2 mt-auto">
         <div className="min-w-0">
-          <span className="text-[11px] text-slate-400 block font-medium">Giá bán</span>
-          <span className="text-base font-extrabold text-orange-600 tabular-nums truncate block">
+          <span className="text-[10px] uppercase font-medium tracking-wider text-zinc-400 block">Giá bán</span>
+          <span className="text-base font-semibold text-zinc-950 tabular-nums truncate block">
             {formattedPrice}
           </span>
         </div>
@@ -112,10 +108,10 @@ export const ProductCard = ({ product, onAddToCart }) => {
           type="button"
           onClick={handleAddToCartClick}
           disabled={isOutOfStock}
-          className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
             isOutOfStock
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
-              : 'bg-orange-600 hover:bg-orange-700 text-white shadow-2xs hover:shadow active:scale-95'
+              ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed border border-zinc-200'
+              : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-50 shadow-sm active:scale-[0.98]'
           }`}
           title={isOutOfStock ? 'Sản phẩm đã hết hàng' : 'Thêm vào giỏ hàng'}
         >

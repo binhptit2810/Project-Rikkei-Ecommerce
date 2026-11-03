@@ -14,25 +14,25 @@ export const FALLBACK_IMAGE =
 export const ORDER_STATUS_CONFIG = {
   PENDING: {
     label: 'Chờ xác nhận',
-    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+    badgeClass: 'bg-zinc-100 text-zinc-800 border-zinc-200',
     icon: Clock,
     step: 0,
   },
   CONFIRMED: {
     label: 'Đã xác nhận',
-    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    badgeClass: 'bg-zinc-100 text-zinc-800 border-zinc-200',
     icon: CheckCircle2,
     step: 1,
   },
   PROCESSING: {
     label: 'Đang xử lý',
-    badgeClass: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    badgeClass: 'bg-zinc-100 text-zinc-800 border-zinc-200',
     icon: Package,
     step: 2,
   },
   SHIPPING: {
     label: 'Đang giao hàng',
-    badgeClass: 'bg-purple-50 text-purple-700 border-purple-200',
+    badgeClass: 'bg-zinc-100 text-zinc-800 border-zinc-200',
     icon: Truck,
     step: 3,
   },
@@ -58,7 +58,7 @@ export const PAYMENT_STATUS_CONFIG = {
   },
   UNPAID: {
     label: 'Chưa thanh toán',
-    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+    badgeClass: 'bg-zinc-100 text-zinc-800 border-zinc-200',
     icon: Clock,
   },
   FAILED: {
@@ -68,7 +68,7 @@ export const PAYMENT_STATUS_CONFIG = {
   },
   REFUNDED: {
     label: 'Đã hoàn tiền',
-    badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    badgeClass: 'bg-zinc-100 text-zinc-800 border-zinc-200',
     icon: RotateCcw,
   },
 }
@@ -98,17 +98,17 @@ export const formatDateTime = (dateStr) => {
 
 export const OrderStatusBadge = ({ status, description }) => {
   const config = ORDER_STATUS_CONFIG[status] || {
-    label: description || status || 'Chưa rõ',
-    badgeClass: 'bg-slate-50 text-slate-700 border-slate-200',
+    label: description || status || 'Không rõ',
+    badgeClass: 'bg-zinc-100 text-zinc-600 border-zinc-200',
     icon: Clock,
   }
-  const IconComponent = config.icon
+  const Icon = config.icon
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${config.badgeClass}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.badgeClass}`}
     >
-      <IconComponent className="w-3.5 h-3.5" />
+      <Icon className="w-3.5 h-3.5" />
       <span>{description || config.label}</span>
     </span>
   )
@@ -116,17 +116,17 @@ export const OrderStatusBadge = ({ status, description }) => {
 
 export const PaymentStatusBadge = ({ status, description }) => {
   const config = PAYMENT_STATUS_CONFIG[status] || {
-    label: description || status || 'Chưa thanh toán',
-    badgeClass: 'bg-slate-50 text-slate-700 border-slate-200',
+    label: description || status || 'Không rõ',
+    badgeClass: 'bg-zinc-100 text-zinc-600 border-zinc-200',
     icon: Clock,
   }
-  const IconComponent = config.icon
+  const Icon = config.icon
 
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${config.badgeClass}`}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${config.badgeClass}`}
     >
-      <IconComponent className="w-3 h-3" />
+      <Icon className="w-3.5 h-3.5" />
       <span>{description || config.label}</span>
     </span>
   )
