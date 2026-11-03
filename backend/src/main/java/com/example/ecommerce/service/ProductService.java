@@ -138,7 +138,7 @@ public class ProductService {
                 .imageUrl(request.getImageUrl())
                 .category(category)
                 .stockQuantity(request.getStockQuantity())
-                .active(request.getActive() != null ? request.getActive() : true)
+                .active(true)
                 .build();
 
         Product savedProduct = productRepository.save(product);
