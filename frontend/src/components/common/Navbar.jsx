@@ -8,7 +8,8 @@ import {
   LogOut, 
   Menu, 
   X,
-  ChevronDown
+  ChevronDown,
+  Package
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 import { useCartStore } from '../../store/useCartStore'
@@ -173,6 +174,14 @@ export const Navbar = () => {
                       <span>Hồ sơ tài khoản</span>
                     </Link>
 
+                    <Link
+                      to="/orders"
+                      className="flex items-center gap-2.5 px-4 py-2 text-xs font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-50 transition-colors"
+                    >
+                      <Package className="w-4 h-4 text-slate-400" />
+                      <span>Đơn hàng của tôi</span>
+                    </Link>
+
                     {user.role === 'ADMIN' && (
                       <Link
                         to="/admin/users"
@@ -255,6 +264,14 @@ export const Navbar = () => {
                 }`}
               >
                 Hồ sơ tài khoản
+              </Link>
+              <Link
+                to="/orders"
+                className={`block px-3 py-2 rounded-xl text-sm font-medium ${
+                  isActive('/orders') ? 'bg-slate-100 text-slate-900 font-semibold' : 'text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                Đơn hàng của tôi
               </Link>
               {user?.role === 'ADMIN' && (
                 <Link
