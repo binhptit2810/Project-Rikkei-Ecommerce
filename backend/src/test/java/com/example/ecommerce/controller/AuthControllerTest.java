@@ -20,6 +20,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -28,6 +29,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Integration Test cho AuthController.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra xác thực (Authentication), Bean Validation,
  * Xử lý lỗi tập trung khi sai thông tin (401) hoặc tài khoản bị khóa (403).
  */
@@ -95,6 +98,7 @@ class AuthControllerTest {
         request.setFullName("Lê Văn C");
         request.setEmail("not-an-email");
         request.setPassword("Password123@");
+        request.setPhone("0912345678");
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -111,6 +115,7 @@ class AuthControllerTest {
         request.setFullName("Lê Văn C");
         request.setEmail("valid@example.com");
         request.setPassword("12345"); // ít hơn 6 ký tự
+        request.setPhone("0912345678");
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -118,6 +123,91 @@ class AuthControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.data.password").value("Mật khẩu phải từ 6 đến 100 ký tự"));
+    }
+
+    @Test
+    @DisplayName("NFR-DATA-09: Đăng ký không có số điện thoại (null) bị Bean Validation trả 400 BAD REQUEST")
+    void register_NullPhone_Returns400() throws Exception {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("Lê Văn C");
+        request.setEmail("valid@example.com");
+        request.setPassword("Password123@");
+        request.setPhone(null);
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.phone").value("Số điện thoại không được để trống"));
+    }
+
+    @Test
+    @DisplayName("NFR-DATA-10: Đăng ký với số điện thoại rỗng bị Bean Validation trả 400 BAD REQUEST")
+    void register_EmptyPhone_Returns400() throws Exception {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("Lê Văn C");
+        request.setEmail("valid@example.com");
+        request.setPassword("Password123@");
+        request.setPhone("");
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.phone", containsString("Số điện thoại không được để trống")));
+    }
+
+    @Test
+    @DisplayName("NFR-DATA-11: Đăng ký với số điện thoại chỉ chứa khoảng trắng bị Bean Validation trả 400 BAD REQUEST")
+    void register_WhitespacePhone_Returns400() throws Exception {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("Lê Văn C");
+        request.setEmail("valid@example.com");
+        request.setPassword("Password123@");
+        request.setPhone("   ");
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.phone", containsString("Số điện thoại không được để trống")));
+    }
+
+    @Test
+    @DisplayName("NFR-DATA-12: Đăng ký với số điện thoại sai định dạng (không bắt đầu bằng 0) bị Bean Validation trả 400 BAD REQUEST")
+    void register_InvalidFormatPhone_Returns400() throws Exception {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("Lê Văn C");
+        request.setEmail("valid@example.com");
+        request.setPassword("Password123@");
+        request.setPhone("1234567890"); // Không bắt đầu bằng 0
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.phone").value("Số điện thoại không hợp lệ (gồm 10 số, bắt đầu bằng số 0)"));
+    }
+
+    @Test
+    @DisplayName("NFR-DATA-13: Đăng ký với số điện thoại không đủ 10 chữ số bị Bean Validation trả 400 BAD REQUEST")
+    void register_ShortPhone_Returns400() throws Exception {
+        RegisterRequest request = new RegisterRequest();
+        request.setFullName("Lê Văn C");
+        request.setEmail("valid@example.com");
+        request.setPassword("Password123@");
+        request.setPhone("091234"); // Không đủ 10 số
+
+        mockMvc.perform(post("/api/v1/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.phone").value("Số điện thoại không hợp lệ (gồm 10 số, bắt đầu bằng số 0)"));
     }
 
     @Test

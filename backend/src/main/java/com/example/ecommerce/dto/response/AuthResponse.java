@@ -9,6 +9,8 @@ import lombok.ToString;
 
 /**
  * Response body cho POST /api/v1/auth/register và POST /api/v1/auth/login.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Frontend lưu accessToken vào localStorage hoặc memory store, sau đó gửi trong
  * header: Authorization: Bearer <accessToken>
@@ -30,6 +32,7 @@ import lombok.ToString;
  *   }
  * }
  */
+// [TSK-D02-CCT]
 @Data
 @Builder
 @NoArgsConstructor

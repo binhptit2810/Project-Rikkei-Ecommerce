@@ -20,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * Unit Test cho GlobalExceptionHandler.
  * Kiểm tra chuẩn hóa phản hồi ApiResponse cho tất cả các nhóm mã lỗi HTTP (400, 401, 403, 404, 500).
  */
+// [TSK-D03-CCT]
 class GlobalExceptionHandlerTest {
 
     private GlobalExceptionHandler exceptionHandler;
@@ -114,6 +115,19 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getMessage()).isEqualTo("Bạn không có quyền thực hiện thao tác này");
+    }
+
+    @Test
+    @DisplayName("NFR-ERR-07-CUSTOM: AccessDeniedException với thông báo tùy biến trả về đúng message và 403 FORBIDDEN")
+    void handleAccessDenied_WithCustomMessage_ReturnsCustomMessageAnd403() {
+        AccessDeniedException ex = new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này");
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleAccessDenied(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getMessage()).isEqualTo("Bạn không có quyền truy cập thông tin đơn hàng này");
     }
 
     @Test

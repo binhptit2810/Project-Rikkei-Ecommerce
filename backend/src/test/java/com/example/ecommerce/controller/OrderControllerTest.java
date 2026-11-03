@@ -204,6 +204,39 @@ class OrderControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/orders/{id}: Xem chi tiết đơn hàng thành công trả 200 OK")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void getOrderById_Success_Returns200() throws Exception {
+        OrderResponse response = OrderResponse.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-123456")
+                .totalAmount(BigDecimal.valueOf(500000))
+                .orderStatus(OrderStatus.PENDING)
+                .build();
+
+        when(orderService.getOrderById(eq(1L), eq("customer@example.com"))).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/orders/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(1L))
+                .andExpect(jsonPath("$.data.orderCode").value("ORD-20261102-123456"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/orders/{id}: Từ chối 403 FORBIDDEN khi truy cập đơn của người khác (IDOR Protection)")
+    @WithMockUser(username = "other@example.com", roles = {"CUSTOMER"})
+    void getOrderById_AccessDenied_Returns403() throws Exception {
+        when(orderService.getOrderById(eq(1L), eq("other@example.com")))
+                .thenThrow(new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này"));
+
+        mockMvc.perform(get("/api/v1/orders/1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Bạn không có quyền truy cập thông tin đơn hàng này"));
+    }
+
+    @Test
     @DisplayName("PATCH /api/v1/orders/{id}/cancel: Từ chối 403 FORBIDDEN khi hủy đơn của người khác (IDOR Protection)")
     @WithMockUser(username = "other@example.com", roles = {"CUSTOMER"})
     void cancelOrder_AccessDenied_Returns403() throws Exception {
@@ -218,7 +251,7 @@ class OrderControllerTest {
 
     @Test
     @DisplayName("GET /api/v1/orders/{id}: Từ chối truy cập 401 khi chưa đăng nhập")
-    void getOrderDetail_Unauthenticated_Returns401() throws Exception {
+    void getOrderById_Unauthenticated_Returns401() throws Exception {
         mockMvc.perform(get("/api/v1/orders/1"))
                 .andExpect(status().isUnauthorized());
     }

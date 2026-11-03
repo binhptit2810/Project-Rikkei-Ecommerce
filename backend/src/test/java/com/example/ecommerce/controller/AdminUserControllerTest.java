@@ -14,6 +14,7 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
@@ -22,6 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -32,9 +34,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Integration Test cho AdminUserController.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra RBAC (Phân quyền Admin vs Customer), Validation dữ liệu đầu vào,
  * và chuẩn hóa phản hồi ApiResponse.
  */
+// [TSK-D04-CCT]
+// [TSK-D06-CCT]
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -268,6 +274,14 @@ class AdminUserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-CLASS: Xác minh AdminUserController được phân quyền @PreAuthorize(\"hasRole('ADMIN')\") ở cấp Class")
+    void adminUserController_HasClassLevelPreAuthorize() {
+        PreAuthorize annotation = AdminUserController.class.getAnnotation(PreAuthorize.class);
+        assertThat(annotation).isNotNull();
+        assertThat(annotation.value()).isEqualTo("hasRole('ADMIN')");
     }
 }
 

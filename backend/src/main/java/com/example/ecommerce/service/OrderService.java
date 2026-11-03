@@ -8,6 +8,7 @@ import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
+import org.springframework.security.access.AccessDeniedException;
 import com.example.ecommerce.repository.OrderRepository;
 import com.example.ecommerce.repository.ProductRepository;
 import com.example.ecommerce.repository.UserRepository;
@@ -212,7 +213,7 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + userEmail));
 
         if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
-            throw new BusinessException("Bạn không có quyền truy cập thông tin đơn hàng này");
+            throw new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này");
         }
 
         return mapToOrderResponse(order);
@@ -238,7 +239,7 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + userEmail));
 
         if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
-            throw new BusinessException("Bạn không có quyền truy cập thông tin đơn hàng này");
+            throw new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này");
         }
 
         return mapToOrderResponse(order);
@@ -267,7 +268,7 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + userEmail));
 
         if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
-            throw new BusinessException("Bạn không có quyền hủy đơn hàng này");
+            throw new AccessDeniedException("Bạn không có quyền hủy đơn hàng này");
         }
 
         // Kiểm tra điều kiện: chỉ cho phép hủy khi ở trạng thái PENDING hoặc CONFIRMED

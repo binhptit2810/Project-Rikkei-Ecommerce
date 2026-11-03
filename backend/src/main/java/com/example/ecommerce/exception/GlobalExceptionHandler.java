@@ -28,6 +28,7 @@ import java.util.Map;
  *
  * Thứ tự ưu tiên handler: từ cụ thể nhất đến tổng quát nhất.
  */
+// [TSK-D03-CCT]
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
@@ -119,8 +120,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDenied(AccessDeniedException ex) {
         log.warn("Access denied: {}", ex.getMessage());
+        String message = (StringUtils.hasText(ex.getMessage())
+                && !"Access is denied".equalsIgnoreCase(ex.getMessage())
+                && !"Forbidden".equalsIgnoreCase(ex.getMessage()))
+                ? ex.getMessage()
+                : "Bạn không có quyền thực hiện thao tác này";
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error("Bạn không có quyền thực hiện thao tác này"));
+                .body(ApiResponse.error(message));
     }
 
     /**

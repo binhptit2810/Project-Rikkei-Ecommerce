@@ -4,6 +4,7 @@ import com.example.ecommerce.dto.request.ChangePasswordRequest;
 import com.example.ecommerce.dto.request.LockUserRequest;
 import com.example.ecommerce.dto.request.UpdateProfileRequest;
 import com.example.ecommerce.dto.response.UserResponse;
+import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
@@ -22,6 +23,8 @@ import java.time.LocalDateTime;
 
 /**
  * Nghiệp vụ quản lý hồ sơ người dùng.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Nguyên tắc bảo mật:
  *   - Danh tính người dùng luôn được lấy từ SecurityContext (UserDetails), KHÔNG tin tưởng ID do client gửi.
@@ -33,6 +36,7 @@ import java.time.LocalDateTime;
  *   - HOẶC đọc JWT claims trong SecurityContext principal
  *   - VD trong OrderService: userRepository.findByEmail(userDetails.getUsername()).getId()
  */
+// [TSK-D02-CCT]
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -49,6 +53,7 @@ public class UserService {
      * @return UserResponse không chứa password
      * @throws ResourceNotFoundException nếu user không tồn tại trong DB
      */
+    // [TSK-D04-CCT]
     @Transactional(readOnly = true)
     public UserResponse getCurrentUser(UserDetails userDetails) {
         User user = findUserByDetails(userDetails);
@@ -68,6 +73,25 @@ public class UserService {
     }
 
     /**
+     * Lấy danh sách khách hàng (role = CUSTOMER) có phân trang và tìm kiếm (dành cho User area).
+     * Tuyệt đối không trả về tài khoản ADMIN.
+     *
+     * @param pageable thông tin phân trang (page, size, sort)
+     * @param keyword  từ khóa tìm kiếm theo tên, email, sđt (chỉ tìm trong phạm vi CUSTOMER)
+     * @return Page<UserResponse> danh sách khách hàng
+     */
+    @Transactional(readOnly = true)
+    public Page<UserResponse> getCustomers(Pageable pageable, String keyword) {
+        Page<User> userPage;
+        if (StringUtils.hasText(keyword)) {
+            userPage = userRepository.searchByRoleAndKeyword(Role.CUSTOMER, keyword.trim(), pageable);
+        } else {
+            userPage = userRepository.findByRole(Role.CUSTOMER, pageable);
+        }
+        return userPage.map(UserResponse::fromEntity);
+    }
+
+    /**
      * Khóa tài khoản người dùng kèm lý do và thời điểm khóa (dành cho Admin).
      *
      * @param id               ID người dùng cần khóa
@@ -82,7 +106,7 @@ public class UserService {
         User targetUser = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với ID: " + id));
 
-        // BR-AUTH-04: Ngăn chặn Admin tự khóa tài khoản của chính mình dựa trên ID xác thực phía server
+        // [TSK-D04-CCT] - BR-AUTH-04: Ngăn chặn Admin tự khóa tài khoản của chính mình dựa trên ID xác thực phía server
         if (adminUserDetails != null) {
             boolean isSelf = false;
             if (adminUserDetails instanceof com.example.ecommerce.security.CustomUserDetails customUserDetails
@@ -143,6 +167,7 @@ public class UserService {
      * @throws ResourceNotFoundException nếu không tìm thấy người dùng
      * @throws BusinessException        nếu tài khoản đang hoạt động
      */
+    // [TSK-D04-CCT]
     @Transactional
     public UserResponse unlockUser(Long id, UserDetails adminUserDetails) {
         User targetUser = userRepository.findById(id)
@@ -176,6 +201,7 @@ public class UserService {
      * @param request     dữ liệu cập nhật đã được validate
      * @return UserResponse sau khi cập nhật
      */
+    // [TSK-D04-CCT]
     @Transactional
     public UserResponse updateProfile(UserDetails userDetails, UpdateProfileRequest request) {
         User user = findUserByDetails(userDetails);
@@ -209,6 +235,7 @@ public class UserService {
      * @param request     dữ liệu đổi mật khẩu
      * @throws BusinessException nếu mật khẩu xác nhận không khớp, mật khẩu cũ sai, hoặc mật khẩu mới trùng mật khẩu cũ
      */
+    // [TSK-D04-CCT]
     @Transactional
     public void changePassword(UserDetails userDetails, ChangePasswordRequest request) {
         if (!request.getNewPassword().equals(request.getConfirmPassword())) {

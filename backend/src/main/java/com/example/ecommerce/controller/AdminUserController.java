@@ -19,12 +19,18 @@ import org.springframework.web.bind.annotation.*;
 
 /**
  * Controller quản lý người dùng dành riêng cho Admin.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Tất cả endpoint yêu cầu quyền ADMIN (được bảo vệ bởi SecurityConfig: /api/v1/admin/**
  * và @PreAuthorize("hasRole('ADMIN')")).
  */
+// [TSK-D02-CCT]
+// [TSK-D04-CCT]
+// [TSK-D06-CCT]
 @RestController
 @RequestMapping("/api/v1/admin/users")
+@PreAuthorize("hasRole('ADMIN')")
 @RequiredArgsConstructor
 public class AdminUserController {
 
@@ -75,6 +81,7 @@ public class AdminUserController {
      * @param adminUserDetails tài khoản admin đang đăng nhập (lấy từ SecurityContext)
      * @return ApiResponse chứa UserResponse đã cập nhật trạng thái
      */
+    // [TSK-D04-CCT]
     @PatchMapping("/{id}/lock")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<UserResponse>> lockUser(
@@ -96,6 +103,7 @@ public class AdminUserController {
      * @param adminUserDetails tài khoản admin đang đăng nhập (lấy từ SecurityContext)
      * @return ApiResponse chứa UserResponse đã cập nhật trạng thái
      */
+    // [TSK-D04-CCT]
     @PatchMapping("/{id}/unlock")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<UserResponse>> unlockUser(

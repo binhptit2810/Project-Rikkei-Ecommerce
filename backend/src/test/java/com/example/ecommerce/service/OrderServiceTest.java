@@ -7,9 +7,6 @@ import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import com.example.ecommerce.repository.OrderRepository;
 import com.example.ecommerce.repository.ProductRepository;
@@ -380,6 +377,128 @@ class OrderServiceTest {
 
         verify(inventoryService, never()).restoreStockForOrder(any());
     }
+
+    @Test
+    @DisplayName("IDOR-01: CUSTOMER truy cập đơn hàng của chính mình thành công")
+    void getOrderById_Success_WhenOwnerAccesses() {
+        Order existingOrder = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-111111")
+                .user(testUser)
+                .orderStatus(OrderStatus.PENDING)
+                .totalAmount(BigDecimal.valueOf(250000))
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(existingOrder));
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
+
+        OrderResponse response = orderService.getOrderById(1L, "customer@example.com");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getOrderCode()).isEqualTo("ORD-20261102-111111");
+        assertThat(response.getUserId()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("IDOR-02: CUSTOMER A truy cập đơn hàng của CUSTOMER B bị ném AccessDeniedException")
+    void getOrderById_ThrowsAccessDenied_WhenOtherCustomerAccesses() {
+        Order existingOrder = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-111111")
+                .user(testUser)
+                .orderStatus(OrderStatus.PENDING)
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(existingOrder));
+        when(userRepository.findByEmail("other@example.com")).thenReturn(Optional.of(otherUser));
+
+        assertThatThrownBy(() -> orderService.getOrderById(1L, "other@example.com"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Bạn không có quyền truy cập thông tin đơn hàng này");
+    }
+
+    @Test
+    @DisplayName("IDOR-03: ADMIN truy cập đơn hàng của CUSTOMER B thành công (bỏ qua kiểm tra ownership)")
+    void getOrderById_Success_WhenAdminAccesses() {
+        Order existingOrder = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-111111")
+                .user(testUser)
+                .orderStatus(OrderStatus.PENDING)
+                .totalAmount(BigDecimal.valueOf(250000))
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(existingOrder));
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(adminUser));
+
+        OrderResponse response = orderService.getOrderById(1L, "admin@example.com");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getUserId()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("IDOR-04: CUSTOMER A hủy đơn hàng của CUSTOMER B bị ném AccessDeniedException và không thay đổi dữ liệu")
+    void cancelOrder_ThrowsAccessDenied_WhenOtherCustomerCancels() {
+        Order existingOrder = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-111111")
+                .user(testUser)
+                .orderStatus(OrderStatus.PENDING)
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(existingOrder));
+        when(userRepository.findByEmail("other@example.com")).thenReturn(Optional.of(otherUser));
+
+        assertThatThrownBy(() -> orderService.cancelOrder(1L, "other@example.com"))
+                .isInstanceOf(AccessDeniedException.class)
+                .hasMessageContaining("Bạn không có quyền hủy đơn hàng này");
+
+        // Xác minh trạng thái đơn hàng không bị thay đổi và kho không bị hoàn lại
+        assertThat(existingOrder.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
+        verify(inventoryService, never()).restoreStockForOrder(any());
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("IDOR-05: ADMIN hủy đơn hàng của CUSTOMER thành công (bỏ qua kiểm tra ownership)")
+    void cancelOrder_Success_WhenAdminCancels() {
+        Order existingOrder = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-111111")
+                .user(testUser)
+                .orderStatus(OrderStatus.PENDING)
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findById(1L)).thenReturn(Optional.of(existingOrder));
+        when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(adminUser));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse response = orderService.cancelOrder(1L, "admin@example.com");
+
+        assertThat(response).isNotNull();
+        assertThat(response.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(inventoryService).restoreStockForOrder(existingOrder);
+        verify(orderRepository).save(existingOrder);
+    }
+
+    @Test
+    @DisplayName("IDOR-06: CUSTOMER truy cập đơn hàng không tồn tại nhận ResourceNotFoundException")
+    void getOrderById_ThrowsNotFound_WhenOrderDoesNotExist() {
+        when(orderRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.getOrderById(999L, "customer@example.com"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy đơn hàng với ID: 999");
+
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+}
 
     @Test
     @DisplayName("IDOR-01: CUSTOMER truy cập đơn hàng của chính mình thành công")

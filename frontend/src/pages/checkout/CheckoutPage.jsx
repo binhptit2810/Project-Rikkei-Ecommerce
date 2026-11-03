@@ -6,13 +6,11 @@ import {
   ShieldCheck,
   ShoppingBag,
   AlertCircle,
-  Truck,
   User,
   Phone,
   MapPin,
   FileText,
   Lock,
-  ArrowLeft,
   CheckCircle2,
 } from 'lucide-react'
 import { useCartStore } from '../../store/useCartStore'
@@ -118,7 +116,6 @@ export const CheckoutPage = () => {
       }
     }
 
-    // Sprint 1 (TSK-D05-VDHH): Validation hoàn tất & chuẩn bị payload CreateOrderRequest
     const orderPayload = {
       recipientName: formData.recipientName.trim(),
       recipientPhone: formData.recipientPhone.trim(),
@@ -158,62 +155,69 @@ export const CheckoutPage = () => {
   }
 
   return (
-    <div className="min-h-[calc(100vh-140px)] bg-slate-50/50 py-8 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-[calc(100vh-140px)] bg-zinc-50/50 py-8 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-xs text-slate-500 mb-6">
-          <Link to="/" className="hover:text-orange-600 transition-colors">
+        <nav className="flex items-center gap-1.5 text-xs text-zinc-500 mb-6">
+          <Link to="/" className="hover:text-zinc-950 transition-colors">
             Trang chủ
           </Link>
           <span>/</span>
-          <Link to="/cart" className="hover:text-orange-600 transition-colors">
+          <Link to="/cart" className="hover:text-zinc-950 transition-colors">
             Giỏ hàng
           </Link>
           <span>/</span>
-          <span className="font-semibold text-slate-900">Thanh toán</span>
+          <span className="font-medium text-zinc-900">Thanh toán</span>
         </nav>
 
         {/* Header */}
-        <div className="mb-8 pb-4 border-b border-slate-200">
-          <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-orange-600 mb-1">
-            <ShieldCheck className="w-4 h-4" />
+        <div className="mb-6 pb-4 border-b border-zinc-200">
+          <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-zinc-500 mb-1">
+            <ShieldCheck className="w-3.5 h-3.5 text-zinc-700" />
             <span>Thanh toán bảo mật</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-zinc-950 tracking-tight">
             Xác nhận thông tin & Đặt hàng
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
+          <p className="text-zinc-500 text-sm mt-1">
             Kiểm tra địa chỉ giao nhận và phương thức thanh toán trước khi xác nhận đặt mua.
           </p>
         </div>
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-800 rounded-2xl flex items-center justify-between text-sm shadow-2xs">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />
+          <div className="mb-6 p-3.5 bg-red-50 border border-red-200 text-red-800 rounded-md flex items-center justify-between text-xs sm:text-sm shadow-xs">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
               <span className="font-medium">{errorMessage}</span>
             </div>
             <button
               onClick={() => setErrorMessage(null)}
-              className="text-red-700 hover:text-red-950 font-bold text-xs px-2 py-1"
+              className="text-red-700 hover:text-red-950 font-medium text-xs px-2 py-0.5 rounded cursor-pointer"
             >
               Đóng
             </button>
           </div>
         )}
 
-        {/* Sprint 1 Success Notice */}
+        {/* Success Notice with PAY- transactionCode */}
         {successInfo && (
-          <div className="mb-6 p-5 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl shadow-2xs">
-            <div className="flex items-start gap-3">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-md shadow-xs space-y-2">
+            <div className="flex items-start gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
               <div>
-                <p className="font-bold text-sm">{successInfo.message}</p>
+                <p className="font-medium text-sm">{successInfo.message}</p>
                 {successInfo.order && (
-                  <p className="text-xs text-emerald-800 font-semibold mt-1">
-                    Mã đơn hàng: <span className="underline">{successInfo.order.orderCode}</span> — Tổng thanh toán: {formatPrice(successInfo.order.totalAmount)}
-                  </p>
+                  <div className="mt-1 space-y-1">
+                    <p className="text-xs text-emerald-800 font-medium">
+                      Mã đơn hàng: <span className="underline font-semibold">{successInfo.order.orderCode}</span> — Tổng thanh toán: {formatPrice(successInfo.order.totalAmount)}
+                    </p>
+                    {successInfo.order.transactionCode && (
+                      <p className="text-xs text-emerald-800 font-medium">
+                        Mã giao dịch: <span className="font-mono bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-900 font-bold">{successInfo.order.transactionCode}</span> ({successInfo.order.paymentMethodDescription || successInfo.order.paymentMethod})
+                      </p>
+                    )}
+                  </div>
                 )}
                 <p className="text-xs text-emerald-700 mt-1">
                   Người nhận: <strong>{successInfo.payload?.recipientName}</strong> ({successInfo.payload?.recipientPhone}) - Địa chỉ: <strong>{successInfo.payload?.shippingAddress}</strong>
@@ -228,21 +232,21 @@ export const CheckoutPage = () => {
             {/* Left Column: Recipient info & Payment methods (7/12) */}
             <div className="lg:col-span-7 space-y-6">
               {/* Card thông tin giao hàng */}
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 sm:p-7 space-y-5">
-                <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-                  <span className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs">
+              <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6 space-y-4">
+                <div className="flex items-center gap-2.5 pb-3 border-b border-zinc-100">
+                  <span className="w-6 h-6 rounded bg-zinc-900 text-zinc-50 flex items-center justify-center font-medium text-xs">
                     1
                   </span>
-                  <h2 className="text-base font-bold text-slate-900">Thông tin người nhận</h2>
+                  <h2 className="text-sm font-semibold text-zinc-950">Thông tin người nhận</h2>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-900 block">
                       Họ và tên người nhận <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
-                      <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <User className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="text"
                         name="recipientName"
@@ -250,17 +254,17 @@ export const CheckoutPage = () => {
                         onChange={handleChange}
                         placeholder="Nguyễn Văn A"
                         required
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-sm text-slate-800 bg-white"
+                        className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950"
                       />
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-zinc-900 block">
                       Số điện thoại <span className="text-red-500">*</span>
                     </label>
                     <div className="relative">
-                      <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                      <Phone className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                       <input
                         type="tel"
                         name="recipientPhone"
@@ -268,18 +272,18 @@ export const CheckoutPage = () => {
                         onChange={handleChange}
                         placeholder="0912345678"
                         required
-                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-sm text-slate-800 bg-white"
+                        className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950"
                       />
                     </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-900 block">
                     Địa chỉ nhận hàng chi tiết <span className="text-red-500">*</span>
                   </label>
                   <div className="relative">
-                    <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                    <MapPin className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
                     <textarea
                       name="shippingAddress"
                       value={formData.shippingAddress}
@@ -287,44 +291,44 @@ export const CheckoutPage = () => {
                       rows="2"
                       placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành..."
                       required
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-sm text-slate-800 bg-white"
+                      className="flex min-h-[60px] w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-2 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 resize-none"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-zinc-900 block">
                     Ghi chú đơn hàng (Tùy chọn)
                   </label>
                   <div className="relative">
-                    <FileText className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <FileText className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
                       name="note"
                       value={formData.note}
                       onChange={handleChange}
                       placeholder="Giao giờ hành chính, gọi trước khi giao..."
-                      className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-sm text-slate-800 bg-white"
+                      className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950"
                     />
                   </div>
                 </div>
               </div>
 
               {/* Card phương thức thanh toán */}
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 sm:p-7 space-y-4">
-                <div className="flex items-center gap-3 pb-3 border-b border-slate-100">
-                  <span className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-xs">
+              <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6 space-y-4">
+                <div className="flex items-center gap-2.5 pb-3 border-b border-zinc-100">
+                  <span className="w-6 h-6 rounded bg-zinc-900 text-zinc-50 flex items-center justify-center font-medium text-xs">
                     2
                   </span>
-                  <h2 className="text-base font-bold text-slate-900">Phương thức thanh toán</h2>
+                  <h2 className="text-sm font-semibold text-zinc-950">Phương thức thanh toán</h2>
                 </div>
 
                 <div className="space-y-3">
                   <label
-                    className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer ${
+                    className={`flex items-start gap-3 p-3.5 rounded-md border transition-colors cursor-pointer ${
                       formData.paymentMethod === 'COD'
-                        ? 'border-orange-500 bg-orange-50/40 shadow-xs'
-                        : 'border-slate-200 hover:border-slate-300'
+                        ? 'border-zinc-900 bg-zinc-50 shadow-xs'
+                        : 'border-zinc-200 hover:border-zinc-300'
                     }`}
                   >
                     <input
@@ -333,24 +337,24 @@ export const CheckoutPage = () => {
                       value="COD"
                       checked={formData.paymentMethod === 'COD'}
                       onChange={handleChange}
-                      className="mt-1 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                      className="mt-0.5 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <Banknote className="w-4 h-4 text-orange-600" />
-                        <span className="font-bold text-sm text-slate-900">Thanh toán khi nhận hàng (COD)</span>
+                        <Banknote className="w-4 h-4 text-zinc-800" />
+                        <span className="font-medium text-sm text-zinc-900">Thanh toán khi nhận hàng (COD)</span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-1">
+                      <p className="text-xs text-zinc-500 mt-0.5">
                         Thanh toán tiền mặt cho nhân viên giao hàng khi nhận được kiện hàng.
                       </p>
                     </div>
                   </label>
 
                   <label
-                    className={`flex items-start gap-3.5 p-4 rounded-xl border transition-all cursor-pointer ${
+                    className={`flex items-start gap-3 p-3.5 rounded-md border transition-colors cursor-pointer ${
                       formData.paymentMethod === 'SIMULATED'
-                        ? 'border-orange-500 bg-orange-50/40 shadow-xs'
-                        : 'border-slate-200 hover:border-slate-300'
+                        ? 'border-zinc-900 bg-zinc-50 shadow-xs'
+                        : 'border-zinc-200 hover:border-zinc-300'
                     }`}
                   >
                     <input
@@ -359,15 +363,15 @@ export const CheckoutPage = () => {
                       value="SIMULATED"
                       checked={formData.paymentMethod === 'SIMULATED'}
                       onChange={handleChange}
-                      className="mt-1 text-orange-600 focus:ring-orange-500 cursor-pointer"
+                      className="mt-0.5 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
                     />
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
-                        <CreditCard className="w-4 h-4 text-orange-600" />
-                        <span className="font-bold text-sm text-slate-900">Thanh toán trực tuyến mô phỏng</span>
+                        <CreditCard className="w-4 h-4 text-zinc-800" />
+                        <span className="font-medium text-sm text-zinc-900">Thanh toán trực tuyến mô phỏng</span>
                       </div>
-                      <p className="text-xs text-slate-500 mt-1">
-                        Cổng thanh toán giả lập (sẽ hoàn thiện trong Sprint 2).
+                      <p className="text-xs text-zinc-500 mt-0.5">
+                        Cổng thanh toán giả lập (sinh mã định danh PAY- tự động).
                       </p>
                     </div>
                   </label>
@@ -377,39 +381,39 @@ export const CheckoutPage = () => {
 
             {/* Right Column: Order summary (5/12) */}
             <div className="lg:col-span-5 space-y-6">
-              <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 sm:p-7 space-y-5 sticky top-20">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6 space-y-5 sticky top-20">
+                <div className="flex items-center justify-between pb-3 border-b border-zinc-100">
                   <div className="flex items-center gap-2">
-                    <ShoppingBag className="w-5 h-5 text-slate-700" />
-                    <h2 className="text-base font-bold text-slate-900">Đơn hàng của bạn</h2>
+                    <ShoppingBag className="w-4 h-4 text-zinc-700" />
+                    <h2 className="text-sm font-semibold text-zinc-950">Đơn hàng của bạn</h2>
                   </div>
-                  <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                  <span className="text-xs font-medium px-2 py-0.5 rounded bg-zinc-100 text-zinc-800 border border-zinc-200">
                     {totalCount} sản phẩm
                   </span>
                 </div>
 
                 {/* Danh sách sản phẩm mua */}
-                <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 pr-1">
+                <div className="max-h-64 overflow-y-auto divide-y divide-zinc-100 pr-1">
                   {items.map((item) => (
-                    <div key={item.id} className="py-3 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-12 h-12 rounded-lg bg-slate-100 shrink-0 overflow-hidden border border-slate-100">
+                    <div key={item.id} className="py-2.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-10 h-10 rounded-md bg-zinc-50 shrink-0 overflow-hidden border border-zinc-200">
                           {item.imageUrl ? (
                             <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-slate-400 text-xs">
-                              Ảnh
+                            <div className="w-full h-full flex items-center justify-center text-zinc-400 text-xs">
+                              SP
                             </div>
                           )}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
-                          <p className="text-[11px] text-slate-500 mt-0.5">
+                          <p className="text-xs font-medium text-zinc-900 truncate">{item.name}</p>
+                          <p className="text-[11px] text-zinc-500">
                             {formatPrice(item.price)} x {item.quantity}
                           </p>
                         </div>
                       </div>
-                      <div className="text-xs font-bold text-slate-900 shrink-0">
+                      <div className="text-xs font-semibold text-zinc-950 shrink-0 tabular-nums">
                         {formatPrice(item.price * item.quantity)}
                       </div>
                     </div>
@@ -417,18 +421,18 @@ export const CheckoutPage = () => {
                 </div>
 
                 {/* Chi phí */}
-                <div className="pt-3 border-t border-slate-100 space-y-2 text-xs">
-                  <div className="flex justify-between text-slate-600">
+                <div className="pt-3 border-t border-zinc-100 space-y-2 text-xs">
+                  <div className="flex justify-between text-zinc-600">
                     <span>Tạm tính</span>
-                    <span className="font-semibold text-slate-900">{formatPrice(totalPrice)}</span>
+                    <span className="font-medium text-zinc-900 tabular-nums">{formatPrice(totalPrice)}</span>
                   </div>
-                  <div className="flex justify-between text-slate-600">
+                  <div className="flex justify-between text-zinc-600">
                     <span>Phí vận chuyển</span>
-                    <span className="font-semibold text-emerald-600">Miễn phí</span>
+                    <span className="font-medium text-emerald-600">Miễn phí</span>
                   </div>
-                  <div className="pt-3 border-t border-slate-100 flex justify-between text-sm">
-                    <span className="font-bold text-slate-900">Tổng thanh toán</span>
-                    <span className="font-extrabold text-orange-600 text-lg">{formatPrice(totalPrice)}</span>
+                  <div className="pt-3 border-t border-zinc-100 flex justify-between text-sm">
+                    <span className="font-semibold text-zinc-950">Tổng thanh toán</span>
+                    <span className="font-semibold text-zinc-950 text-base tabular-nums">{formatPrice(totalPrice)}</span>
                   </div>
                 </div>
 
@@ -436,14 +440,14 @@ export const CheckoutPage = () => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="w-full py-4 px-6 bg-orange-600 hover:bg-orange-700 active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm rounded-xl shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-2"
+                  className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none text-zinc-50 font-medium text-sm rounded-md shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
                   <Lock className="w-4 h-4" />
-                  <span>Xác nhận thông tin đặt hàng</span>
+                  <span>Xác nhận đặt hàng</span>
                 </button>
 
-                <div className="text-center text-[11px] text-slate-400 leading-relaxed">
-                  Bằng việc hoàn tất đặt hàng, bạn xác nhận đồng ý với điều khoản mua sắm và chính sách bảo mật của Rikkei Ecommerce.
+                <div className="text-center text-[11px] text-zinc-400 leading-relaxed">
+                  Bằng việc hoàn tất đặt hàng, bạn xác nhận đồng ý với điều khoản mua sắm và chính sách bảo mật của Rikkei Store.
                 </div>
               </div>
             </div>

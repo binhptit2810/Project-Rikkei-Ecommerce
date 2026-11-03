@@ -3,11 +3,11 @@
 @tailwind utilities;
 
 @layer base {
-
   *,
   *::before,
   *::after {
     box-sizing: border-box;
+    border-color: #e4e4e7;
   }
 
   html {
@@ -17,64 +17,71 @@
   }
 
   body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background-color: #f8fafc;
-    color: #0f172a;
+    font-family: 'Geist Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    background-color: #ffffff;
+    color: #09090b;
     line-height: 1.5;
   }
 
-  /* Số hiển thị thẳng cột trong bảng và danh sách giá tiền */
+  /* Số hiển thị thẳng hàng trong bảng và danh sách giá tiền */
   .tabular-nums {
     font-variant-numeric: tabular-nums;
   }
 }
 
-/* Custom refined scrollbar */
+/* Minimal subtle scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f1f5f9;
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
+  background: #d4d4d8;
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+  background: #a1a1aa;
 }
 
 @layer components {
-
-  /* Nút bấm thương mại tiêu chuẩn */
+  /* shadcn/ui New York style button variants */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm text-white bg-primary-600 hover:bg-primary-700 active:scale-[0.98] transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-primary-500/30 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium text-sm text-zinc-50 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] transition-colors shadow-sm disabled:opacity-50 disabled:pointer-events-none cursor-pointer;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-medium text-sm text-slate-700 bg-white hover:bg-slate-50 hover:text-slate-900 active:scale-[0.98] border border-slate-200 transition-all shadow-subtle focus:outline-none focus:ring-2 focus:ring-slate-300/40 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium text-sm text-zinc-900 bg-zinc-100 hover:bg-zinc-200/80 active:scale-[0.99] transition-colors shadow-none disabled:opacity-50 disabled:pointer-events-none cursor-pointer;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium text-sm text-zinc-900 bg-white hover:bg-zinc-50 hover:text-zinc-900 border border-zinc-200 active:scale-[0.99] transition-colors shadow-sm disabled:opacity-50 disabled:pointer-events-none cursor-pointer;
   }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg font-medium text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 transition-colors cursor-pointer;
+    @apply inline-flex items-center justify-center gap-2 px-3 py-2 rounded-md font-medium text-sm text-zinc-700 hover:text-zinc-900 hover:bg-zinc-100 transition-colors disabled:opacity-50 disabled:pointer-events-none cursor-pointer;
   }
 
-  /* Thẻ nội dung tiêu chuẩn */
+  .btn-destructive {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-md font-medium text-sm text-white bg-red-600 hover:bg-red-700 active:scale-[0.99] transition-colors shadow-sm disabled:opacity-50 disabled:pointer-events-none cursor-pointer;
+  }
+
+  /* shadcn/ui Card Component */
   .card-standard {
-    @apply bg-white rounded-2xl border border-slate-200/80 shadow-subtle hover:shadow-card transition-all;
+    @apply bg-white rounded-lg border border-zinc-200 shadow-sm transition-all;
   }
 
-  /* Ô nhập liệu chuẩn */
+  /* shadcn/ui Input Component */
   .input-standard {
-    @apply w-full px-3.5 py-2 rounded-xl text-sm text-slate-900 bg-white border border-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/15 transition-all;
+    @apply flex h-9 w-full rounded-md border border-zinc-200 bg-white px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:cursor-not-allowed disabled:opacity-50;
   }
 
-  /* Badge nhãn trạng thái */
+  /* Status Badges */
   .badge-neutral {
-    @apply inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200/60;
+    @apply inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-100 text-zinc-800 border border-zinc-200;
   }
 }

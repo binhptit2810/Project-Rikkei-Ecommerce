@@ -32,6 +32,8 @@ import static org.mockito.Mockito.*;
 
 /**
  * Unit Test toàn diện cho JwtAuthenticationFilter.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra các nhánh điều kiện trích xuất header, phân tích claims, kiểm tra hạn token,
  * trạng thái kích hoạt của UserDetails và xử lý ngoại lệ trong Filter Chain.
  */

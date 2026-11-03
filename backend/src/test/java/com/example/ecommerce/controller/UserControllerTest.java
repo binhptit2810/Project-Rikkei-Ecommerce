@@ -8,6 +8,9 @@ import com.example.ecommerce.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -28,8 +31,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /**
  * Integration Test cho UserController.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  * Kiểm tra các endpoint quản lý hồ sơ cá nhân, đổi mật khẩu và bảo mật xác thực người dùng.
  */
+// [TSK-D04-CCT]
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -200,6 +206,59 @@ class UserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    @DisplayName("FR-USER-06: CUSTOMER gọi API GET /api/v1/users thành công 200, chỉ nhận dữ liệu CUSTOMER và không chứa ADMIN")
+    void getCustomers_Authenticated_ReturnsOnlyCustomers200() throws Exception {
+        UserResponse customerResp = UserResponse.builder()
+                .id(10L)
+                .email("customer.only@example.com")
+                .fullName("Customer Only")
+                .role(Role.CUSTOMER)
+                .active(true)
+                .build();
+
+        when(userService.getCustomers(any(), any()))
+                .thenReturn(new PageImpl<>(List.of(customerResp), PageRequest.of(0, 10), 1));
+
+        mockMvc.perform(get("/api/v1/users")
+                        .param("page", "0")
+                        .param("size", "10")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].email").value("customer.only@example.com"))
+                .andExpect(jsonPath("$.data.content[0].role").value("CUSTOMER"));
+    }
+
+    @Test
+    @DisplayName("NFR-SEC: Chưa đăng nhập gọi GET /api/v1/users trả về 401 UNAUTHORIZED")
+    void getCustomers_Unauthenticated_Returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/users")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    @DisplayName("NFR-SEC: CUSTOMER gọi API quản trị GET /api/v1/admin/users bị từ chối 403 FORBIDDEN")
+    void adminUsers_CustomerCallingAdminApi_Returns403() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/users")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @DisplayName("NFR-SEC: Chưa đăng nhập gọi API quản trị GET /api/v1/admin/users trả về 401 UNAUTHORIZED")
+    void adminUsers_Unauthenticated_Returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/users")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false));
     }
 }

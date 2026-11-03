@@ -7,6 +7,8 @@ import java.time.LocalDateTime;
 
 /**
  * Entity ánh xạ bảng `users` trong MySQL.
+ * Phụ trách: Cao Chí Thiện
+ * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
  *
  * Schema tham chiếu (01-schema.sql):
  *   id, email (UNIQUE), password (BCrypt), full_name, phone, address,
@@ -16,6 +18,7 @@ import java.time.LocalDateTime;
  *   - Trường password không được trả về trong response (dùng UserResponse DTO).
  *   - Không truyền entity này trực tiếp vào ResponseEntity.
  */
+// [TSK-D02-CCT]
 @Entity
 @Table(name = "users")
 @Data

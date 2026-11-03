@@ -1,28 +1,56 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
   Search,
-  SlidersHorizontal,
   ArrowUpDown,
   PackageOpen,
   X,
   ChevronLeft,
   ChevronRight,
-  ArrowRight,
-  ShoppingBag,
   Sparkles,
+  CheckCircle2,
+  AlertCircle,
+  ArrowRight,
 } from 'lucide-react'
 import productService from '../../services/productService'
 import categoryService from '../../services/categoryService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import ProductCard from '../../components/common/ProductCard'
+import { useCartStore } from '../../store/useCartStore'
+
+// Skeleton card cho hiệu ứng tải sản phẩm
+const ProductCardSkeleton = () => (
+  <div className="bg-white rounded-lg border border-zinc-200 shadow-sm overflow-hidden flex flex-col justify-between animate-pulse">
+    <div>
+      <div className="aspect-square w-full bg-zinc-100" />
+      <div className="p-4 space-y-2.5">
+        <div className="h-4 bg-zinc-200 rounded w-3/4" />
+        <div className="h-3 bg-zinc-100 rounded w-full" />
+        <div className="h-3 bg-zinc-100 rounded w-1/2" />
+      </div>
+    </div>
+    <div className="p-4 pt-3 border-t border-zinc-100 flex items-center justify-between gap-2 mt-auto">
+      <div className="space-y-1">
+        <div className="h-2.5 bg-zinc-100 rounded w-10" />
+        <div className="h-4 bg-zinc-200 rounded w-20" />
+      </div>
+      <div className="h-8 w-20 bg-zinc-200 rounded-md" />
+    </div>
+  </div>
+)
 
 export const ProductListPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
+  const addToCart = useCartStore((state) => state.addToCart)
 
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  // Toast Notification state
+  const [toast, setToast] = useState(null)
+  const toastTimeoutRef = useRef(null)
 
   // Pagination state
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '0', 10))
@@ -36,6 +64,41 @@ export const ProductListPage = () => {
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('categoryId') || '')
   const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'createdAt')
   const [sortDir, setSortDir] = useState(searchParams.get('sortDir') || 'desc')
+
+  // Hiển thị Toast Notification và tự động ẩn sau 3 giây
+  const showToast = (message, type = 'success') => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current)
+    }
+    setToast({ message, type })
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null)
+    }, 3000)
+  }
+
+  // Cleanup timeout khi unmount
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current)
+      }
+    }
+  }, [])
+
+  // Xử lý thêm vào giỏ hàng
+  const handleAddToCart = async (product) => {
+    try {
+      const res = await addToCart(product, 1)
+      if (res && res.success === false) {
+        showToast(res.message || 'Sản phẩm đã hết hàng', 'error')
+      } else {
+        showToast(`Đã thêm "${product.name}" vào giỏ hàng!`, 'success')
+      }
+    } catch (err) {
+      console.error('Lỗi khi thêm giỏ hàng:', err)
+      showToast('Có lỗi xảy ra khi thêm vào giỏ hàng', 'error')
+    }
+  }
 
   // Load active categories for filter
   useEffect(() => {
@@ -147,34 +210,65 @@ export const ProductListPage = () => {
     setSearchParams({})
   }
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0)
-  }
-
   const activeCategoryObj = categories.find((c) => c.id.toString() === selectedCategory)
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full relative">
+      {/* Toast Notification */}
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full animate-in slide-in-from-bottom-2">
+          <div className="bg-white rounded-lg shadow-md border border-zinc-200 p-4 flex items-start gap-3">
+            {toast.type === 'error' ? (
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            )}
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-zinc-900 leading-snug">
+                {toast.message}
+              </p>
+              {toast.type === 'success' && (
+                <Link
+                  to="/cart"
+                  className="inline-flex items-center gap-1 text-xs font-medium text-zinc-950 underline underline-offset-4 hover:text-zinc-700 mt-1 transition-colors"
+                >
+                  <span>Xem giỏ hàng</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              className="text-zinc-400 hover:text-zinc-700 p-1 rounded hover:bg-zinc-100 transition-colors cursor-pointer"
+              aria-label="Đóng thông báo"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Page Header */}
-      <div className="mb-8">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-slate-200">
+      <div className="mb-6">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-zinc-200">
           <div>
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-orange-600 mb-1">
-              <Sparkles className="w-4 h-4" />
+            <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-zinc-500 mb-1">
+              <Sparkles className="w-3.5 h-3.5" />
               <span>Cửa hàng trực tuyến</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl font-semibold text-zinc-950 tracking-tight">
               {activeCategoryObj ? activeCategoryObj.name : 'Tất cả sản phẩm'}
             </h1>
-            <p className="text-slate-500 text-sm mt-1">
+            <p className="text-zinc-500 text-sm mt-1">
               {loading ? (
                 'Đang tìm kiếm...'
               ) : (
                 <span>
-                  Hiển thị <span className="font-semibold text-slate-900">{totalElements}</span> sản phẩm chất lượng
+                  Hiển thị <span className="font-medium text-zinc-900">{totalElements}</span> sản phẩm
                   {keyword && (
                     <span>
-                      {' '}cho từ khóa "<span className="text-orange-600 font-semibold">{keyword}</span>"
+                      {' '}cho từ khóa "<span className="text-zinc-900 font-medium">{keyword}</span>"
                     </span>
                   )}
                 </span>
@@ -185,19 +279,19 @@ export const ProductListPage = () => {
           {/* Search bar */}
           <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 max-w-md w-full">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Tìm sản phẩm theo tên..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="w-full pl-10 pr-9 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-sm bg-white shadow-2xs transition-all"
+                className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-8 py-1 text-sm shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950"
               />
               {searchInput && (
                 <button
                   type="button"
                   onClick={() => setSearchInput('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -205,23 +299,23 @@ export const ProductListPage = () => {
             </div>
             <button
               type="submit"
-              className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-sm rounded-xl shadow-2xs transition-colors cursor-pointer"
+              className="inline-flex items-center justify-center h-9 px-4 rounded-md bg-zinc-900 text-zinc-50 hover:bg-zinc-800 text-sm font-medium transition-colors shadow-sm cursor-pointer"
             >
-              Tìm
+              Tìm kiếm
             </button>
           </form>
         </div>
 
         {/* Filter & Sorting toolbar */}
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
           {/* Category Filter Pills */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none flex-1 min-w-0">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none flex-1 min-w-0">
             <button
               onClick={() => handleCategorySelect('')}
-              className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+              className={`px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                 selectedCategory === ''
-                  ? 'bg-orange-600 text-white shadow-2xs'
-                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                  ? 'bg-zinc-900 text-zinc-50 shadow-sm'
+                  : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200/80 border border-zinc-200'
               }`}
             >
               Tất cả danh mục
@@ -230,10 +324,10 @@ export const ProductListPage = () => {
               <button
                 key={cat.id}
                 onClick={() => handleCategorySelect(cat.id.toString())}
-                className={`px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                className={`px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                   selectedCategory === cat.id.toString()
-                    ? 'bg-orange-600 text-white shadow-2xs'
-                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+                    ? 'bg-zinc-900 text-zinc-50 shadow-sm'
+                    : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200/80 border border-zinc-200'
                 }`}
               >
                 {cat.name}
@@ -246,7 +340,7 @@ export const ProductListPage = () => {
             {(selectedCategory || keyword) && (
               <button
                 onClick={handleClearFilters}
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-red-600 px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1 text-xs font-medium text-zinc-500 hover:text-zinc-900 px-2 py-1 rounded hover:bg-zinc-100 transition-colors cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Xóa lọc</span>
@@ -254,7 +348,7 @@ export const ProductListPage = () => {
             )}
 
             <div className="flex items-center gap-2">
-              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
+              <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400" />
               <select
                 value={
                   sortBy === 'price' && sortDir === 'asc'
@@ -266,7 +360,7 @@ export const ProductListPage = () => {
                     : 'created_desc'
                 }
                 onChange={handleSortChange}
-                className="text-xs font-medium border border-slate-200 rounded-xl px-3 py-2 bg-white text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 cursor-pointer shadow-2xs"
+                className="h-8 text-xs font-medium border border-zinc-200 rounded-md px-2.5 bg-white text-zinc-800 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 cursor-pointer"
               >
                 <option value="created_desc">Mới nhất</option>
                 <option value="price_asc">Giá: Thấp đến Cao</option>
@@ -280,123 +374,68 @@ export const ProductListPage = () => {
 
       {/* Product Content Area */}
       {loading ? (
-        <div className="py-24 flex justify-center">
-          <LoadingSpinner />
+        <div className="space-y-6">
+          <div className="flex items-center justify-center gap-2.5 py-4 text-xs font-medium text-zinc-600 bg-zinc-50 rounded-lg border border-zinc-200">
+            <LoadingSpinner size="sm" className="text-zinc-900" />
+            <span>Đang tải danh sách sản phẩm...</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {Array.from({ length: 8 }).map((_, idx) => (
+              <ProductCardSkeleton key={idx} />
+            ))}
+          </div>
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl text-center text-sm my-8">
-          <p className="font-semibold">{error}</p>
+        <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-lg text-center text-sm my-8">
+          <p className="font-medium">{error}</p>
           <button
             onClick={fetchProducts}
-            className="mt-3 px-4 py-2 bg-white border border-red-200 text-red-700 text-xs font-bold rounded-xl hover:bg-red-100 transition-colors"
+            className="mt-3 px-3 py-1.5 bg-white border border-red-200 text-red-700 text-xs font-medium rounded-md hover:bg-red-50 transition-colors cursor-pointer"
           >
             Thử tải lại
           </button>
         </div>
       ) : products.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-200 shadow-2xs my-4">
-          <div className="w-16 h-16 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center mx-auto mb-4">
-            <PackageOpen className="w-8 h-8" />
+        <div className="text-center py-20 bg-white rounded-lg border border-dashed border-zinc-200 shadow-xs my-4">
+          <div className="w-12 h-12 rounded-lg bg-zinc-100 text-zinc-700 flex items-center justify-center mx-auto mb-3 border border-zinc-200">
+            <PackageOpen className="w-6 h-6" />
           </div>
-          <h3 className="text-lg font-bold text-slate-900 mb-1">Không tìm thấy sản phẩm nào</h3>
-          <p className="text-slate-500 text-sm max-w-md mx-auto mb-6">
-            Thử thay đổi từ khóa tìm kiếm, điều chỉnh bộ lọc hoặc chọn danh mục khác.
+          <h3 className="text-base font-semibold text-zinc-900 mb-1">Không tìm thấy sản phẩm nào</h3>
+          <p className="text-zinc-500 text-xs max-w-md mx-auto mb-5">
+            {keyword || selectedCategory
+              ? 'Không có sản phẩm nào phù hợp với bộ lọc hiện tại. Thử thay đổi từ khóa tìm kiếm hoặc chọn danh mục khác.'
+              : 'Hiện tại chưa có sản phẩm nào trong hệ thống.'}
           </p>
           <button
+            type="button"
             onClick={handleClearFilters}
-            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl shadow-2xs transition-colors cursor-pointer"
+            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-50 text-xs font-medium rounded-md shadow-sm transition-colors cursor-pointer inline-flex items-center gap-1.5"
           >
-            Xem tất cả sản phẩm
+            <span>Xóa bộ lọc / Xem tất cả sản phẩm</span>
           </button>
         </div>
       ) : (
         <>
           {/* Products Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {products.map((item) => {
-              const isOutOfStock = item.stockQuantity <= 0
-              return (
-                <Link
-                  key={item.id}
-                  to={`/products/${item.id}`}
-                  className="group bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-card hover:border-orange-300 transition-all duration-200 overflow-hidden flex flex-col"
-                >
-                  {/* Product Image */}
-                  <div className="aspect-square w-full bg-slate-50 relative overflow-hidden flex items-center justify-center">
-                    {item.imageUrl ? (
-                      <img
-                        src={item.imageUrl}
-                        alt={item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={(e) => {
-                          e.target.onerror = null
-                          e.target.src = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=80'
-                        }}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center text-slate-300">
-                        <ShoppingBag className="w-12 h-12 stroke-[1.25] text-slate-300 mb-1" />
-                        <span className="text-xs text-slate-400">Hình ảnh minh họa</span>
-                      </div>
-                    )}
-
-                    {/* Category Badge */}
-                    {item.categoryName && (
-                      <span className="absolute top-3 left-3 bg-white/90 text-slate-800 text-[11px] font-semibold px-2.5 py-1 rounded-lg backdrop-blur-xs border border-slate-200/60 shadow-2xs">
-                        {item.categoryName}
-                      </span>
-                    )}
-
-                    {/* Stock Status Badge */}
-                    {isOutOfStock ? (
-                      <span className="absolute top-3 right-3 bg-red-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-2xs">
-                        Hết hàng
-                      </span>
-                    ) : (
-                      <span className="absolute top-3 right-3 bg-emerald-600 text-white text-[10px] font-semibold px-2.5 py-1 rounded-lg shadow-2xs">
-                        Còn {item.stockQuantity}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Product Info */}
-                  <div className="p-4 flex flex-col flex-1 justify-between">
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-sm group-hover:text-orange-600 transition-colors line-clamp-2 mb-1.5 leading-snug">
-                        {item.name}
-                      </h3>
-                      <p className="text-slate-500 text-xs line-clamp-2 mb-3 leading-relaxed">
-                        {item.description || 'Sản phẩm chính hãng với tiêu chuẩn chất lượng cao.'}
-                      </p>
-                    </div>
-
-                    <div className="pt-3 border-t border-slate-100 flex items-center justify-between mt-auto">
-                      <div>
-                        <span className="text-[11px] text-slate-400 block font-medium">Giá bán</span>
-                        <span className="text-base font-extrabold text-orange-600 tabular-nums">
-                          {formatPrice(item.price)}
-                        </span>
-                      </div>
-
-                      <span className="text-xs font-semibold text-orange-600 group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                        Chi tiết <ArrowRight className="w-3.5 h-3.5" />
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              )
-            })}
+            {products.map((item) => (
+              <ProductCard
+                key={item.id}
+                product={item}
+                onAddToCart={handleAddToCart}
+              />
+            ))}
           </div>
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="mt-12 flex items-center justify-center gap-2">
+            <div className="mt-12 flex items-center justify-center gap-1.5">
               <button
                 onClick={() => handlePageChange(page - 1)}
                 disabled={page === 0}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors bg-white shadow-2xs"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-zinc-200 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 disabled:pointer-events-none transition-colors bg-white shadow-xs cursor-pointer"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="w-3.5 h-3.5" />
                 <span>Trước</span>
               </button>
 
@@ -407,10 +446,10 @@ export const ProductListPage = () => {
                     <button
                       key={idx}
                       onClick={() => handlePageChange(idx)}
-                      className={`w-9 h-9 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      className={`w-8 h-8 rounded-md text-xs font-medium transition-colors cursor-pointer ${
                         isCurrent
-                          ? 'bg-orange-600 text-white shadow-2xs'
-                          : 'text-slate-700 bg-white hover:bg-slate-100 border border-slate-200'
+                          ? 'bg-zinc-900 text-zinc-50 shadow-sm border border-zinc-900'
+                          : 'text-zinc-700 bg-white hover:bg-zinc-100 border border-zinc-200'
                       }`}
                     >
                       {idx + 1}
@@ -422,10 +461,10 @@ export const ProductListPage = () => {
               <button
                 onClick={() => handlePageChange(page + 1)}
                 disabled={page >= totalPages - 1}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors bg-white shadow-2xs"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-zinc-200 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 disabled:pointer-events-none transition-colors bg-white shadow-xs cursor-pointer"
               >
                 <span>Sau</span>
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
           )}

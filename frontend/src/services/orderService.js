@@ -18,9 +18,10 @@ export const orderService = {
 
   /**
    * Lấy danh sách lịch sử đơn hàng của người dùng hiện tại
+   * @param {Object} [params={}]
    */
-  getMyOrders: async () => {
-    const response = await apiClient.get('/orders/my')
+  getMyOrders: async (params = {}) => {
+    const response = await apiClient.get('/orders/my', { params })
     return response.data
   },
 
@@ -44,4 +45,3 @@ export const orderService = {
 }
 
 export default orderService
-
