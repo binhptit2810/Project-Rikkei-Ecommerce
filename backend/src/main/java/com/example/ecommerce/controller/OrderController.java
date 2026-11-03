@@ -3,6 +3,7 @@ package com.example.ecommerce.controller;
 import com.example.ecommerce.dto.request.CreateOrderRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.OrderResponse;
+import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,11 +14,10 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
-
 /**
  * Controller quản lý đơn hàng (Order API).
- * Phụ trách: Vũ Đức Huy Hoàng (Thành viên 3 - VDHH)
+ * Người phụ trách: Vũ Đức Huy Hoàng (Thành viên 3 - VDHH)
+ * Người phối hợp: Đặng Thanh Bình [DTB] (Inventory & Payment)
  *
  * Tất cả các endpoints yêu cầu người dùng phải đăng nhập (vai trò CUSTOMER hoặc ADMIN).
  */
@@ -47,34 +47,52 @@ public class OrderController {
     }
 
     /**
-     * Lấy danh sách toàn bộ lịch sử đơn hàng của người dùng đang đăng nhập.
-     * GET /api/v1/orders/my
+     * Lấy danh sách lịch sử đơn hàng của người dùng đang đăng nhập có phân trang.
+     * GET /api/v1/orders/my?page=0&size=10&sortBy=createdAt&sortDir=desc
+     *
+     * @param page Số thứ tự trang (mặc định 0)
+     * @param size Số phần tử mỗi trang (mặc định 10)
+     * @param sortBy Trường sắp xếp (mặc định createdAt)
+     * @param sortDir Hướng sắp xếp (mặc định desc)
+     * @param userDetails Thông tin tài khoản người dùng đang đăng nhập
      */
     @GetMapping("/my")
     @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<List<OrderResponse>>> getMyOrders(
+    public ResponseEntity<ApiResponse<PageResponse<OrderResponse>>> getMyOrders(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "desc") String sortDir,
             @AuthenticationPrincipal UserDetails userDetails) {
-        List<OrderResponse> orders = orderService.getMyOrders(userDetails.getUsername());
+        PageResponse<OrderResponse> orders = orderService.getMyOrders(
+                userDetails.getUsername(), page, size, sortBy, sortDir
+        );
         return ResponseEntity.ok(ApiResponse.success(orders));
     }
 
     /**
-     * Xem thông tin chi tiết một đơn hàng theo ID.
+     * Xem thông tin chi tiết một đơn hàng theo ID kèm danh sách món hàng (OrderItem).
      * GET /api/v1/orders/{id}
+     *
+     * @param id ID của đơn hàng
+     * @param userDetails Thông tin tài khoản người dùng đang đăng nhập
      */
     @GetMapping("/{id}")
     @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<OrderResponse>> getOrderById(
+    public ResponseEntity<ApiResponse<OrderResponse>> getOrderDetail(
             @PathVariable Long id,
             @AuthenticationPrincipal UserDetails userDetails) {
-        OrderResponse order = orderService.getOrderById(id, userDetails.getUsername());
+        OrderResponse order = orderService.getOrderDetail(id, userDetails.getUsername());
         return ResponseEntity.ok(ApiResponse.success(order));
     }
 
     /**
      * Hủy đơn hàng (chỉ áp dụng khi đơn hàng còn ở trạng thái PENDING hoặc CONFIRMED).
-     * Sau khi hủy thành công, số lượng tồn kho sẽ được tự động hoàn lại đầy đủ.
+     * Sau khi hủy thành công, số lượng tồn kho sẽ được tự động hoàn lại đầy đủ qua restoreStockForOrder() [DTB].
      * PATCH /api/v1/orders/{id}/cancel
+     *
+     * @param id ID của đơn hàng cần hủy
+     * @param userDetails Thông tin tài khoản người dùng đang đăng nhập
      */
     @PatchMapping("/{id}/cancel")
     @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
@@ -85,4 +103,3 @@ public class OrderController {
         return ResponseEntity.ok(ApiResponse.success("Hủy đơn hàng thành công", order));
     }
 }
-

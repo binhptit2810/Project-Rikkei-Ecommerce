@@ -2,7 +2,9 @@ package com.example.ecommerce.controller;
 
 import com.example.ecommerce.dto.request.CreateOrderRequest;
 import com.example.ecommerce.dto.request.OrderItemRequest;
+import com.example.ecommerce.dto.response.OrderItemResponse;
 import com.example.ecommerce.dto.response.OrderResponse;
+import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.entity.OrderStatus;
 import com.example.ecommerce.entity.PaymentMethod;
 import com.example.ecommerce.entity.PaymentStatus;
@@ -25,8 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -109,7 +110,7 @@ class OrderControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/orders/my: Lấy danh sách đơn hàng của người dùng đang đăng nhập")
+    @DisplayName("GET /api/v1/orders/my: Lấy danh sách đơn hàng có phân trang thành công trả 200 OK")
     @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
     void getMyOrders_Returns200() throws Exception {
         OrderResponse response = OrderResponse.builder()
@@ -118,12 +119,70 @@ class OrderControllerTest {
                 .totalAmount(BigDecimal.valueOf(500000))
                 .build();
 
-        when(orderService.getMyOrders("customer@example.com")).thenReturn(List.of(response));
+        PageResponse<OrderResponse> pageResponse = PageResponse.<OrderResponse>builder()
+                .content(List.of(response))
+                .pageNumber(0)
+                .pageSize(10)
+                .totalElements(1)
+                .totalPages(1)
+                .last(true)
+                .build();
 
-        mockMvc.perform(get("/api/v1/orders/my"))
+        when(orderService.getMyOrders(eq("customer@example.com"), anyInt(), anyInt(), anyString(), anyString()))
+                .thenReturn(pageResponse);
+
+        mockMvc.perform(get("/api/v1/orders/my?page=0&size=10"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data[0].orderCode").value("ORD-20261102-123456"));
+                .andExpect(jsonPath("$.data.content[0].orderCode").value("ORD-20261102-123456"))
+                .andExpect(jsonPath("$.data.totalElements").value(1))
+                .andExpect(jsonPath("$.data.pageNumber").value(0));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/orders/{id}: Xem chi tiết đơn hàng kèm OrderItem thành công trả 200 OK")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void getOrderDetail_Success_Returns200() throws Exception {
+        OrderItemResponse item = OrderItemResponse.builder()
+                .id(10L)
+                .productId(101L)
+                .productName("Áo Thun Cotton")
+                .unitPrice(BigDecimal.valueOf(250000))
+                .quantity(2)
+                .subtotal(BigDecimal.valueOf(500000))
+                .build();
+
+        OrderResponse response = OrderResponse.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-123456")
+                .totalAmount(BigDecimal.valueOf(500000))
+                .orderStatus(OrderStatus.PENDING)
+                .items(List.of(item))
+                .build();
+
+        when(orderService.getOrderDetail(eq(1L), eq("customer@example.com"))).thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/orders/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.id").value(1L))
+                .andExpect(jsonPath("$.data.orderCode").value("ORD-20261102-123456"))
+                .andExpect(jsonPath("$.data.items[0].productName").value("Áo Thun Cotton"))
+                .andExpect(jsonPath("$.data.items[0].quantity").value(2))
+                .andExpect(jsonPath("$.data.items[0].subtotal").value(500000));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/orders/{id}: Từ chối 403 FORBIDDEN khi truy cập đơn của người khác (IDOR Protection)")
+    @WithMockUser(username = "other@example.com", roles = {"CUSTOMER"})
+    void getOrderDetail_AccessDenied_Returns403() throws Exception {
+        when(orderService.getOrderDetail(eq(1L), eq("other@example.com")))
+                .thenThrow(new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này"));
+
+        mockMvc.perform(get("/api/v1/orders/1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Bạn không có quyền truy cập thông tin đơn hàng này"));
     }
 
     @Test
@@ -155,7 +214,7 @@ class OrderControllerTest {
                 .orderStatus(OrderStatus.PENDING)
                 .build();
 
-        when(orderService.getOrderById(eq(1L), eq("customer@example.com"))).thenReturn(response);
+        when(orderService.getOrderDetail(eq(1L), eq("customer@example.com"))).thenReturn(response);
 
         mockMvc.perform(get("/api/v1/orders/1"))
                 .andExpect(status().isOk())
@@ -168,7 +227,7 @@ class OrderControllerTest {
     @DisplayName("GET /api/v1/orders/{id}: Từ chối 403 FORBIDDEN khi truy cập đơn của người khác (IDOR Protection)")
     @WithMockUser(username = "other@example.com", roles = {"CUSTOMER"})
     void getOrderById_AccessDenied_Returns403() throws Exception {
-        when(orderService.getOrderById(eq(1L), eq("other@example.com")))
+        when(orderService.getOrderDetail(eq(1L), eq("other@example.com")))
                 .thenThrow(new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này"));
 
         mockMvc.perform(get("/api/v1/orders/1"))
