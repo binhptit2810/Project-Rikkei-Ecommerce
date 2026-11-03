@@ -43,5 +43,6 @@ public class CreateProductRequest {
     @NotNull(message = "Số lượng tồn kho không được để trống")
     @Min(value = 0, message = "Số lượng tồn kho phải lớn hơn hoặc bằng 0")
     private Integer stockQuantity;
-}
 
+    private Boolean active;
+}
