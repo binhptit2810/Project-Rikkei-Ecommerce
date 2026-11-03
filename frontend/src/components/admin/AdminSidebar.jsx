@@ -105,23 +105,23 @@ export const AdminSidebar = ({ onClose }) => {
   }
 
   return (
-    <aside className="w-64 h-screen bg-slate-950 border-r border-slate-850 flex flex-col justify-between select-none">
+    <aside className="w-64 h-screen bg-zinc-950 border-r border-zinc-850 flex flex-col justify-between select-none">
       <div>
         {/* 1. Brand Logo */}
-        <div className="h-16 px-5 border-b border-slate-850 flex items-center justify-between">
+        <div className="h-16 px-5 border-b border-zinc-850 flex items-center justify-between">
           <Link
             to="/admin/dashboard"
             onClick={onClose}
-            className="flex items-center gap-3 group"
+            className="flex items-center gap-2.5 group"
           >
-            <div className="w-9 h-9 rounded-xl bg-orange-600 text-white font-extrabold text-base flex items-center justify-center shadow-2xs">
+            <div className="w-7 h-7 rounded-md bg-zinc-100 text-zinc-950 font-semibold text-xs flex items-center justify-center">
               R
             </div>
             <div className="flex flex-col">
-              <span className="font-extrabold text-sm text-white tracking-tight group-hover:text-orange-400 transition-colors">
-                Rikkei Commerce
+              <span className="font-semibold text-sm text-zinc-100 tracking-tight leading-none">
+                Rikkei Store
               </span>
-              <span className="text-[10px] font-bold text-orange-500 tracking-wider uppercase">
+              <span className="text-[10px] font-medium text-zinc-500 tracking-wider uppercase mt-0.5">
                 Admin Console
               </span>
             </div>
@@ -132,22 +132,22 @@ export const AdminSidebar = ({ onClose }) => {
             <button
               type="button"
               onClick={onClose}
-              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              className="lg:hidden p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors cursor-pointer"
               title="Đóng sidebar"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
 
         {/* 2. Navigation Items List */}
-        <nav className="p-3 space-y-6 overflow-y-auto max-h-[calc(100vh-140px)]">
+        <nav className="p-3 space-y-5 overflow-y-auto max-h-[calc(100vh-140px)]">
           {navigationGroups.map((group, groupIdx) => (
             <div key={groupIdx}>
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-3 mb-2">
+              <div className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider px-2.5 mb-1.5">
                 {group.groupTitle}
               </div>
-              <ul className="space-y-1">
+              <ul className="space-y-0.5">
                 {group.items.map((item) => {
                   const Icon = item.icon
 
@@ -158,27 +158,27 @@ export const AdminSidebar = ({ onClose }) => {
                           to={item.path}
                           onClick={onClose}
                           className={({ isActive }) =>
-                            `flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all group ${
+                            `flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium transition-colors group ${
                               isActive
-                                ? 'bg-orange-600 text-white shadow-2xs'
-                                : 'text-slate-300 hover:bg-slate-900 hover:text-white'
+                                ? 'bg-zinc-800 text-zinc-50 shadow-xs'
+                                : 'text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200'
                             }`
                           }
                         >
                           {({ isActive }) => (
                             <>
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2.5">
                                 <Icon
                                   className={`w-4 h-4 ${
                                     isActive
-                                      ? 'text-white'
-                                      : 'text-slate-400 group-hover:text-orange-400 transition-colors'
+                                      ? 'text-zinc-50'
+                                      : 'text-zinc-500 group-hover:text-zinc-300 transition-colors'
                                   }`}
                                 />
                                 <span>{item.label}</span>
                               </div>
                               {isActive && (
-                                <span className="w-1.5 h-1.5 rounded-full bg-white"></span>
+                                <span className="w-1.5 h-1.5 rounded-full bg-zinc-200"></span>
                               )}
                             </>
                           )}
@@ -191,14 +191,14 @@ export const AdminSidebar = ({ onClose }) => {
                   return (
                     <li key={item.key}>
                       <div
-                        className="flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-medium text-slate-500 cursor-not-allowed hover:bg-slate-900/40 transition-colors group"
+                        className="flex items-center justify-between px-2.5 py-2 rounded-md text-xs font-medium text-zinc-600 cursor-not-allowed hover:bg-zinc-900/40 transition-colors group"
                         title="Chức năng đang phát triển trong Sprint 2"
                       >
-                        <div className="flex items-center gap-3">
-                          <Icon className="w-4 h-4 text-slate-600 group-hover:text-slate-500 transition-colors" />
-                          <span className="text-slate-400">{item.label}</span>
+                        <div className="flex items-center gap-2.5">
+                          <Icon className="w-4 h-4 text-zinc-600 group-hover:text-zinc-500 transition-colors" />
+                          <span className="text-zinc-500">{item.label}</span>
                         </div>
-                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-slate-900 text-slate-500 border border-slate-800 shrink-0">
+                        <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-500 border border-zinc-850 shrink-0">
                           Sprint 2
                         </span>
                       </div>
@@ -212,22 +212,22 @@ export const AdminSidebar = ({ onClose }) => {
       </div>
 
       {/* 3. Footer: Admin Info Card */}
-      <div className="p-3 border-t border-slate-800/80 bg-slate-950">
-        <div className="flex items-center gap-3 p-2 rounded-xl bg-slate-900 border border-slate-800">
-          <div className="w-8 h-8 rounded-lg bg-orange-600 text-white font-bold text-xs flex items-center justify-center shrink-0">
+      <div className="p-3 border-t border-zinc-850 bg-zinc-950">
+        <div className="flex items-center gap-2.5 p-2 rounded-md bg-zinc-900 border border-zinc-800">
+          <div className="w-7 h-7 rounded-md bg-zinc-800 text-zinc-200 font-semibold text-xs flex items-center justify-center shrink-0 border border-zinc-700">
             {getInitial(user?.fullName)}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-bold text-white truncate">
+            <div className="text-xs font-semibold text-zinc-200 truncate">
               {user?.fullName || 'Quản trị viên'}
             </div>
-            <div className="text-[10px] text-slate-400 truncate">
+            <div className="text-[10px] text-zinc-500 truncate">
               {user?.email || 'admin@ecommerce.com'}
             </div>
           </div>
           <Link
             to="/"
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer"
             title="Về trang mua sắm"
           >
             <Store className="w-4 h-4" />

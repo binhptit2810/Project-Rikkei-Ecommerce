@@ -259,7 +259,7 @@ export const OrderHistoryPage = () => {
       <div className="max-w-7xl mx-auto">
         {/* Breadcrumb */}
         <nav className="flex items-center gap-2 text-xs text-slate-500 mb-6">
-          <Link to="/" className="hover:text-orange-600 transition-colors">
+          <Link to="/" className="hover:text-zinc-950 transition-colors">
             Trang chủ
           </Link>
           <span>/</span>
@@ -272,7 +272,7 @@ export const OrderHistoryPage = () => {
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
               <span>Lịch sử đơn hàng</span>
               {orders.length > 0 && (
-                <span className="text-xs font-bold bg-orange-50 text-orange-700 px-3 py-1 rounded-full border border-orange-200/60 tabular-nums">
+                <span className="text-xs font-bold bg-zinc-100 text-zinc-800 px-3 py-1 rounded-full border border-zinc-200 tabular-nums">
                   {orders.length} đơn
                 </span>
               )}
@@ -286,17 +286,17 @@ export const OrderHistoryPage = () => {
             <button
               onClick={fetchOrders}
               disabled={loading}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-orange-600 bg-white hover:bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 transition-colors cursor-pointer shadow-2xs"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-zinc-950 bg-white hover:bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 transition-colors cursor-pointer shadow-2xs"
               title="Làm mới danh sách"
             >
               <RefreshCw
-                className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-orange-600' : ''}`}
+                className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-zinc-900' : ''}`}
               />
               <span>Làm mới</span>
             </button>
             <Link
               to="/products"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 px-3.5 py-2 rounded-xl transition-all shadow-2xs"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 px-3.5 py-2 rounded-xl transition-all shadow-2xs"
             >
               <ShoppingBag className="w-3.5 h-3.5" />
               <span>Tiếp tục mua sắm</span>
@@ -314,7 +314,7 @@ export const OrderHistoryPage = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Tìm theo mã đơn, người nhận, tên sản phẩm..."
-              className="w-full pl-10 pr-9 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-xs text-slate-800 bg-white"
+              className="w-full pl-10 pr-9 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-zinc-950/20 focus:border-zinc-900 text-xs text-slate-800 bg-white"
             />
             {searchQuery && (
               <button
@@ -337,7 +337,7 @@ export const OrderHistoryPage = () => {
                   onClick={() => setActiveTab(tab.key)}
                   className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-orange-600 text-white shadow-2xs'
+                      ? 'bg-zinc-900 text-zinc-50 shadow-sm'
                       : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                   }`}
                 >
@@ -360,7 +360,7 @@ export const OrderHistoryPage = () => {
         {/* Content Section */}
         {loading ? (
           <div className="py-20 flex flex-col items-center justify-center bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
-            <LoadingSpinner size="lg" className="text-orange-600 mb-3" />
+            <LoadingSpinner size="lg" className="text-zinc-900 mb-3" />
             <p className="text-slate-500 text-sm font-medium">
               Đang tải lịch sử đơn hàng của bạn...
             </p>
@@ -380,7 +380,7 @@ export const OrderHistoryPage = () => {
             </div>
             <button
               onClick={fetchOrders}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-orange-600 hover:bg-orange-700 transition-colors cursor-pointer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 transition-colors cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Thử lại</span>
@@ -389,7 +389,7 @@ export const OrderHistoryPage = () => {
         ) : orders.length === 0 ? (
           /* Empty state khi chưa có đơn hàng nào */
           <div className="py-16 px-4 text-center bg-white rounded-2xl border border-slate-200/80 shadow-2xs space-y-4">
-            <div className="w-16 h-16 rounded-2xl bg-orange-50 text-orange-600 flex items-center justify-center mx-auto">
+            <div className="w-16 h-16 rounded-2xl bg-zinc-100 text-zinc-900 flex items-center justify-center mx-auto">
               <ShoppingBag className="w-8 h-8 stroke-[1.5]" />
             </div>
             <div>
@@ -403,7 +403,7 @@ export const OrderHistoryPage = () => {
             </div>
             <Link
               to="/products"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-orange-600 hover:bg-orange-700 active:scale-95 transition-all shadow-2xs"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 active:scale-95 transition-all shadow-2xs"
             >
               <span>Khám phá sản phẩm ngay</span>
               <ChevronRight className="w-4 h-4" />
@@ -514,7 +514,7 @@ export const OrderHistoryPage = () => {
                             <div className="min-w-0">
                               <Link
                                 to={`/products/${item.productId}`}
-                                className="text-xs font-bold text-slate-900 hover:text-orange-600 transition-colors line-clamp-1"
+                                className="text-xs font-bold text-slate-900 hover:text-zinc-950 transition-colors line-clamp-1"
                               >
                                 {item.productName}
                               </Link>
@@ -545,7 +545,7 @@ export const OrderHistoryPage = () => {
                         <span className="text-[11px] text-slate-400 block font-medium">
                           Tổng tiền
                         </span>
-                        <span className="text-base sm:text-lg font-extrabold text-orange-600 tabular-nums">
+                        <span className="text-base sm:text-lg font-extrabold text-zinc-900 tabular-nums">
                           {formatPrice(order.totalAmount)}
                         </span>
                       </div>
