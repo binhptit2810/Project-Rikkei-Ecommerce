@@ -27,8 +27,10 @@ import org.springframework.web.bind.annotation.*;
  */
 // [TSK-D02-CCT]
 // [TSK-D04-CCT]
+// [TSK-D06-CCT]
 @RestController
 @RequestMapping("/api/v1/admin/users")
+@PreAuthorize("hasRole('ADMIN')")
 @RequiredArgsConstructor
 public class AdminUserController {
 

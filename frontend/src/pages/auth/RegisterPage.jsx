@@ -80,11 +80,11 @@ export const RegisterPage = () => {
       errors.confirmPassword = 'Mật khẩu xác nhận không trùng khớp'
     }
 
-    // Số điện thoại (tùy chọn)
-    if (formData.phone && formData.phone.trim()) {
-      if (!phoneRegex.test(formData.phone.trim())) {
-        errors.phone = 'Số điện thoại không hợp lệ (gồm 10 số, bắt đầu bằng số 0)'
-      }
+    // Số điện thoại (bắt buộc: 10 chữ số, bắt đầu bằng 0)
+    if (!formData.phone || !formData.phone.trim()) {
+      errors.phone = 'Số điện thoại không được để trống'
+    } else if (!phoneRegex.test(formData.phone.trim())) {
+      errors.phone = 'Số điện thoại không hợp lệ (gồm 10 số, bắt đầu bằng số 0)'
     }
 
     setFormErrors(errors)
@@ -100,12 +100,27 @@ export const RegisterPage = () => {
         fullName: formData.fullName.trim(),
         email: formData.email.trim().toLowerCase(),
         password: formData.password,
-        phone: formData.phone.trim() || null,
+        phone: formData.phone.trim(),
         address: formData.address.trim() || null,
       })
       navigate('/profile', { replace: true })
     } catch (err) {
-      // Handled via store error state
+      const responseData = err?.response?.data
+      const backendFieldErrors = responseData?.data
+
+      if (
+        backendFieldErrors &&
+        typeof backendFieldErrors === 'object' &&
+        Object.keys(backendFieldErrors).length > 0
+      ) {
+        // Ánh xạ chính xác các trường lỗi từ Backend vào formErrors để highlight trực tiếp input
+        setFormErrors((prev) => ({
+          ...prev,
+          ...backendFieldErrors,
+        }))
+        // Đã ánh xạ lỗi chi tiết vào input -> xóa banner lỗi chung để không bị trùng lặp
+        clearError()
+      }
     }
   }
 
@@ -273,10 +288,10 @@ export const RegisterPage = () => {
               </div>
             </div>
 
-            {/* Phone (Optional) */}
+            {/* Phone */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                Số điện thoại <span className="text-slate-400 font-normal lowercase">(tùy chọn)</span>
+                Số điện thoại <span className="text-red-500">*</span>
               </label>
               <div className="relative">
                 <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
