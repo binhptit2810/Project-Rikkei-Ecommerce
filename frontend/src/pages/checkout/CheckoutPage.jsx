@@ -209,9 +209,16 @@ export const CheckoutPage = () => {
               <div>
                 <p className="font-bold text-sm">{successInfo.message}</p>
                 {successInfo.order && (
-                  <p className="text-xs text-emerald-800 font-semibold mt-1">
-                    Mã đơn hàng: <span className="underline">{successInfo.order.orderCode}</span> — Tổng thanh toán: {formatPrice(successInfo.order.totalAmount)}
-                  </p>
+                  <div className="mt-1 space-y-1">
+                    <p className="text-xs text-emerald-800 font-semibold">
+                      Mã đơn hàng: <span className="underline">{successInfo.order.orderCode}</span> — Tổng thanh toán: {formatPrice(successInfo.order.totalAmount)}
+                    </p>
+                    {successInfo.order.transactionCode && (
+                      <p className="text-xs text-emerald-800 font-semibold">
+                        Mã giao dịch: <span className="font-mono bg-emerald-100/80 px-1.5 py-0.5 rounded text-emerald-900 font-bold">{successInfo.order.transactionCode}</span> ({successInfo.order.paymentMethodDescription || successInfo.order.paymentMethod})
+                      </p>
+                    )}
+                  </div>
                 )}
                 <p className="text-xs text-emerald-700 mt-1">
                   Người nhận: <strong>{successInfo.payload?.recipientName}</strong> ({successInfo.payload?.recipientPhone}) - Địa chỉ: <strong>{successInfo.payload?.shippingAddress}</strong>

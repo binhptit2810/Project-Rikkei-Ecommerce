@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
     product_id       BIGINT NOT NULL,
     change_quantity  INT NOT NULL,               -- Có thể âm (xuất kho)
     stock_after      INT NOT NULL CHECK (stock_after >= 0),
-    transaction_type ENUM('ORDER_PLACED','ORDER_CANCELLED','MANUAL_ADJUST','INITIAL_STOCK')
+    transaction_type ENUM('ORDER_PLACED','ORDER_CANCELLED','MANUAL_ADJUST','INITIAL_STOCK','MANUAL_IMPORT','MANUAL_EXPORT')
                      NOT NULL,
     order_id         BIGINT,                     -- NULL nếu không liên quan đơn hàng
     note             VARCHAR(255),

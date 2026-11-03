@@ -1,5 +1,6 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.dto.request.ProcessPaymentRequest;
 import com.example.ecommerce.dto.response.PaymentResponse;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
@@ -12,11 +13,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 /**
- * Service quản lý thanh toán (Payment Module - Sprint 1: COD Initial & Lookups).
+ * Service quản lý thanh toán (Payment Module).
  * Phụ trách: Đặng Thanh Bình (Thành viên 4 - DTB)
  *
- * Cổng thanh toán trực tuyến mô phỏng sẽ được hiện thực trong Sprint 2 (TSK-D09-DTB).
+ * Xử lý thanh toán COD và cổng thanh toán trực tuyến mô phỏng SIMULATED.
+ * Mọi giao dịch đều được cấp mã định danh duy nhất có tiền tố PAY- (định dạng PAY-YYYYMMDD-XXXXXXXX).
  */
 @Service
 @RequiredArgsConstructor
@@ -44,6 +48,92 @@ public class PaymentService {
                 .build();
 
         return paymentRepository.save(payment);
+    }
+
+    /**
+     * Xử lý thanh toán đơn hàng (COD hoặc SIMULATED) và sinh/cập nhật mã giao dịch duy nhất PAY-.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public PaymentResponse processPayment(Long orderId, ProcessPaymentRequest request, String userEmail) {
+        log.info("Xử lý thanh toán cho đơn hàng ID: {} bởi người dùng: {}", orderId, userEmail);
+
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với id: " + orderId));
+
+        if (userEmail != null) {
+            User user = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
+
+            if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
+                throw new BusinessException("Bạn không có quyền thanh toán đơn hàng này");
+            }
+        }
+
+        if (order.getOrderStatus() == OrderStatus.CANCELLED) {
+            throw new BusinessException("Không thể thanh toán cho đơn hàng đã bị hủy");
+        }
+
+        if (order.getPaymentStatus() == PaymentStatus.PAID) {
+            throw new BusinessException("Đơn hàng này đã được thanh toán thành công trước đó");
+        }
+
+        Payment payment = paymentRepository.findByOrderId(orderId)
+                .orElseGet(() -> {
+                    Payment p = Payment.builder()
+                            .order(order)
+                            .transactionCode(Payment.generateTransactionCode())
+                            .amount(order.getTotalAmount())
+                            .status(PaymentStatus.UNPAID)
+                            .paymentMethod(request.getPaymentMethod() != null ? request.getPaymentMethod() : PaymentMethod.COD)
+                            .build();
+                    order.setPayment(p);
+                    return p;
+                });
+
+        if (payment.getTransactionCode() == null || payment.getTransactionCode().trim().isEmpty()) {
+            payment.setTransactionCode(Payment.generateTransactionCode());
+        }
+
+        PaymentMethod method = request.getPaymentMethod() != null ? request.getPaymentMethod() : payment.getPaymentMethod();
+        payment.setPaymentMethod(method);
+        payment.setAmount(order.getTotalAmount());
+
+        if (method == PaymentMethod.COD) {
+            payment.setStatus(PaymentStatus.UNPAID);
+            payment.setPaidAt(null);
+            payment.setTransactionNote(request.getTransactionNote() != null && !request.getTransactionNote().trim().isEmpty()
+                    ? request.getTransactionNote().trim()
+                    : "Thanh toán tiền mặt khi nhận hàng (COD)");
+            order.setPaymentStatus(PaymentStatus.UNPAID);
+        } else if (method == PaymentMethod.SIMULATED) {
+            boolean success = request.getSimulateSuccess() == null || request.getSimulateSuccess();
+            if (success) {
+                payment.setStatus(PaymentStatus.PAID);
+                payment.setPaidAt(LocalDateTime.now());
+                payment.setTransactionNote(request.getTransactionNote() != null && !request.getTransactionNote().trim().isEmpty()
+                        ? request.getTransactionNote().trim()
+                        : "Thanh toán trực tuyến mô phỏng thành công");
+                order.setPaymentStatus(PaymentStatus.PAID);
+                if (order.getOrderStatus() == OrderStatus.PENDING) {
+                    order.setOrderStatus(OrderStatus.CONFIRMED);
+                }
+            } else {
+                payment.setStatus(PaymentStatus.FAILED);
+                payment.setPaidAt(null);
+                payment.setTransactionNote(request.getTransactionNote() != null && !request.getTransactionNote().trim().isEmpty()
+                        ? request.getTransactionNote().trim()
+                        : "Thanh toán trực tuyến mô phỏng thất bại");
+                order.setPaymentStatus(PaymentStatus.FAILED);
+            }
+        }
+
+        Payment savedPayment = paymentRepository.save(payment);
+        orderRepository.save(order);
+
+        log.info("Xử lý thanh toán hoàn tất cho đơn hàng {}. Mã giao dịch: {}, Trạng thái: {}",
+                order.getOrderCode(), savedPayment.getTransactionCode(), savedPayment.getStatus());
+
+        return mapToPaymentResponse(savedPayment);
     }
 
     /**
