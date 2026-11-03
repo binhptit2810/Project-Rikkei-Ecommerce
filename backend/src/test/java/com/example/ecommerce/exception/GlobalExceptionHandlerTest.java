@@ -118,6 +118,19 @@ class GlobalExceptionHandlerTest {
     }
 
     @Test
+    @DisplayName("NFR-ERR-07-CUSTOM: AccessDeniedException với thông báo tùy biến trả về đúng message và 403 FORBIDDEN")
+    void handleAccessDenied_WithCustomMessage_ReturnsCustomMessageAnd403() {
+        AccessDeniedException ex = new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này");
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleAccessDenied(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getMessage()).isEqualTo("Bạn không có quyền truy cập thông tin đơn hàng này");
+    }
+
+    @Test
     @DisplayName("NFR-ERR-08: General Exception trả về 500 INTERNAL_SERVER_ERROR")
     void handleGeneral_Returns500() {
         Exception ex = new RuntimeException("Lỗi máy chủ không mong muốn");
