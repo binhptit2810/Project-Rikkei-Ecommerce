@@ -25,6 +25,17 @@ export const CartPage = () => {
 
   const [checkoutNotice, setCheckoutNotice] = useState(null)
 
+  React.useEffect(() => {
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: { pathname: '/cart' },
+          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để xem và quản lý giỏ hàng.',
+        },
+      })
+    }
+  }, [isAuthenticated, navigate])
+
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0)
   }

@@ -631,4 +631,350 @@ void getMyOrders_EmptyList_ReturnsValidEmptyPage() {
 
         verify(userRepository, never()).findByEmail(anyString());
     }
+
+    // =========================================================================
+    // BR-ORDER-03: MÁY TRẠNG THÁI ĐƠN HÀNG (STATE MACHINE TESTS)
+    // Phụ trách: Đặng Thanh Bình (Thành viên 4 - DTB)
+    // Phối hợp: Vũ Đức Huy Hoàng [VDHH]
+    // =========================================================================
+
+    @Test
+    @DisplayName("BR-ORDER-03.01: Chuyển đổi hợp lệ PENDING -> CONFIRMED")
+    void updateOrderStatus_Success_PENDING_to_CONFIRMED() {
+        Order order = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261104-000001")
+                .user(testUser)
+                .orderStatus(OrderStatus.PENDING)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse res = orderService.updateOrderStatus(1L, OrderStatus.CONFIRMED);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.02: Chuyển đổi hợp lệ CONFIRMED -> PROCESSING")
+    void updateOrderStatus_Success_CONFIRMED_to_PROCESSING() {
+        Order order = Order.builder()
+                .id(2L)
+                .orderCode("ORD-20261104-000002")
+                .user(testUser)
+                .orderStatus(OrderStatus.CONFIRMED)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findByIdForUpdate(2L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse res = orderService.updateOrderStatus(2L, OrderStatus.PROCESSING);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getOrderStatus()).isEqualTo(OrderStatus.PROCESSING);
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.PROCESSING);
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.03: Chuyển đổi hợp lệ PROCESSING -> SHIPPING")
+    void updateOrderStatus_Success_PROCESSING_to_SHIPPING() {
+        Order order = Order.builder()
+                .id(3L)
+                .orderCode("ORD-20261104-000003")
+                .user(testUser)
+                .orderStatus(OrderStatus.PROCESSING)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findByIdForUpdate(3L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse res = orderService.updateOrderStatus(3L, OrderStatus.SHIPPING);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getOrderStatus()).isEqualTo(OrderStatus.SHIPPING);
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.SHIPPING);
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.04: Chuyển đổi hợp lệ SHIPPING -> COMPLETED và tự động cập nhật thanh toán COD sang PAID")
+    void updateOrderStatus_Success_SHIPPING_to_COMPLETED_UpdatesPaymentToPaid() {
+        Payment payment = Payment.builder()
+                .id(10L)
+                .paymentMethod(PaymentMethod.COD)
+                .status(PaymentStatus.UNPAID)
+                .amount(BigDecimal.valueOf(500000))
+                .build();
+
+        Order order = Order.builder()
+                .id(4L)
+                .orderCode("ORD-20261104-000004")
+                .user(testUser)
+                .orderStatus(OrderStatus.SHIPPING)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .payment(payment)
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findByIdForUpdate(4L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse res = orderService.updateOrderStatus(4L, OrderStatus.COMPLETED);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getOrderStatus()).isEqualTo(OrderStatus.COMPLETED);
+        assertThat(order.getOrderStatus()).isEqualTo(OrderStatus.COMPLETED);
+        assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(payment.getPaidAt()).isNotNull();
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.05: Chuyển đổi hợp lệ PENDING -> CANCELLED (hoàn kho)")
+    void updateOrderStatus_Success_PENDING_to_CANCELLED_RestoresStock() {
+        Order order = Order.builder()
+                .id(5L)
+                .orderCode("ORD-20261104-000005")
+                .user(testUser)
+                .orderStatus(OrderStatus.PENDING)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findByIdForUpdate(5L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse res = orderService.updateOrderStatus(5L, OrderStatus.CANCELLED);
+
+        assertThat(res.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        verify(inventoryService).restoreStockForOrder(order);
+        verify(orderRepository).save(order);
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.06: Chuyển đổi hợp lệ CONFIRMED -> CANCELLED (hoàn kho và hoàn tiền nếu PAID)")
+    void updateOrderStatus_Success_CONFIRMED_to_CANCELLED_RestoresStockAndRefunds() {
+        Payment payment = Payment.builder()
+                .id(11L)
+                .paymentMethod(PaymentMethod.SIMULATED)
+                .status(PaymentStatus.PAID)
+                .amount(BigDecimal.valueOf(1000000))
+                .build();
+
+        Order order = Order.builder()
+                .id(6L)
+                .orderCode("ORD-20261104-000006")
+                .user(testUser)
+                .orderStatus(OrderStatus.CONFIRMED)
+                .paymentStatus(PaymentStatus.PAID)
+                .payment(payment)
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findByIdForUpdate(6L)).thenReturn(Optional.of(order));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse res = orderService.updateOrderStatus(6L, OrderStatus.CANCELLED);
+
+        assertThat(res.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(order.getPaymentStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        verify(inventoryService).restoreStockForOrder(order);
+        verify(orderRepository).save(order);
+    }
+
+    // --- CÁC TEST CHẶN NHẢY CÓC TRẠNG THÁI (Jumping Ahead) ---
+
+    @Test
+    @DisplayName("BR-ORDER-03.07: Chặn nhảy cóc PENDING -> PROCESSING")
+    void updateOrderStatus_Throws_WhenJumping_PENDING_to_PROCESSING() {
+        Order order = Order.builder().id(7L).orderStatus(OrderStatus.PENDING).build();
+        when(orderRepository.findByIdForUpdate(7L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(7L, OrderStatus.PROCESSING))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.08: Chặn nhảy cóc PENDING -> SHIPPING")
+    void updateOrderStatus_Throws_WhenJumping_PENDING_to_SHIPPING() {
+        Order order = Order.builder().id(8L).orderStatus(OrderStatus.PENDING).build();
+        when(orderRepository.findByIdForUpdate(8L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(8L, OrderStatus.SHIPPING))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.09: Chặn nhảy cóc PENDING -> COMPLETED")
+    void updateOrderStatus_Throws_WhenJumping_PENDING_to_COMPLETED() {
+        Order order = Order.builder().id(9L).orderStatus(OrderStatus.PENDING).build();
+        when(orderRepository.findByIdForUpdate(9L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(9L, OrderStatus.COMPLETED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.10: Chặn nhảy cóc CONFIRMED -> SHIPPING")
+    void updateOrderStatus_Throws_WhenJumping_CONFIRMED_to_SHIPPING() {
+        Order order = Order.builder().id(10L).orderStatus(OrderStatus.CONFIRMED).build();
+        when(orderRepository.findByIdForUpdate(10L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(10L, OrderStatus.SHIPPING))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.11: Chặn nhảy cóc CONFIRMED -> COMPLETED")
+    void updateOrderStatus_Throws_WhenJumping_CONFIRMED_to_COMPLETED() {
+        Order order = Order.builder().id(11L).orderStatus(OrderStatus.CONFIRMED).build();
+        when(orderRepository.findByIdForUpdate(11L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(11L, OrderStatus.COMPLETED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.12: Chặn nhảy cóc PROCESSING -> COMPLETED")
+    void updateOrderStatus_Throws_WhenJumping_PROCESSING_to_COMPLETED() {
+        Order order = Order.builder().id(12L).orderStatus(OrderStatus.PROCESSING).build();
+        when(orderRepository.findByIdForUpdate(12L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(12L, OrderStatus.COMPLETED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    // --- CÁC TEST CHẶN QUAY LUI TRẠNG THÁI (Moving Backward) ---
+
+    @Test
+    @DisplayName("BR-ORDER-03.13: Chặn quay lui CONFIRMED -> PENDING")
+    void updateOrderStatus_Throws_WhenMovingBackward_CONFIRMED_to_PENDING() {
+        Order order = Order.builder().id(13L).orderStatus(OrderStatus.CONFIRMED).build();
+        when(orderRepository.findByIdForUpdate(13L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(13L, OrderStatus.PENDING))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.14: Chặn quay lui PROCESSING -> CONFIRMED hoặc PENDING")
+    void updateOrderStatus_Throws_WhenMovingBackward_PROCESSING_to_CONFIRMED() {
+        Order order = Order.builder().id(14L).orderStatus(OrderStatus.PROCESSING).build();
+        when(orderRepository.findByIdForUpdate(14L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(14L, OrderStatus.CONFIRMED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.15: Chặn quay lui SHIPPING -> PROCESSING")
+    void updateOrderStatus_Throws_WhenMovingBackward_SHIPPING_to_PROCESSING() {
+        Order order = Order.builder().id(15L).orderStatus(OrderStatus.SHIPPING).build();
+        when(orderRepository.findByIdForUpdate(15L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(15L, OrderStatus.PROCESSING))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    // --- CÁC TEST CHẶN HỦY TẠI PROCESSING / SHIPPING ---
+
+    @Test
+    @DisplayName("BR-ORDER-03.16: Chặn hủy đơn hàng khi đang PROCESSING (đang chuẩn bị hàng)")
+    void updateOrderStatus_Throws_WhenCancelling_From_PROCESSING() {
+        Order order = Order.builder().id(16L).orderStatus(OrderStatus.PROCESSING).build();
+        when(orderRepository.findByIdForUpdate(16L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(16L, OrderStatus.CANCELLED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.17: Chặn hủy đơn hàng khi đang SHIPPING (đang giao hàng)")
+    void updateOrderStatus_Throws_WhenCancelling_From_SHIPPING() {
+        Order order = Order.builder().id(17L).orderStatus(OrderStatus.SHIPPING).build();
+        when(orderRepository.findByIdForUpdate(17L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(17L, OrderStatus.CANCELLED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vi phạm quy tắc nghiệp vụ BR-ORDER-03");
+    }
+
+    // --- CÁC TEST CHẶN THAY ĐỔI TỪ TRẠNG THÁI KẾT THÚC (Terminal States) ---
+
+    @Test
+    @DisplayName("BR-ORDER-03.18: Chặn thay đổi trạng thái khi đơn hàng đã COMPLETED")
+    void updateOrderStatus_Throws_WhenModifyingTerminal_COMPLETED() {
+        Order order = Order.builder().id(18L).orderStatus(OrderStatus.COMPLETED).build();
+        when(orderRepository.findByIdForUpdate(18L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(18L, OrderStatus.SHIPPING))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Đơn hàng đã hoàn thành, không thể thay đổi trạng thái");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.19: Chặn thay đổi trạng thái khi đơn hàng đã CANCELLED")
+    void updateOrderStatus_Throws_WhenModifyingTerminal_CANCELLED() {
+        Order order = Order.builder().id(19L).orderStatus(OrderStatus.CANCELLED).build();
+        when(orderRepository.findByIdForUpdate(19L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(19L, OrderStatus.CONFIRMED))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Đơn hàng đã bị hủy, không thể thay đổi trạng thái");
+    }
+
+    // --- CÁC TEST NGOẠI LỆ ĐẦU VÀO ---
+
+    @Test
+    @DisplayName("BR-ORDER-03.20: Chặn cập nhật trạng thái trùng lặp với trạng thái hiện tại")
+    void updateOrderStatus_Throws_WhenSameStatus() {
+        Order order = Order.builder().id(20L).orderStatus(OrderStatus.PENDING).build();
+        when(orderRepository.findByIdForUpdate(20L)).thenReturn(Optional.of(order));
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(20L, OrderStatus.PENDING))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Đơn hàng hiện tại đã ở trạng thái 'Chờ xác nhận', không thể cập nhật lại trạng thái này");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.21: Chặn khi trạng thái mới là null")
+    void updateOrderStatus_Throws_WhenNewStatusIsNull() {
+        assertThatThrownBy(() -> orderService.updateOrderStatus(21L, null))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Trạng thái đơn hàng mới không được để trống");
+    }
+
+    @Test
+    @DisplayName("BR-ORDER-03.22: Ném ResourceNotFoundException khi không tìm thấy mã đơn hàng")
+    void updateOrderStatus_Throws_WhenOrderIdNotFound() {
+        when(orderRepository.findByIdForUpdate(999L)).thenReturn(Optional.empty());
+        when(orderRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> orderService.updateOrderStatus(999L, OrderStatus.CONFIRMED))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy đơn hàng với ID: 999");
+    }
 }

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { 
   ShoppingBag, 
@@ -8,7 +8,6 @@ import {
   LogOut, 
   Menu, 
   X,
-  ChevronDown,
   Package
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
@@ -35,77 +34,98 @@ export const Navbar = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  // Đóng menu khi chuyển trang
+  // Đóng mobile menu khi chuyển trang
   useEffect(() => {
     setMobileMenuOpen(false)
     setUserDropdownOpen(false)
   }, [location.pathname])
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
+    setUserDropdownOpen(false)
     navigate('/login')
   }
 
-  const getInitial = (name) => {
+  const handleCartClick = (e) => {
+    if (!isAuthenticated) {
+      e.preventDefault()
+      navigate('/login', {
+        state: {
+          from: { pathname: '/cart' },
+          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để xem giỏ hàng.',
+        },
+      })
+    }
+  }
+
+  const getInitials = (name) => {
     if (!name) return 'U'
     const parts = name.trim().split(' ')
     return parts[parts.length - 1].charAt(0).toUpperCase()
   }
 
-  const isActive = (path) => {
-    if (path === '/') return location.pathname === '/'
-    return location.pathname.startsWith(path)
-  }
+  const isActive = (path) => location.pathname === path
 
   return (
-    <header className="bg-white/95 backdrop-blur-sm border-b border-zinc-200 sticky top-0 z-40 transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
-        
+    <header className="sticky top-0 z-40 w-full border-b border-zinc-200 bg-white/95 backdrop-blur-xs">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-4">
         {/* Brand Logo */}
-        <Link to="/" className="flex items-center gap-2.5 group shrink-0">
-          <div className="w-8 h-8 rounded-md bg-zinc-900 text-zinc-50 flex items-center justify-center transition-colors shadow-sm">
-            <ShoppingBag className="w-4 h-4 text-zinc-50" />
+        <Link 
+          to="/" 
+          className="flex items-center gap-2 text-zinc-950 font-semibold tracking-tight text-base hover:opacity-90 transition-opacity"
+        >
+          <div className="w-7 h-7 rounded-md bg-zinc-900 text-zinc-50 flex items-center justify-center font-bold text-xs shadow-xs">
+            R
           </div>
-          <div className="flex flex-col">
-            <span className="font-semibold text-base text-zinc-950 tracking-tight leading-none">
-              Rikkei<span className="text-zinc-500 font-normal">Store</span>
-            </span>
-            <span className="text-[10px] font-medium text-zinc-400 tracking-wider uppercase mt-0.5">
-              Commerce Platform
-            </span>
-          </div>
+          <span className="hidden sm:inline font-bold">Rikkei E-commerce</span>
         </Link>
 
         {/* Desktop Navigation Links */}
-        <nav className="hidden md:flex items-center gap-1">
+        <nav className="hidden md:flex items-center gap-1 text-sm font-medium">
           <Link
             to="/"
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              isActive('/')
-                ? 'text-zinc-950 bg-zinc-100 font-medium'
+            className={`px-3 py-1.5 rounded-md transition-colors ${
+              isActive('/') 
+                ? 'bg-zinc-100 text-zinc-950 font-medium' 
                 : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50'
             }`}
           >
             Trang chủ
           </Link>
-
           <Link
             to="/products"
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              isActive('/products')
-                ? 'text-zinc-950 bg-zinc-100 font-medium'
+            className={`px-3 py-1.5 rounded-md transition-colors ${
+              isActive('/products') 
+                ? 'bg-zinc-100 text-zinc-950 font-medium' 
                 : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50'
             }`}
           >
             Sản phẩm
           </Link>
 
+          {isAuthenticated && (
+            <Link
+              to="/orders"
+              className={`px-3 py-1.5 rounded-md transition-colors ${
+                isActive('/orders') 
+                  ? 'bg-zinc-100 text-zinc-950 font-medium' 
+                  : 'text-zinc-600 hover:text-zinc-950 hover:bg-zinc-50'
+              }`}
+            >
+              Đơn hàng
+            </Link>
+          )}
+
           {isAuthenticated && user?.role === 'ADMIN' && (
             <Link
               to="/admin/users"
-              className="px-3 py-1.5 rounded-md text-sm font-medium text-zinc-900 bg-zinc-100 hover:bg-zinc-200/80 transition-colors flex items-center gap-1.5 border border-zinc-200"
+              className={`px-3 py-1.5 rounded-md transition-colors flex items-center gap-1.5 ${
+                location.pathname.startsWith('/admin')
+                  ? 'bg-zinc-900 text-zinc-50 font-medium'
+                  : 'text-zinc-700 hover:text-zinc-950 hover:bg-zinc-100'
+              }`}
             >
-              <Shield className="w-3.5 h-3.5 text-zinc-700" />
+              <Shield className="w-3.5 h-3.5" />
               <span>Quản trị</span>
             </Link>
           )}
@@ -116,11 +136,12 @@ export const Navbar = () => {
           {/* Cart Button */}
           <Link
             to="/cart"
+            onClick={handleCartClick}
             className="relative p-2 text-zinc-700 hover:text-zinc-950 hover:bg-zinc-100 rounded-md transition-colors flex items-center justify-center cursor-pointer"
             title="Giỏ hàng"
           >
             <ShoppingCart className="w-4 h-4" />
-            {totalCartCount > 0 && (
+            {isAuthenticated && totalCartCount > 0 && (
               <span className="absolute -top-1 -right-1 bg-zinc-900 text-zinc-50 font-semibold text-[10px] rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center border-2 border-white shadow-xs">
                 {totalCartCount > 99 ? '99+' : totalCartCount}
               </span>
@@ -133,29 +154,24 @@ export const Navbar = () => {
               <button
                 type="button"
                 onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                className="flex items-center gap-2 p-1.5 pr-2 rounded-md hover:bg-zinc-100 transition-colors border border-transparent hover:border-zinc-200 cursor-pointer"
+                className="flex items-center gap-2 p-1 pl-2 rounded-md border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-800 transition-colors cursor-pointer"
               >
-                <div className="w-7 h-7 rounded-md bg-zinc-900 text-zinc-50 font-medium text-xs flex items-center justify-center">
-                  {getInitial(user.fullName)}
+                <div className="w-6 h-6 rounded-full bg-zinc-900 text-zinc-50 font-medium text-xs flex items-center justify-center">
+                  {getInitials(user.fullName || user.email)}
                 </div>
-                <span className="text-xs font-medium text-zinc-800 hidden sm:inline max-w-[120px] truncate">
-                  {user.fullName || user.email}
+                <span className="text-xs font-medium max-w-[120px] truncate hidden sm:inline">
+                  {user.fullName || user.email.split('@')[0]}
                 </span>
-                <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
               </button>
 
-              {/* User Dropdown Menu */}
+              {/* User Dropdown */}
               {userDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-md border border-zinc-200 py-1 z-50 animate-in fade-in slide-in-from-top-1 duration-150">
+                <div className="absolute right-0 mt-1.5 w-56 rounded-md border border-zinc-200 bg-white shadow-md py-1 z-50 text-xs animate-in fade-in zoom-in-95 duration-100">
                   <div className="px-3 py-2 border-b border-zinc-100">
-                    <div className="text-xs font-semibold text-zinc-900 truncate">
-                      {user.fullName || 'Người dùng'}
-                    </div>
-                    <div className="text-[11px] text-zinc-500 truncate mt-0.5">
-                      {user.email}
-                    </div>
-                    <div className="mt-1.5">
-                      <span className="inline-block text-[10px] font-medium px-2 py-0.5 rounded bg-zinc-100 text-zinc-800 border border-zinc-200 uppercase tracking-wider">
+                    <p className="font-semibold text-zinc-950 truncate">{user.fullName || 'Người dùng'}</p>
+                    <p className="text-zinc-500 text-[11px] font-mono truncate">{user.email}</p>
+                    <div className="mt-1">
+                      <span className="badge-neutral text-[10px] py-0 px-1.5">
                         {user.role}
                       </span>
                     </div>

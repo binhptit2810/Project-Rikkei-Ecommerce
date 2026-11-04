@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams, useNavigate } from 'react-router-dom'
+import { useAuthStore } from '../../store/useAuthStore'
 import {
   Search,
   ArrowUpDown,
@@ -42,6 +43,8 @@ const ProductCardSkeleton = () => (
 export const ProductListPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const addToCart = useCartStore((state) => state.addToCart)
+  const { isAuthenticated } = useAuthStore()
+  const navigate = useNavigate()
 
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
@@ -87,8 +90,27 @@ export const ProductListPage = () => {
 
   // Xử lý thêm vào giỏ hàng
   const handleAddToCart = async (product) => {
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: { pathname: '/products' },
+          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để thêm sản phẩm vào giỏ hàng.',
+        },
+      })
+      return
+    }
+
     try {
       const res = await addToCart(product, 1)
+      if (res?.requireLogin) {
+        navigate('/login', {
+          state: {
+            from: { pathname: '/products' },
+            message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để thêm sản phẩm vào giỏ hàng.',
+          },
+        })
+        return
+      }
       if (res && res.success === false) {
         showToast(res.message || 'Sản phẩm đã hết hàng', 'error')
       } else {

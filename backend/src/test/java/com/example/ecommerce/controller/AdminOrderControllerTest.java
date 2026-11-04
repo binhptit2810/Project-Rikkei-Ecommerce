@@ -161,4 +161,53 @@ class AdminOrderControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
     }
+
+    @Test
+    @DisplayName("PATCH /admin/orders/{id}/status: Cập nhật thành công qua endpoint trực tiếp /admin/orders/{id}/status")
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    void updateOrderStatus_DirectPath_Admin_Returns200() throws Exception {
+        OrderResponse updated = sampleOrderResponse();
+        updated.setOrderStatus(OrderStatus.CONFIRMED);
+        updated.setOrderStatusDescription("Đã xác nhận");
+
+        UpdateOrderStatusRequest request = UpdateOrderStatusRequest.builder()
+                .status(OrderStatus.CONFIRMED)
+                .build();
+
+        when(orderService.updateOrderStatus(eq(1L), eq(OrderStatus.CONFIRMED))).thenReturn(updated);
+
+        mockMvc.perform(patch("/admin/orders/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.orderStatus").value("CONFIRMED"));
+    }
+
+    @Test
+    @DisplayName("PATCH /admin/orders/{id}/status: Từ chối 403 khi người dùng có role CUSTOMER")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void updateOrderStatus_Customer_Returns403() throws Exception {
+        UpdateOrderStatusRequest request = UpdateOrderStatusRequest.builder()
+                .status(OrderStatus.CONFIRMED)
+                .build();
+
+        mockMvc.perform(patch("/admin/orders/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("PATCH /admin/orders/{id}/status: Từ chối 401 khi chưa xác thực")
+    void updateOrderStatus_Unauthenticated_Returns401() throws Exception {
+        UpdateOrderStatusRequest request = UpdateOrderStatusRequest.builder()
+                .status(OrderStatus.CONFIRMED)
+                .build();
+
+        mockMvc.perform(patch("/admin/orders/1/status")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
 }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { 
   ArrowRight, 
   ShoppingBag, 
@@ -21,6 +21,7 @@ import { useCartStore } from '../store/useCartStore'
 
 export const HomePage = () => {
   const { isAuthenticated } = useAuthStore()
+  const navigate = useNavigate()
   const addToCart = useCartStore((state) => state.addToCart)
 
   const [categories, setCategories] = useState([])
@@ -84,9 +85,27 @@ export const HomePage = () => {
   const handleQuickAdd = async (e, product) => {
     e.preventDefault()
     e.stopPropagation()
+
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để thêm sản phẩm vào giỏ hàng.',
+        },
+      })
+      return
+    }
+
     if (!product || product.stockQuantity <= 0) return
 
     const res = await addToCart(product, 1)
+    if (res?.requireLogin) {
+      navigate('/login', {
+        state: {
+          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để thêm sản phẩm vào giỏ hàng.',
+        },
+      })
+      return
+    }
     if (res?.success) {
       setAddedToast(`Đã thêm "${product.name}" vào giỏ hàng`)
       setTimeout(() => setAddedToast(null), 3000)

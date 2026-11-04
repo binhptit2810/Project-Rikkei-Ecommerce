@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { ShoppingBag, ShoppingCart } from 'lucide-react'
+import { useAuthStore } from '../../store/useAuthStore'
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=80'
 
@@ -10,6 +11,8 @@ const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1505740420928-5e560c06
  */
 export const ProductCard = ({ product, onAddToCart }) => {
   const [imgError, setImgError] = useState(false)
+  const { isAuthenticated } = useAuthStore()
+  const navigate = useNavigate()
 
   if (!product) return null
 
@@ -29,6 +32,18 @@ export const ProductCard = ({ product, onAddToCart }) => {
   const handleAddToCartClick = (e) => {
     e.preventDefault()
     e.stopPropagation()
+
+    // Bắt buộc đăng nhập hoặc đăng ký nếu chưa xác thực
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: { pathname: `/products/${product.id}` },
+          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để thêm sản phẩm vào giỏ hàng.',
+        },
+      })
+      return
+    }
+
     if (!isOutOfStock && onAddToCart) {
       onAddToCart(product)
     }

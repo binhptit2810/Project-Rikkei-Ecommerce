@@ -358,20 +358,35 @@ public class OrderService {
     /**
      * Dành cho Admin: Cập nhật trạng thái đơn hàng (tuân thủ State Machine).
      */
+    /**
+     * Quy tắc nghiệp vụ BR-ORDER-03: Dành cho Admin: Cập nhật trạng thái đơn hàng (tuân thủ State Machine).
+     * Phụ trách: Đặng Thanh Bình (Thành viên 4 - DTB)
+     * Phối hợp: Vũ Đức Huy Hoàng [VDHH]
+     *
+     * Quy trình bắt buộc tuần tự: PENDING -> CONFIRMED -> PROCESSING -> SHIPPING -> COMPLETED
+     * Chặn tuyệt đối nhảy cóc trạng thái hoặc quay lui trạng thái.
+     * Cho phép hủy (CANCELLED) khi đơn đang ở PENDING hoặc CONFIRMED; tự động hoàn tồn kho và hoàn tiền nếu đã thanh toán.
+     * Tự động cập nhật Payment sang PAID khi đơn COD được chuyển sang COMPLETED.
+     */
     @Transactional(rollbackFor = Exception.class)
     public OrderResponse updateOrderStatus(Long orderId, OrderStatus newStatus) {
-        Order order = orderRepository.findById(orderId)
+        if (orderId == null) {
+            throw new BusinessException("Mã đơn hàng không được để trống.");
+        }
+        if (newStatus == null) {
+            throw new BusinessException("Trạng thái đơn hàng mới không được để trống.");
+        }
+
+        Order order = orderRepository.findByIdForUpdate(orderId)
+                .or(() -> orderRepository.findById(orderId))
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + orderId));
 
         OrderStatus currentStatus = order.getOrderStatus();
-        if (currentStatus == newStatus) {
-            return mapToOrderResponse(order);
-        }
 
-        // Kiểm tra tính hợp lệ của luồng chuyển trạng thái (State Machine)
+        // Kiểm tra tính hợp lệ của luồng chuyển trạng thái (State Machine BR-ORDER-03)
         validateStatusTransition(currentStatus, newStatus);
 
-        // Nếu admin chuyển trạng thái sang CANCELLED mà đơn chưa hủy: hoàn tồn kho
+        // Nếu admin chuyển trạng thái sang CANCELLED mà đơn chưa hủy: hoàn tồn kho và hoàn tiền
         if (newStatus == OrderStatus.CANCELLED && currentStatus != OrderStatus.CANCELLED) {
             inventoryService.restoreStockForOrder(order);
             if (order.getPaymentStatus() == PaymentStatus.PAID) {
@@ -405,13 +420,28 @@ public class OrderService {
     }
 
     /**
-     * Xác thực tính hợp lệ của luồng chuyển trạng thái đơn hàng (State Machine).
-     * Luồng chuẩn: PENDING -> CONFIRMED -> PROCESSING -> SHIPPING -> COMPLETED
-     * Hủy đơn (CANCELLED) chỉ được phép từ PENDING hoặc CONFIRMED.
+     * Xác thực tính hợp lệ của luồng chuyển trạng thái đơn hàng (State Machine BR-ORDER-03).
+     * Quy tắc nghiệp vụ BR-ORDER-03:
+     * - Luồng chuẩn tuần tự: PENDING -> CONFIRMED -> PROCESSING -> SHIPPING -> COMPLETED
+     * - Chặn tuyệt đối nhảy cóc trạng thái (ví dụ: PENDING -> PROCESSING, PENDING -> SHIPPING, PENDING -> COMPLETED, CONFIRMED -> SHIPPING, etc.)
+     * - Chặn tuyệt đối quay lui trạng thái (ví dụ: SHIPPING -> CONFIRMED, CONFIRMED -> PENDING, etc.)
+     * - Hủy đơn (CANCELLED) chỉ được phép từ PENDING hoặc CONFIRMED; không thể hủy khi đã PROCESSING, SHIPPING, COMPLETED.
+     * - Khi đơn đã COMPLETED hoặc CANCELLED thì là trạng thái kết thúc (Terminal State), không thể thay đổi nữa.
+     * - Không thể cập nhật trạng thái trùng lặp với trạng thái hiện tại.
      */
     public void validateStatusTransition(OrderStatus current, OrderStatus next) {
+        if (next == null) {
+            throw new BusinessException("Trạng thái mới không được để trống.");
+        }
+
+        if (current == null) {
+            throw new BusinessException("Trạng thái hiện tại của đơn hàng không hợp lệ.");
+        }
+
         if (current == next) {
-            return;
+            throw new BusinessException(String.format(
+                    "Đơn hàng hiện tại đã ở trạng thái '%s', không thể cập nhật lại trạng thái này.",
+                    current.getDescription()));
         }
 
         if (current == OrderStatus.COMPLETED) {
@@ -441,7 +471,10 @@ public class OrderService {
         }
 
         if (!valid) {
-            throw new BusinessException(String.format("Không thể chuyển đổi trạng thái từ '%s' sang '%s'. Luồng chuyển đổi chuẩn: PENDING -> CONFIRMED -> PROCESSING -> SHIPPING -> COMPLETED (hoặc CANCELLED từ PENDING/CONFIRMED).",
+            throw new BusinessException(String.format(
+                    "Vi phạm quy tắc nghiệp vụ BR-ORDER-03: Không thể chuyển đổi trạng thái từ '%s' sang '%s'. " +
+                    "Quy trình chuyển đổi bắt buộc: PENDING -> CONFIRMED -> PROCESSING -> SHIPPING -> COMPLETED " +
+                    "(chỉ cho phép hủy từ PENDING hoặc CONFIRMED). Chặn mọi thao tác nhảy cóc hoặc quay lui trạng thái.",
                     current.getDescription(), next.getDescription()));
         }
     }

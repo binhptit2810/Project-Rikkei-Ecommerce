@@ -118,7 +118,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/uploads/**").permitAll()
 
                 // --- Admin only ---
-                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/v1/admin/**", "/admin/**").hasRole("ADMIN")
 
                 // --- Mọi request còn lại: phải đăng nhập ---
                 .anyRequest().authenticated()
