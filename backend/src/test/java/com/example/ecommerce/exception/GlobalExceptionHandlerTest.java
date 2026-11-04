@@ -18,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Unit Test cho GlobalExceptionHandler.
- * Kiểm tra chuẩn hóa phản hồi ApiResponse cho tất cả các nhóm mã lỗi HTTP (400, 401, 403, 404, 500).
+ * Kiểm tra chuẩn hóa phản hồi ApiResponse cho tất cả các nhóm mã lỗi HTTP (400, 401, 403, 404, 409, 500).
  */
 // [TSK-D03-CCT]
 class GlobalExceptionHandlerTest {
@@ -53,6 +53,19 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().getMessage()).isEqualTo("Không tìm thấy sản phẩm");
+    }
+
+    @Test
+    @DisplayName("NFR-ERR-02-CONFLICT: ConflictException trả về 409 CONFLICT")
+    void handleConflict_Returns409() {
+        ConflictException ex = new ConflictException("Đơn hàng không thể hủy ở trạng thái hiện tại");
+
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleConflict(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getMessage()).isEqualTo("Đơn hàng không thể hủy ở trạng thái hiện tại");
     }
 
     @Test
@@ -316,4 +329,3 @@ class GlobalExceptionHandlerTest {
         assertThat(response.getBody().getMessage()).isEqualTo("Chưa đăng nhập hoặc thông tin xác thực không hợp lệ");
     }
 }
-

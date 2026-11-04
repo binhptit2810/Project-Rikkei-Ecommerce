@@ -8,6 +8,8 @@ import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.entity.OrderStatus;
 import com.example.ecommerce.entity.PaymentMethod;
 import com.example.ecommerce.entity.PaymentStatus;
+import com.example.ecommerce.exception.ConflictException;
+import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.service.OrderService;
 import com.example.ecommerce.service.RefreshTokenService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -140,6 +142,13 @@ class OrderControllerTest {
     }
 
     @Test
+    @DisplayName("GET /api/v1/orders/my: Từ chối truy cập 401 khi chưa đăng nhập")
+    void getMyOrders_Unauthenticated_Returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/my"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     @DisplayName("GET /api/v1/orders/{id}: Xem chi tiết đơn hàng kèm OrderItem thành công trả 200 OK")
     @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
     void getOrderDetail_Success_Returns200() throws Exception {
@@ -170,6 +179,19 @@ class OrderControllerTest {
                 .andExpect(jsonPath("$.data.items[0].productName").value("Áo Thun Cotton"))
                 .andExpect(jsonPath("$.data.items[0].quantity").value(2))
                 .andExpect(jsonPath("$.data.items[0].subtotal").value(500000));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/orders/{id}: Trả về 404 NOT_FOUND khi đơn hàng không tồn tại")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void getOrderDetail_NotFound_Returns404() throws Exception {
+        when(orderService.getOrderDetail(eq(999L), eq("customer@example.com")))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: 999"));
+
+        mockMvc.perform(get("/api/v1/orders/999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Không tìm thấy đơn hàng với ID: 999"));
     }
 
     @Test
@@ -204,36 +226,29 @@ class OrderControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/v1/orders/{id}: Xem chi tiết đơn hàng thành công trả 200 OK")
+    @DisplayName("PATCH /api/v1/orders/{id}/cancel: Trả 409 CONFLICT khi đơn hàng ở trạng thái không cho phép hủy")
     @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
-    void getOrderById_Success_Returns200() throws Exception {
-        OrderResponse response = OrderResponse.builder()
-                .id(1L)
-                .orderCode("ORD-20261102-123456")
-                .totalAmount(BigDecimal.valueOf(500000))
-                .orderStatus(OrderStatus.PENDING)
-                .build();
+    void cancelOrder_Returns409_WhenConflict() throws Exception {
+        when(orderService.cancelOrder(eq(1L), eq("customer@example.com")))
+                .thenThrow(new ConflictException("Không thể hủy đơn hàng ở trạng thái 'Đang giao hàng'. Chỉ được hủy khi đơn ở trạng thái Chờ xác nhận hoặc Đã xác nhận."));
 
-        when(orderService.getOrderDetail(eq(1L), eq("customer@example.com"))).thenReturn(response);
-
-        mockMvc.perform(get("/api/v1/orders/1"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.id").value(1L))
-                .andExpect(jsonPath("$.data.orderCode").value("ORD-20261102-123456"));
+        mockMvc.perform(patch("/api/v1/orders/1/cancel"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Không thể hủy đơn hàng ở trạng thái 'Đang giao hàng'. Chỉ được hủy khi đơn ở trạng thái Chờ xác nhận hoặc Đã xác nhận."));
     }
 
     @Test
-    @DisplayName("GET /api/v1/orders/{id}: Từ chối 403 FORBIDDEN khi truy cập đơn của người khác (IDOR Protection)")
-    @WithMockUser(username = "other@example.com", roles = {"CUSTOMER"})
-    void getOrderById_AccessDenied_Returns403() throws Exception {
-        when(orderService.getOrderDetail(eq(1L), eq("other@example.com")))
-                .thenThrow(new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này"));
+    @DisplayName("PATCH /api/v1/orders/{id}/cancel: Trả 404 NOT_FOUND khi đơn hàng không tồn tại")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void cancelOrder_Returns404_WhenNotFound() throws Exception {
+        when(orderService.cancelOrder(eq(999L), eq("customer@example.com")))
+                .thenThrow(new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: 999"));
 
-        mockMvc.perform(get("/api/v1/orders/1"))
-                .andExpect(status().isForbidden())
+        mockMvc.perform(patch("/api/v1/orders/999/cancel"))
+                .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Bạn không có quyền truy cập thông tin đơn hàng này"));
+                .andExpect(jsonPath("$.message").value("Không tìm thấy đơn hàng với ID: 999"));
     }
 
     @Test
@@ -247,6 +262,13 @@ class OrderControllerTest {
                 .andExpect(status().isForbidden())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Bạn không có quyền hủy đơn hàng này"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/orders/{id}/cancel: Từ chối 401 UNAUTHORIZED khi chưa đăng nhập")
+    void cancelOrder_Unauthenticated_Returns401() throws Exception {
+        mockMvc.perform(patch("/api/v1/orders/1/cancel"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
