@@ -265,20 +265,34 @@ class OrderServiceTest {
         assertThat(response.getTotalElements()).isEqualTo(1);
     }
 
-    @Test
-    @DisplayName("Customer chưa có đơn hàng: trả về PageResponse rỗng hợp lệ")
-    void getMyOrders_EmptyList_ReturnsValidEmptyPage() {
-        Page<Order> emptyPage = new PageImpl<>(List.of());
-        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
-        when(orderRepository.findByUserId(eq(1L), any(Pageable.class))).thenReturn(emptyPage);
+  @Test
+@DisplayName("Customer chưa có đơn hàng: trả về PageResponse rỗng hợp lệ")
+void getMyOrders_EmptyList_ReturnsValidEmptyPage() {
 
-        PageResponse<OrderResponse> response = orderService.getMyOrders("customer@example.com", 0, 10, "createdAt", "desc");
+    Page<Order> emptyPage = Page.empty(
+            org.springframework.data.domain.PageRequest.of(0, 10)
+    );
 
-        assertThat(response).isNotNull();
-        assertThat(response.getContent()).isEmpty();
-        assertThat(response.getTotalElements()).isEqualTo(0);
-        assertThat(response.getTotalPages()).isEqualTo(0);
-    }
+    when(userRepository.findByEmail("customer@example.com"))
+            .thenReturn(Optional.of(testUser));
+
+    when(orderRepository.findByUserId(eq(1L), any(Pageable.class)))
+            .thenReturn(emptyPage);
+
+    PageResponse<OrderResponse> response =
+            orderService.getMyOrders(
+                    "customer@example.com",
+                    0,
+                    10,
+                    "createdAt",
+                    "desc"
+            );
+
+    assertThat(response).isNotNull();
+    assertThat(response.getContent()).isEmpty();
+    assertThat(response.getTotalElements()).isEqualTo(0);
+    assertThat(response.getTotalPages()).isEqualTo(0);
+}
 
     @Test
     @DisplayName("Lấy chi tiết đơn hàng (getOrderDetail) kèm danh sách món hàng thành công")
