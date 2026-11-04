@@ -22,6 +22,7 @@ import OrderDetailPage from './pages/orders/OrderDetailPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
 import AdminProductsPage from './pages/admin/AdminProductsPage'
 import AdminCategoriesPage from './pages/admin/AdminCategoriesPage'
+import AdminOrdersPage from './pages/admin/AdminOrdersPage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -69,12 +70,13 @@ function App() {
             </RoleRoute>
           }
         >
-          {/* Trang tổng quan Dashboard, Quản lý người dùng, Sản phẩm và Danh mục */}
+          {/* Trang tổng quan Dashboard, Quản lý người dùng, Sản phẩm, Danh mục và Đơn hàng */}
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboardPage />} />
           <Route path="users" element={<UserManagementPage />} />
           <Route path="products" element={<AdminProductsPage />} />
           <Route path="categories" element={<AdminCategoriesPage />} />
+          <Route path="orders" element={<AdminOrdersPage />} />
         </Route>
 
         {/* 3. Customer Area Routes (Sử dụng CustomerLayout riêng với Navbar và Footer) */}

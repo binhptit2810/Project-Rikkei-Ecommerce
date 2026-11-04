@@ -1,6 +1,7 @@
 package com.example.ecommerce.repository;
 
 import com.example.ecommerce.entity.Order;
+import com.example.ecommerce.entity.OrderStatus;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -40,8 +41,18 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     boolean existsByOrderCode(String orderCode);
 
-    long countByOrderStatus(com.example.ecommerce.entity.OrderStatus orderStatus);
+    long countByOrderStatus(OrderStatus orderStatus);
 
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.orderStatus = :orderStatus")
-    BigDecimal sumTotalAmountByOrderStatus(@Param("orderStatus") com.example.ecommerce.entity.OrderStatus orderStatus);
+    BigDecimal sumTotalAmountByOrderStatus(@Param("orderStatus") OrderStatus orderStatus);
+
+    @Query("SELECT o FROM Order o WHERE " +
+            "(:status IS NULL OR o.orderStatus = :status) AND " +
+            "(:search IS NULL OR :search = '' OR " +
+            " LOWER(o.orderCode) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+            " LOWER(o.recipientName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
+            " LOWER(o.recipientPhone) LIKE LOWER(CONCAT('%', :search, '%')))")
+    Page<Order> searchOrdersAdmin(@Param("status") OrderStatus status,
+                                  @Param("search") String search,
+                                  Pageable pageable);
 }
