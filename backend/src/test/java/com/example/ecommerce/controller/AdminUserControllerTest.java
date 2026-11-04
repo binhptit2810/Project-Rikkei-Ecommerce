@@ -3,6 +3,8 @@ package com.example.ecommerce.controller;
 import com.example.ecommerce.dto.request.LockUserRequest;
 import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.entity.Role;
+import com.example.ecommerce.exception.BusinessException;
+import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -26,7 +28,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -35,12 +37,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Integration Test cho AdminUserController.
  * Phụ trách: Cao Chí Thiện
- * Task ID: TSK-AUTH-00 - Hoàn thiện xác thực JWT, Opaque Token và RBAC
- * Kiểm tra RBAC (Phân quyền Admin vs Customer), Validation dữ liệu đầu vào,
- * và chuẩn hóa phản hồi ApiResponse.
+ * Task ID: [TSK-D08-CCT] Viết Unit Tests RBAC cho AdminUserController & Rà soát BusinessException
+ * Kiểm tra RBAC (Phân quyền Admin vs Customer vs Unauthenticated),
+ * Validation dữ liệu đầu vào, BusinessException & ResourceNotFoundException,
+ * chuẩn hóa phản hồi ApiResponse, và kiểm chứng tương tác Mockito.
  */
 // [TSK-D04-CCT]
 // [TSK-D06-CCT]
+// [TSK-D08-CCT]
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
@@ -64,6 +68,10 @@ class AdminUserControllerTest {
 
     @MockBean
     private com.example.ecommerce.service.RefreshTokenService refreshTokenService;
+
+    // =========================================================================
+    // 1. Phân quyền RBAC & Unauthenticated Tests
+    // =========================================================================
 
     @Test
     @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
@@ -91,72 +99,94 @@ class AdminUserControllerTest {
                 .andExpect(jsonPath("$.data.pageSize").value(1))
                 .andExpect(jsonPath("$.data.totalElements").value(1))
                 .andExpect(jsonPath("$.data.totalPages").value(1));
-    }
 
-    @Test
-    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
-    @DisplayName("BR-AUTH-04: Admin tự khóa chính mình bị từ chối bằng BusinessException trả 400 BAD REQUEST")
-    void lockUser_AdminSelfLocking_Returns400() throws Exception {
-        LockUserRequest request = new LockUserRequest("Admin cố tình tự khóa");
-
-        when(userService.lockUser(eq(1L), any(LockUserRequest.class), any()))
-                .thenThrow(new com.example.ecommerce.exception.BusinessException("Bạn không thể tự khóa tài khoản của chính mình"));
-
-        mockMvc.perform(patch("/api/v1/admin/users/1/lock")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Bạn không thể tự khóa tài khoản của chính mình"));
-    }
-
-    @Test
-    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
-    @DisplayName("API-ERR: Khóa người dùng không tồn tại trả 404 NOT FOUND")
-    void lockUser_UserNotFound_Returns404() throws Exception {
-        LockUserRequest request = new LockUserRequest("Lý do");
-
-        when(userService.lockUser(eq(999L), any(LockUserRequest.class), any()))
-                .thenThrow(new com.example.ecommerce.exception.ResourceNotFoundException("Người dùng không tồn tại với ID: 999"));
-
-        mockMvc.perform(patch("/api/v1/admin/users/999/lock")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Người dùng không tồn tại với ID: 999"));
-    }
-
-    @Test
-    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
-    @DisplayName("API-ERR: Mở khóa người dùng đang hoạt động bình thường trả 400 BAD REQUEST")
-    void unlockUser_AlreadyActive_Returns400() throws Exception {
-        when(userService.unlockUser(eq(2L), any()))
-                .thenThrow(new com.example.ecommerce.exception.BusinessException("Tài khoản này đang hoạt động bình thường, không cần mở khóa"));
-
-        mockMvc.perform(patch("/api/v1/admin/users/2/unlock")
-                        .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Tài khoản này đang hoạt động bình thường, không cần mở khóa"));
+        verify(userService, times(1)).getAllUsers(any(Pageable.class));
     }
 
     @Test
     @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
-    @DisplayName("NFR-SEC-23: Khách hàng (CUSTOMER) truy cập GET /api/v1/admin/users bị từ chối 403 FORBIDDEN")
+    @DisplayName("NFR-SEC-23: Khách hàng (CUSTOMER) truy cập GET /api/v1/admin/users bị từ chối 403 FORBIDDEN kèm JSON lỗi chuẩn")
     void getUsers_AsCustomer_Returns403() throws Exception {
         mockMvc.perform(get("/api/v1/admin/users")
                         .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Bạn không có quyền thực hiện thao tác này"));
+
+        verify(userService, never()).getAllUsers(any());
     }
 
     @Test
-    @DisplayName("NFR-SEC-24: Người dùng chưa đăng nhập truy cập GET /api/v1/admin/users bị từ chối 401 UNAUTHORIZED")
+    @DisplayName("NFR-SEC-24: Người dùng chưa đăng nhập truy cập GET /api/v1/admin/users bị từ chối 401 UNAUTHORIZED kèm JSON lỗi chuẩn")
     void getUsers_Unauthenticated_Returns401() throws Exception {
         mockMvc.perform(get("/api/v1/admin/users")
                         .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isUnauthorized());
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Chưa đăng nhập hoặc token hết hạn"));
+
+        verify(userService, never()).getAllUsers(any());
     }
+
+    @Test
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    @DisplayName("NFR-SEC-26: Khách hàng (CUSTOMER) gọi PATCH /api/v1/admin/users/{id}/lock bị chặn 403 FORBIDDEN kèm JSON lỗi chuẩn")
+    void lockUser_AsCustomer_Returns403() throws Exception {
+        LockUserRequest request = new LockUserRequest("Lý do");
+
+        mockMvc.perform(patch("/api/v1/admin/users/2/lock")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Bạn không có quyền thực hiện thao tác này"));
+
+        verify(userService, never()).lockUser(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-26-UNAUTH: Người dùng chưa đăng nhập gọi PATCH /api/v1/admin/users/{id}/lock bị từ chối 401 UNAUTHORIZED")
+    void lockUser_Unauthenticated_Returns401() throws Exception {
+        LockUserRequest request = new LockUserRequest("Lý do bất kỳ");
+
+        mockMvc.perform(patch("/api/v1/admin/users/2/lock")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Chưa đăng nhập hoặc token hết hạn"));
+
+        verify(userService, never()).lockUser(any(), any(), any());
+    }
+
+    @Test
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    @DisplayName("NFR-SEC-28: Khách hàng (CUSTOMER) gọi PATCH /api/v1/admin/users/{id}/unlock bị chặn 403 FORBIDDEN kèm JSON lỗi chuẩn")
+    void unlockUser_AsCustomer_Returns403() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/users/2/unlock")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Bạn không có quyền thực hiện thao tác này"));
+
+        verify(userService, never()).unlockUser(any(), any());
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-28-UNAUTH: Người dùng chưa đăng nhập gọi PATCH /api/v1/admin/users/{id}/unlock bị từ chối 401 UNAUTHORIZED")
+    void unlockUser_Unauthenticated_Returns401() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/users/2/unlock")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Chưa đăng nhập hoặc token hết hạn"));
+
+        verify(userService, never()).unlockUser(any(), any());
+    }
+
+    // =========================================================================
+    // 2. Kiểm thử Lock User (Thành công, BusinessException, Validation, NotFound)
+    // =========================================================================
 
     @Test
     @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
@@ -184,6 +214,65 @@ class AdminUserControllerTest {
                 .andExpect(jsonPath("$.message").value("Khóa tài khoản thành công"))
                 .andExpect(jsonPath("$.data.active").value(false))
                 .andExpect(jsonPath("$.data.lockReason").value("Tài khoản nghi vấn gian lận"));
+
+        verify(userService, times(1)).lockUser(eq(2L), any(LockUserRequest.class), any());
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("BR-AUTH-04: Admin tự khóa chính mình bị từ chối bằng BusinessException trả 400 BAD REQUEST")
+    void lockUser_AdminSelfLocking_Returns400() throws Exception {
+        LockUserRequest request = new LockUserRequest("Admin cố tình tự khóa");
+
+        when(userService.lockUser(eq(1L), any(LockUserRequest.class), any()))
+                .thenThrow(new BusinessException("Bạn không thể tự khóa tài khoản của chính mình"));
+
+        mockMvc.perform(patch("/api/v1/admin/users/1/lock")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Bạn không thể tự khóa tài khoản của chính mình"));
+
+        verify(userService, times(1)).lockUser(eq(1L), any(LockUserRequest.class), any());
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("NFR-SEC-08: Admin khóa tài khoản đã bị khóa từ trước nhận BusinessException trả 400 BAD REQUEST")
+    void lockUser_AlreadyLocked_Returns400() throws Exception {
+        LockUserRequest request = new LockUserRequest("Khóa tiếp tài khoản đã khóa");
+
+        when(userService.lockUser(eq(2L), any(LockUserRequest.class), any()))
+                .thenThrow(new BusinessException("Tài khoản này đã bị khóa từ trước"));
+
+        mockMvc.perform(patch("/api/v1/admin/users/2/lock")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Tài khoản này đã bị khóa từ trước"));
+
+        verify(userService, times(1)).lockUser(eq(2L), any(LockUserRequest.class), any());
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("API-ERR: Khóa người dùng không tồn tại trả 404 NOT FOUND")
+    void lockUser_UserNotFound_Returns404() throws Exception {
+        LockUserRequest request = new LockUserRequest("Lý do");
+
+        when(userService.lockUser(eq(999L), any(LockUserRequest.class), any()))
+                .thenThrow(new ResourceNotFoundException("Người dùng không tồn tại với ID: 999"));
+
+        mockMvc.perform(patch("/api/v1/admin/users/999/lock")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Người dùng không tồn tại với ID: 999"));
+
+        verify(userService, times(1)).lockUser(eq(999L), any(LockUserRequest.class), any());
     }
 
     @Test
@@ -197,20 +286,63 @@ class AdminUserControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value("Dữ liệu không hợp lệ"));
+                .andExpect(jsonPath("$.message").value("Dữ liệu không hợp lệ"))
+                .andExpect(jsonPath("$.data.reason").value("Lý do khóa tài khoản không được để trống"));
+
+        verify(userService, never()).lockUser(any(), any(), any());
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
-    @DisplayName("NFR-SEC-26: Khách hàng (CUSTOMER) gọi PATCH /api/v1/admin/users/{id}/lock bị chặn 403 FORBIDDEN")
-    void lockUser_AsCustomer_Returns403() throws Exception {
-        LockUserRequest request = new LockUserRequest("Lý do");
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("NFR-DATA-07: Admin khóa tài khoản với lý do vượt quá 500 ký tự bị Bean Validation trả 400 BAD REQUEST")
+    void lockUser_AsAdmin_ReasonExceeds500Chars_Returns400() throws Exception {
+        String longReason = "A".repeat(501);
+        LockUserRequest request = new LockUserRequest(longReason);
 
         mockMvc.perform(patch("/api/v1/admin/users/2/lock")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Dữ liệu không hợp lệ"))
+                .andExpect(jsonPath("$.data.reason").value("Lý do khóa tài khoản không được vượt quá 500 ký tự"));
+
+        verify(userService, never()).lockUser(any(), any(), any());
     }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("API-ERR: Khóa tài khoản với ID sai định dạng chữ thay vì số trả 400 BAD REQUEST")
+    void lockUser_InvalidIdFormat_Returns400() throws Exception {
+        LockUserRequest request = new LockUserRequest("Lý do hợp lệ");
+
+        mockMvc.perform(patch("/api/v1/admin/users/invalid-id/lock")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Tham số 'id' không đúng định dạng"));
+
+        verify(userService, never()).lockUser(any(), any(), any());
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("API-ERR: Gửi request body không đúng định dạng JSON trả 400 BAD REQUEST")
+    void lockUser_MalformedJson_Returns400() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/users/2/lock")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{malformed-json-payload"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Dữ liệu đầu vào không đúng định dạng JSON"));
+
+        verify(userService, never()).lockUser(any(), any(), any());
+    }
+
+    // =========================================================================
+    // 3. Kiểm thử Unlock User (Thành công, BusinessException, NotFound, Type Mismatch)
+    // =========================================================================
 
     @Test
     @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
@@ -235,23 +367,65 @@ class AdminUserControllerTest {
                 .andExpect(jsonPath("$.message").value("Mở khóa tài khoản thành công"))
                 .andExpect(jsonPath("$.data.active").value(true))
                 .andExpect(jsonPath("$.data.lockReason").doesNotExist());
+
+        verify(userService, times(1)).unlockUser(eq(2L), any());
     }
 
     @Test
-    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
-    @DisplayName("NFR-SEC-28: Khách hàng (CUSTOMER) gọi PATCH /api/v1/admin/users/{id}/unlock bị chặn 403 FORBIDDEN")
-    void unlockUser_AsCustomer_Returns403() throws Exception {
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("API-ERR: Mở khóa người dùng đang hoạt động bình thường trả 400 BAD REQUEST")
+    void unlockUser_AlreadyActive_Returns400() throws Exception {
+        when(userService.unlockUser(eq(2L), any()))
+                .thenThrow(new BusinessException("Tài khoản này đang hoạt động bình thường, không cần mở khóa"));
+
         mockMvc.perform(patch("/api/v1/admin/users/2/unlock")
                         .contentType(MediaType.APPLICATION_JSON))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Tài khoản này đang hoạt động bình thường, không cần mở khóa"));
+
+        verify(userService, times(1)).unlockUser(eq(2L), any());
     }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("API-ERR: Mở khóa người dùng không tồn tại trả 404 NOT FOUND")
+    void unlockUser_UserNotFound_Returns404() throws Exception {
+        when(userService.unlockUser(eq(999L), any()))
+                .thenThrow(new ResourceNotFoundException("Người dùng không tồn tại với ID: 999"));
+
+        mockMvc.perform(patch("/api/v1/admin/users/999/unlock")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Người dùng không tồn tại với ID: 999"));
+
+        verify(userService, times(1)).unlockUser(eq(999L), any());
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("API-ERR: Mở khóa tài khoản với ID sai định dạng chữ thay vì số trả 400 BAD REQUEST")
+    void unlockUser_InvalidIdFormat_Returns400() throws Exception {
+        mockMvc.perform(patch("/api/v1/admin/users/invalid-id/unlock")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Tham số 'id' không đúng định dạng"));
+
+        verify(userService, never()).unlockUser(any(), any());
+    }
+
+    // =========================================================================
+    // 4. Branch & Boundary Tests (Pagination & Class Level Security)
+    // =========================================================================
 
     @Test
     @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
     @DisplayName("Branch: Admin gọi getUsers với page âm và size <= 0 -> chuẩn hóa về page=0 và size=DEFAULT_PAGE_SIZE(10)")
     void getUsers_NegativePageAndZeroSize_NormalizesDefaults() throws Exception {
         when(userService.getAllUsers(any(Pageable.class)))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
+                .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/v1/admin/users")
                         .param("page", "-1")
@@ -259,6 +433,8 @@ class AdminUserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+
+        verify(userService, times(1)).getAllUsers(any(Pageable.class));
     }
 
     @Test
@@ -266,7 +442,7 @@ class AdminUserControllerTest {
     @DisplayName("Branch: Admin gọi getUsers với size vượt quá MAX_PAGE_SIZE(100) -> giới hạn về MAX_PAGE_SIZE")
     void getUsers_SizeExceedingMax_CapsAtMaxPageSize() throws Exception {
         when(userService.getAllUsers(any(Pageable.class)))
-                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()));
+                .thenReturn(new PageImpl<>(List.of()));
 
         mockMvc.perform(get("/api/v1/admin/users")
                         .param("page", "0")
@@ -274,6 +450,8 @@ class AdminUserControllerTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
+
+        verify(userService, times(1)).getAllUsers(any(Pageable.class));
     }
 
     @Test
@@ -284,4 +462,3 @@ class AdminUserControllerTest {
         assertThat(annotation.value()).isEqualTo("hasRole('ADMIN')");
     }
 }
-
