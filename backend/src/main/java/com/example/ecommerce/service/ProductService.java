@@ -19,12 +19,13 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.Set;
 
 /**
  * Service quản lý sản phẩm (Product Module).
  * Phụ trách: Đỗ Đức Mạnh (DDM)
- * Task ID: [TSK-D06-DDM] Xây dựng API Quản trị Sản phẩm & Danh mục (Admin CRUD)
+ * Task ID: [TSK-D08-DDM] Tối ưu hóa Bộ lọc Tìm kiếm Sản phẩm & Viết Unit Tests ProductService
  */
 @Service
 @RequiredArgsConstructor
@@ -39,12 +40,14 @@ public class ProductService {
     private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("id", "price", "createdAt", "name", "stockQuantity");
 
     /**
-     * Tìm kiếm và lọc sản phẩm đang active dành cho khách mua sắm.
+     * Tìm kiếm và lọc sản phẩm đang active dành cho khách mua sắm (hỗ trợ lọc theo khoảng giá minPrice, maxPrice).
      */
     @Transactional(readOnly = true)
     public PageResponse<ProductResponse> getProducts(
             String keyword,
             Long categoryId,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
             int page,
             int size,
             String sortBy,
@@ -56,11 +59,28 @@ public class ProductService {
         Page<Product> productPage = productRepository.searchProducts(
                 searchKeyword,
                 categoryId,
+                minPrice,
+                maxPrice,
                 true,
                 pageable
         );
 
         return PageResponse.from(productPage, ProductResponse::fromEntity);
+    }
+
+    /**
+     * Overload getProducts không kèm khoảng giá (tương thích các lời gọi cũ).
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<ProductResponse> getProducts(
+            String keyword,
+            Long categoryId,
+            int page,
+            int size,
+            String sortBy,
+            String sortDir
+    ) {
+        return getProducts(keyword, categoryId, null, null, page, size, sortBy, sortDir);
     }
 
     /**
@@ -79,12 +99,14 @@ public class ProductService {
     }
 
     /**
-     * Lấy danh sách sản phẩm phục vụ quản trị Admin (hỗ trợ phân trang, tìm kiếm và lọc theo trạng thái active/inactive).
+     * Lấy danh sách sản phẩm phục vụ quản trị Admin (hỗ trợ phân trang, tìm kiếm, khoảng giá và lọc theo trạng thái active/inactive).
      */
     @Transactional(readOnly = true)
     public PageResponse<ProductResponse> getAdminProducts(
             String keyword,
             Long categoryId,
+            BigDecimal minPrice,
+            BigDecimal maxPrice,
             Boolean active,
             int page,
             int size,
@@ -97,11 +119,29 @@ public class ProductService {
         Page<Product> productPage = productRepository.searchProducts(
                 searchKeyword,
                 categoryId,
+                minPrice,
+                maxPrice,
                 active,
                 pageable
         );
 
         return PageResponse.from(productPage, ProductResponse::fromEntity);
+    }
+
+    /**
+     * Overload getAdminProducts không kèm khoảng giá.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<ProductResponse> getAdminProducts(
+            String keyword,
+            Long categoryId,
+            Boolean active,
+            int page,
+            int size,
+            String sortBy,
+            String sortDir
+    ) {
+        return getAdminProducts(keyword, categoryId, null, null, active, page, size, sortBy, sortDir);
     }
 
     /**

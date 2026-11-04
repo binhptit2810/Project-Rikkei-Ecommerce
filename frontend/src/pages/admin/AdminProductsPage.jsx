@@ -14,24 +14,26 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUpDown,
-  Eye,
   AlertTriangle,
 } from 'lucide-react'
 import productService from '../../services/productService'
 import categoryService from '../../services/categoryService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import ProductModal from '../../components/admin/ProductModal'
 
 /**
  * Trang Quản lý Sản phẩm dành cho Admin (AdminProductsPage).
  * Tuyến đường (Route): /admin/products
+ * Phụ trách: Đỗ Đức Mạnh (DDM)
+ * Phối hợp: Đỗ Hoàng Anh (DHA)
+ * Task ID: [TSK-D07-DDM] Xây dựng Modal Form Thêm/Sửa Sản phẩm trên Giao diện Admin
  *
  * Tính năng chính:
  * 1. Hiển thị danh sách sản phẩm với phân trang, tìm kiếm từ khóa, lọc danh mục, sắp xếp.
  * 2. Tự động chuyển đổi dự phòng (Fallback) từ /api/v1/admin/products sang /api/v1/products nếu endpoint admin chưa sẵn sàng.
- * 3. Thêm mới sản phẩm với modal xác thực dữ liệu đầu vào chặt chẽ.
- * 4. Chỉnh sửa thông tin sản phẩm và cập nhật thời gian thực.
- * 5. Ẩn / Xóa mềm sản phẩm với hộp thoại xác nhận an toàn.
- * 6. Giao diện chuẩn phong cách Tailwind CSS của Rikkei E-commerce (shadcn/ui New York zinc monochrome, tabular-nums).
+ * 3. Thêm mới và Chỉnh sửa thông tin sản phẩm thông qua ProductModal chuẩn mực.
+ * 4. Ẩn / Xóa mềm sản phẩm với hộp thoại xác nhận an toàn.
+ * 5. Giao diện chuẩn phong cách Tailwind CSS của Rikkei E-commerce (shadcn/ui New York zinc monochrome, tabular-nums).
  */
 export const AdminProductsPage = () => {
   // --- Dữ liệu sản phẩm & danh mục ---
@@ -53,20 +55,9 @@ export const AdminProductsPage = () => {
   const [error, setError] = useState(null)
   const [toastMessage, setToastMessage] = useState(null) // { type: 'success' | 'error', text: '' }
 
-  // --- Trạng thái Modal Thêm / Sửa ---
+  // --- Trạng thái Modal Thêm / Sửa Sản phẩm (ProductModal) ---
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState(null) // null = Thêm mới, object = Sửa
-  const [formData, setFormData] = useState({
-    name: '',
-    categoryId: '',
-    price: '',
-    stockQuantity: '',
-    imageUrl: '',
-    description: '',
-    active: true,
-  })
-  const [formErrors, setFormErrors] = useState({})
-  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // --- Trạng thái Modal Xác nhận Xóa / Ẩn ---
   const [deletingProduct, setDeletingProduct] = useState(null)
@@ -157,7 +148,6 @@ export const AdminProductsPage = () => {
       }
 
       if (isFallback) {
-        // Thông tin hữu ích khi backend đang dùng public API
         console.info('AdminProductsPage: Đang kết nối fallback qua GET /api/v1/products')
       }
     } catch (err) {
@@ -167,6 +157,7 @@ export const AdminProductsPage = () => {
         'Không thể tải danh sách sản phẩm từ hệ thống.'
       setError(msg)
       setProducts([])
+      setTotalElements(0)
     } finally {
       setIsLoading(false)
     }
@@ -201,117 +192,36 @@ export const AdminProductsPage = () => {
   // Mở modal Thêm mới
   const handleOpenCreateModal = () => {
     setEditingProduct(null)
-    setFormData({
-      name: '',
-      categoryId: categories.length > 0 ? String(categories[0].id) : '',
-      price: '',
-      stockQuantity: '',
-      imageUrl: '',
-      description: '',
-      active: true,
-    })
-    setFormErrors({})
     setIsModalOpen(true)
   }
 
   // Mở modal Sửa
   const handleOpenEditModal = (product) => {
     setEditingProduct(product)
-    setFormData({
-      name: product.name || '',
-      categoryId: product.categoryId ? String(product.categoryId) : '',
-      price: product.price !== undefined ? String(product.price) : '',
-      stockQuantity:
-        product.stockQuantity !== undefined ? String(product.stockQuantity) : '0',
-      imageUrl: product.imageUrl || '',
-      description: product.description || '',
-      active: product.active !== false,
-    })
-    setFormErrors({})
     setIsModalOpen(true)
   }
 
   // Đóng modal
   const handleCloseModal = () => {
-    if (isSubmitting) return
     setIsModalOpen(false)
     setEditingProduct(null)
-    setFormErrors({})
   }
 
-  // Validate form trước khi submit
-  const validateForm = () => {
-    const errors = {}
-
-    if (!formData.name.trim()) {
-      errors.name = 'Vui lòng nhập tên sản phẩm'
-    }
-
-    if (!formData.categoryId) {
-      errors.categoryId = 'Vui lòng chọn danh mục cho sản phẩm'
-    }
-
-    const priceNum = Number(formData.price)
-    if (formData.price === '' || isNaN(priceNum) || priceNum <= 0) {
-      errors.price = 'Giá bán phải là số lớn hơn 0'
-    }
-
-    const stockNum = Number(formData.stockQuantity)
-    if (formData.stockQuantity === '' || isNaN(stockNum) || stockNum < 0 || !Number.isInteger(stockNum)) {
-      errors.stockQuantity = 'Số lượng tồn kho phải là số nguyên không âm (≥ 0)'
-    }
-
-    if (formData.imageUrl && !formData.imageUrl.match(/^(https?:\/\/|\/)/i)) {
-      errors.imageUrl = 'Đường dẫn ảnh phải bắt đầu bằng http://, https:// hoặc /'
-    }
-
-    setFormErrors(errors)
-    return Object.keys(errors).length === 0
+  // Callback thành công từ ProductModal
+  const handleModalSuccess = (msg) => {
+    setToastMessage({
+      type: 'success',
+      text: msg,
+    })
+    fetchProducts()
   }
 
-  // Submit form Thêm / Sửa
-  const handleSubmitForm = async (e) => {
-    e.preventDefault()
-    if (!validateForm()) return
-
-    setIsSubmitting(true)
-    const payload = {
-      name: formData.name.trim(),
-      categoryId: Number(formData.categoryId),
-      price: Number(formData.price),
-      stockQuantity: Number(formData.stockQuantity),
-      imageUrl: formData.imageUrl.trim() || null,
-      description: formData.description.trim() || null,
-      active: Boolean(formData.active),
-    }
-
-    try {
-      if (editingProduct) {
-        // Cập nhật sản phẩm
-        await productService.updateProduct(editingProduct.id, payload)
-        setToastMessage({
-          type: 'success',
-          text: `Đã cập nhật sản phẩm "${payload.name}" thành công!`,
-        })
-      } else {
-        // Thêm sản phẩm mới
-        await productService.createProduct(payload)
-        setToastMessage({
-          type: 'success',
-          text: `Đã thêm sản phẩm "${payload.name}" thành công!`,
-        })
-      }
-      setIsModalOpen(false)
-      fetchProducts()
-    } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        'Có lỗi xảy ra khi lưu sản phẩm. Vui lòng thử lại.'
-      setToastMessage({ type: 'error', text: msg })
-    } finally {
-      setIsSubmitting(false)
-    }
+  // Callback lỗi từ ProductModal
+  const handleModalError = (errMsg) => {
+    setToastMessage({
+      type: 'error',
+      text: errMsg,
+    })
   }
 
   // Xác nhận Ẩn / Xóa mềm
@@ -502,16 +412,16 @@ export const AdminProductsPage = () => {
           </div>
         )}
 
-        {/* Trạng thái đang tải */}
+        {/* Trạng thái tải dữ liệu */}
         {isLoading ? (
           <div className="py-20 flex flex-col items-center justify-center text-slate-500">
             <LoadingSpinner size="lg" className="text-zinc-900 mb-3" />
             <p className="text-sm font-medium">Đang tải danh sách sản phẩm...</p>
           </div>
         ) : products.length === 0 ? (
-          /* Trạng thái không có sản phẩm */
+          /* Trạng thái rỗng */
           <div className="py-16 text-center px-4">
-            <div className="w-16 h-16 rounded-2xl bg-zinc-100 text-zinc-700 flex items-center justify-center mx-auto mb-4">
+            <div className="w-16 h-16 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-4">
               <Package className="w-8 h-8" />
             </div>
             <h3 className="text-base font-bold text-slate-800">
@@ -519,8 +429,8 @@ export const AdminProductsPage = () => {
             </h3>
             <p className="text-sm text-slate-500 max-w-md mx-auto mt-1 mb-5">
               {keyword || selectedCategory
-                ? 'Không có sản phẩm nào khớp với tiêu chí tìm kiếm hoặc bộ lọc hiện tại.'
-                : 'Hệ thống chưa có sản phẩm nào. Hãy bấm nút thêm sản phẩm để bắt đầu đăng bán.'}
+                ? 'Không có sản phẩm nào khớp với bộ lọc tìm kiếm hiện tại.'
+                : 'Chưa có sản phẩm nào trong hệ thống. Hãy thêm sản phẩm đầu tiên.'}
             </p>
             {keyword || selectedCategory ? (
               <button
@@ -546,45 +456,43 @@ export const AdminProductsPage = () => {
             )}
           </div>
         ) : (
-          /* Bảng dữ liệu sản phẩm */
+          /* Bảng dữ liệu */
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                  <th className="py-3.5 px-4 w-14">#ID</th>
-                  <th className="py-3.5 px-4 min-w-[260px]">Sản phẩm</th>
-                  <th className="py-3.5 px-4 min-w-[130px]">Danh mục</th>
+                  <th className="py-3.5 px-4 w-16">#ID</th>
+                  <th className="py-3.5 px-4 min-w-[240px]">Sản phẩm</th>
+                  <th className="py-3.5 px-4 min-w-[140px]">Danh mục</th>
                   <th className="py-3.5 px-4 min-w-[130px] text-right">Giá bán</th>
-                  <th className="py-3.5 px-4 min-w-[110px] text-center">Tồn kho</th>
+                  <th className="py-3.5 px-4 min-w-[100px] text-center">Tồn kho</th>
                   <th className="py-3.5 px-4 min-w-[120px] text-center">Trạng thái</th>
                   <th className="py-3.5 px-4 w-28 text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {products.map((product) => {
+                  const isActive = product.active !== false
                   const categoryName =
                     product.categoryName ||
+                    (product.category && product.category.name) ||
                     categoryMap.get(product.categoryId) ||
-                    'Chung'
-                  const isOutOfStock = (product.stockQuantity ?? 0) <= 0
-                  const isLowStock =
-                    !isOutOfStock && (product.stockQuantity ?? 0) <= 10
-                  const isActive = product.active !== false
+                    'Chưa phân loại'
 
                   return (
                     <tr
                       key={product.id}
                       className="hover:bg-slate-50/60 transition-colors group"
                     >
-                      {/* Mã ID */}
-                      <td className="py-3 px-4 font-mono text-xs font-semibold text-slate-400 tabular-nums">
+                      {/* Cột 1: ID */}
+                      <td className="py-3.5 px-4 font-mono text-xs font-semibold text-slate-400 tabular-nums">
                         #{product.id}
                       </td>
 
-                      {/* Hình ảnh & Tên sản phẩm */}
-                      <td className="py-3 px-4">
+                      {/* Cột 2: Sản phẩm (Hình ảnh + Tên + Mô tả) */}
+                      <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200/80 overflow-hidden shrink-0 flex items-center justify-center relative">
+                          <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200/80 overflow-hidden shrink-0 flex items-center justify-center">
                             {product.imageUrl ? (
                               <img
                                 src={product.imageUrl}
@@ -600,48 +508,46 @@ export const AdminProductsPage = () => {
                               <ImageIcon className="w-5 h-5 text-slate-300" />
                             )}
                           </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="font-bold text-slate-800 line-clamp-1 group-hover:text-zinc-950 transition-colors">
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800 truncate group-hover:text-zinc-950 transition-colors">
                               {product.name}
-                            </div>
-                            <div className="text-xs text-slate-400 line-clamp-1 mt-0.5">
-                              {product.description || 'Chưa có mô tả chi tiết'}
-                            </div>
+                            </p>
+                            {product.description && (
+                              <p className="text-xs text-slate-500 truncate max-w-xs mt-0.5">
+                                {product.description}
+                              </p>
+                            )}
                           </div>
                         </div>
                       </td>
 
-                      {/* Danh mục */}
-                      <td className="py-3 px-4">
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">
-                          {categoryName}
-                        </span>
+                      {/* Cột 3: Danh mục */}
+                      <td className="py-3.5 px-4 text-xs font-medium text-slate-600">
+                        {categoryName}
                       </td>
 
-                      {/* Giá bán */}
-                      <td className="py-3 px-4 text-right font-extrabold text-slate-900 tabular-nums">
+                      {/* Cột 4: Giá bán */}
+                      <td className="py-3.5 px-4 text-right font-bold text-slate-800 tabular-nums">
                         {formatVND(product.price)}
                       </td>
 
-                      {/* Tồn kho */}
-                      <td className="py-3 px-4 text-center">
-                        {isOutOfStock ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-100 text-red-700 border border-red-200 tabular-nums">
-                            <AlertCircle className="w-3 h-3" /> Hết hàng (0)
-                          </span>
-                        ) : isLowStock ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-zinc-100 text-zinc-800 border border-zinc-200 tabular-nums">
-                            <AlertTriangle className="w-3 h-3" /> Còn {product.stockQuantity}
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 tabular-nums">
-                            {product.stockQuantity} SP
-                          </span>
-                        )}
+                      {/* Cột 5: Tồn kho */}
+                      <td className="py-3.5 px-4 text-center tabular-nums">
+                        <span
+                          className={`inline-block px-2 py-0.5 rounded-md text-xs font-semibold ${
+                            (product.stockQuantity ?? 0) > 10
+                              ? 'bg-slate-100 text-slate-700'
+                              : (product.stockQuantity ?? 0) > 0
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-red-100 text-red-700'
+                          }`}
+                        >
+                          {product.stockQuantity ?? 0} SP
+                        </span>
                       </td>
 
-                      {/* Trạng thái */}
-                      <td className="py-3 px-4 text-center">
+                      {/* Cột 6: Trạng thái */}
+                      <td className="py-3.5 px-4 text-center">
                         {isActive ? (
                           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700 border border-emerald-200">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -655,8 +561,8 @@ export const AdminProductsPage = () => {
                         )}
                       </td>
 
-                      {/* Thao tác */}
-                      <td className="py-3 px-4 text-right">
+                      {/* Cột 7: Thao tác */}
+                      <td className="py-3.5 px-4 text-right">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
@@ -731,284 +637,16 @@ export const AdminProductsPage = () => {
       </div>
 
       {/* ==================================================================== */}
-      {/* 4. Modal Thêm / Chỉnh sửa Sản phẩm */}
+      {/* 4. Modal Thêm / Chỉnh sửa Sản phẩm (ProductModal) */}
       {/* ==================================================================== */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
-          {/* Lớp phủ Backdrop */}
-          <div
-            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
-            onClick={handleCloseModal}
-          />
-
-          {/* Hộp thoại Modal */}
-          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-200">
-            {/* Modal Header */}
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/60">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-zinc-100 text-zinc-900 flex items-center justify-center shrink-0">
-                  <Package className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">
-                    {editingProduct
-                      ? `Chỉnh sửa sản phẩm #${editingProduct.id}`
-                      : 'Thêm sản phẩm mới'}
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    {editingProduct
-                      ? 'Cập nhật thông tin chi tiết và trạng thái hiển thị.'
-                      : 'Nhập thông tin sản phẩm để niêm yết lên hệ thống thương mại.'}
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={handleCloseModal}
-                disabled={isSubmitting}
-                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body: Form */}
-            <form onSubmit={handleSubmitForm} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              {/* Tên sản phẩm */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Tên sản phẩm <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Áo thun nam Rikkei Cotton Premium"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  className={`w-full px-3.5 py-2 text-sm bg-slate-50 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all ${
-                    formErrors.name
-                      ? 'border-red-500 focus:ring-red-500/20'
-                      : 'border-slate-300 focus:ring-zinc-950/20 focus:border-zinc-900'
-                  }`}
-                />
-                {formErrors.name && (
-                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    <span>{formErrors.name}</span>
-                  </p>
-                )}
-              </div>
-
-              {/* Danh mục & Trạng thái */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Danh mục <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.categoryId}
-                    onChange={(e) =>
-                      setFormData({ ...formData, categoryId: e.target.value })
-                    }
-                    className={`w-full px-3.5 py-2 text-sm bg-slate-50 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all cursor-pointer ${
-                      formErrors.categoryId
-                        ? 'border-red-500 focus:ring-red-500/20'
-                        : 'border-slate-300 focus:ring-zinc-950/20 focus:border-zinc-900'
-                    }`}
-                  >
-                    <option value="">-- Chọn danh mục --</option>
-                    {categories.map((cat) => (
-                      <option key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </option>
-                    ))}
-                  </select>
-                  {formErrors.categoryId && (
-                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      <span>{formErrors.categoryId}</span>
-                    </p>
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Trạng thái hiển thị
-                  </label>
-                  <div className="flex items-center gap-3 pt-1">
-                    <label className="inline-flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.active}
-                        onChange={(e) =>
-                          setFormData({ ...formData, active: e.target.checked })
-                        }
-                        className="w-4 h-4 text-zinc-900 rounded-sm focus:ring-zinc-950 cursor-pointer"
-                      />
-                      <span className="text-sm font-semibold text-slate-700">
-                        {formData.active ? 'Đang mở bán' : 'Tạm ẩn sản phẩm'}
-                      </span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Giá bán & Số lượng tồn kho */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Giá bán (VNĐ) <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    placeholder="Ví dụ: 250000"
-                    value={formData.price}
-                    onChange={(e) =>
-                      setFormData({ ...formData, price: e.target.value })
-                    }
-                    className={`w-full px-3.5 py-2 text-sm bg-slate-50 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all tabular-nums ${
-                      formErrors.price
-                        ? 'border-red-500 focus:ring-red-500/20'
-                        : 'border-slate-300 focus:ring-zinc-950/20 focus:border-zinc-900'
-                    }`}
-                  />
-                  {formErrors.price ? (
-                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      <span>{formErrors.price}</span>
-                    </p>
-                  ) : (
-                    formData.price && (
-                      <p className="text-xs text-slate-500 mt-1 font-semibold tabular-nums">
-                        = {formatVND(formData.price)}
-                      </p>
-                    )
-                  )}
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Số lượng tồn kho <span className="text-red-500">*</span>
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    placeholder="Ví dụ: 100"
-                    value={formData.stockQuantity}
-                    onChange={(e) =>
-                      setFormData({ ...formData, stockQuantity: e.target.value })
-                    }
-                    className={`w-full px-3.5 py-2 text-sm bg-slate-50 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all tabular-nums ${
-                      formErrors.stockQuantity
-                        ? 'border-red-500 focus:ring-red-500/20'
-                        : 'border-slate-300 focus:ring-zinc-950/20 focus:border-zinc-900'
-                    }`}
-                  />
-                  {formErrors.stockQuantity && (
-                    <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      <span>{formErrors.stockQuantity}</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Đường dẫn hình ảnh & Xem trước */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  URL Hình ảnh sản phẩm
-                </label>
-                <div className="flex gap-3 items-start">
-                  <div className="flex-1">
-                    <input
-                      type="url"
-                      placeholder="https://images.unsplash.com/photo-..."
-                      value={formData.imageUrl}
-                      onChange={(e) =>
-                        setFormData({ ...formData, imageUrl: e.target.value })
-                      }
-                      className={`w-full px-3.5 py-2 text-sm bg-slate-50 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all ${
-                        formErrors.imageUrl
-                          ? 'border-red-500 focus:ring-red-500/20'
-                          : 'border-slate-300 focus:ring-zinc-950/20 focus:border-zinc-900'
-                      }`}
-                    />
-                    {formErrors.imageUrl && (
-                      <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        <span>{formErrors.imageUrl}</span>
-                      </p>
-                    )}
-                  </div>
-                  {/* Khung xem trước ảnh */}
-                  <div className="w-12 h-10 rounded-xl bg-slate-100 border border-slate-300 overflow-hidden flex items-center justify-center shrink-0">
-                    {formData.imageUrl ? (
-                      <img
-                        src={formData.imageUrl}
-                        alt="Xem trước"
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          e.currentTarget.onerror = null
-                          e.currentTarget.src =
-                            'https://images.unsplash.com/photo-1560343090-f0409e92791a?w=100&auto=format&fit=crop&q=60'
-                        }}
-                      />
-                    ) : (
-                      <Eye className="w-4 h-4 text-slate-400" />
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Mô tả chi tiết */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Mô tả sản phẩm
-                </label>
-                <textarea
-                  rows={3}
-                  placeholder="Mô tả chất liệu, kiểu dáng, tính năng nổi bật..."
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  className="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-950/20 focus:border-zinc-900 transition-all text-slate-800"
-                />
-              </div>
-
-              {/* Modal Footer Buttons */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={handleCloseModal}
-                  disabled={isSubmitting}
-                  className="px-4 py-2 border border-slate-300 rounded-xl text-sm font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  Hủy bỏ
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="inline-flex items-center gap-2 px-5 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-50 rounded-xl text-sm font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50"
-                >
-                  {isSubmitting && (
-                    <LoadingSpinner size="sm" className="text-white" />
-                  )}
-                  <span>
-                    {isSubmitting
-                      ? 'Đang lưu...'
-                      : editingProduct
-                      ? 'Cập nhật'
-                      : 'Tạo sản phẩm'}
-                  </span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <ProductModal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        product={editingProduct}
+        categories={categories}
+        onSuccess={handleModalSuccess}
+        onError={handleModalError}
+      />
 
       {/* ==================================================================== */}
       {/* 5. Modal Xác nhận Ẩn / Xóa mềm Sản phẩm */}
