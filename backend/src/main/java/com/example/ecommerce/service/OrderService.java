@@ -4,14 +4,21 @@ import com.example.ecommerce.dto.request.CreateOrderRequest;
 import com.example.ecommerce.dto.request.OrderItemRequest;
 import com.example.ecommerce.dto.response.OrderItemResponse;
 import com.example.ecommerce.dto.response.OrderResponse;
+import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
+import org.springframework.security.access.AccessDeniedException;
 import com.example.ecommerce.repository.OrderRepository;
 import com.example.ecommerce.repository.ProductRepository;
 import com.example.ecommerce.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,18 +32,14 @@ import java.util.UUID;
 
 /**
  * Service quản lý đơn hàng (Order Module).
- * Phụ trách: Vũ Đức Huy Hoàng (Thành viên 3 - VDHH)
+ * Người phụ trách: Vũ Đức Huy Hoàng (Thành viên 3 - VDHH)
+ * Người phối hợp: Đặng Thanh Bình [DTB] (Inventory & Payment)
  *
  * Chức năng:
- * - Tạo đơn hàng từ giỏ hàng (createOrder):
- *   + Tính toán đơn giá và tổng tiền tuyệt đối tại Server dựa trên giá sản phẩm trong DB (chống gian lận client).
- *   + Lưu OrderItem snapshot (tên sản phẩm, đơn giá, số lượng, subtotal tại thời điểm mua).
- *   + Khóa bi quan và trừ tồn kho an toàn thông qua InventoryService.
- *   + Khởi tạo bản ghi thanh toán thông qua PaymentService.
- *   + Toàn bộ bọc trong một giao dịch @Transactional duy nhất để đảm bảo tính nhất quán ACID.
- * - Tra cứu lịch sử đơn hàng của người dùng (getMyOrders).
- * - Tra cứu chi tiết đơn hàng (getOrderById, getOrderByOrderCode).
- * - Hủy đơn hàng và hoàn lại tồn kho (cancelOrder).
+ * - Tạo đơn hàng từ giỏ hàng (createOrder) bọc trong 1 @Transactional duy nhất.
+ * - Lấy lịch sử đơn hàng của tôi có phân trang (getMyOrders).
+ * - Lấy chi tiết đơn hàng kèm danh sách món hàng OrderItem (getOrderDetail).
+ * - Hủy đơn hàng và hoàn lại tồn kho qua restoreStockForOrder() (cancelOrder).
  */
 @Service
 @RequiredArgsConstructor
@@ -48,6 +51,9 @@ public class OrderService {
     private final UserRepository userRepository;
     private final InventoryService inventoryService;
     private final PaymentService paymentService;
+
+    private static final int DEFAULT_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 50;
 
     /**
      * Tạo đơn hàng mới từ giỏ hàng.
@@ -134,9 +140,7 @@ public class OrderService {
         // 4. Lưu đơn hàng vào DB để có ID định danh cho Transaction và Payment
         Order savedOrder = orderRepository.save(order);
 
-        // 5. Trừ kho an toàn có khóa bi quan (PESSIMISTIC_WRITE) qua InventoryService
-        // Nếu bất kỳ sản phẩm nào không đủ tồn kho, ngoại lệ BusinessException sẽ được ném
-        // và toàn bộ giao dịch @Transactional được rollback
+        // 5. Trừ kho an toàn có khóa bi quan (PESSIMISTIC_WRITE) qua InventoryService [Đặng Thanh Bình]
         inventoryService.deductStockForOrder(savedOrder);
 
         // 6. Khởi tạo bản ghi thanh toán ban đầu (COD hoặc SIMULATED)
@@ -150,7 +154,34 @@ public class OrderService {
     }
 
     /**
-     * Lấy danh sách lịch sử đơn hàng của người dùng đang đăng nhập.
+     * Lấy danh sách lịch sử đơn hàng của người dùng đang đăng nhập có phân trang.
+     * Phụ trách: Vũ Đức Huy Hoàng (VDHH)
+     *
+     * @param userEmail Email người dùng đăng nhập
+     * @param page Số thứ tự trang (0-based)
+     * @param size Số phần tử mỗi trang
+     * @param sortBy Trường sắp xếp (mặc định createdAt)
+     * @param sortDir Hướng sắp xếp (asc/desc)
+     * @return PageResponse<OrderResponse>
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<OrderResponse> getMyOrders(String userEmail, int page, int size, String sortBy, String sortDir) {
+        log.info("Lấy lịch sử đơn hàng phân trang cho user: {}, page: {}, size: {}", userEmail, page, size);
+        User user = userRepository.findByEmail(userEmail)
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + userEmail));
+
+        int pageIndex = Math.max(0, page);
+        int pageSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+        String validSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "createdAt";
+        Sort.Direction direction = "asc".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Pageable pageable = PageRequest.of(pageIndex, pageSize, Sort.by(direction, validSortBy));
+
+        Page<Order> orderPage = orderRepository.findByUserId(user.getId(), pageable);
+        return PageResponse.from(orderPage, this::mapToOrderResponse);
+    }
+
+    /**
+     * Lấy toàn bộ danh sách lịch sử đơn hàng của người dùng đang đăng nhập (không phân trang).
      */
     @Transactional(readOnly = true)
     public List<OrderResponse> getMyOrders(String userEmail) {
@@ -164,21 +195,36 @@ public class OrderService {
     }
 
     /**
-     * Xem chi tiết đơn hàng theo ID (kiểm tra phân quyền sở hữu).
+     * Lấy chi tiết đơn hàng theo ID kèm danh sách món hàng (OrderItem) và thông tin thanh toán.
+     * Phụ trách: Vũ Đức Huy Hoàng (VDHH)
+     *
+     * @param id ID của đơn hàng
+     * @param userEmail Email người dùng đang đăng nhập
+     * @return OrderResponse thông tin chi tiết đơn hàng kèm OrderItem
      */
     @Transactional(readOnly = true)
-    public OrderResponse getOrderById(Long id, String userEmail) {
-        Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + id));
+    public OrderResponse getOrderDetail(Long id, String userEmail) {
+        log.info("Lấy chi tiết đơn hàng ID: {} cho user: {}", id, userEmail);
+        Order order = orderRepository.findByIdWithItems(id)
+                .orElseGet(() -> orderRepository.findById(id)
+                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + id)));
 
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + userEmail));
 
         if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
-            throw new BusinessException("Bạn không có quyền truy cập thông tin đơn hàng này");
+            throw new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này");
         }
 
         return mapToOrderResponse(order);
+    }
+
+    /**
+     * Alias cho getOrderDetail (tương thích ngược).
+     */
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderById(Long id, String userEmail) {
+        return getOrderDetail(id, userEmail);
     }
 
     /**
@@ -193,7 +239,7 @@ public class OrderService {
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + userEmail));
 
         if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
-            throw new BusinessException("Bạn không có quyền truy cập thông tin đơn hàng này");
+            throw new AccessDeniedException("Bạn không có quyền truy cập thông tin đơn hàng này");
         }
 
         return mapToOrderResponse(order);
@@ -201,30 +247,40 @@ public class OrderService {
 
     /**
      * Hủy đơn hàng và hoàn lại số lượng tồn kho.
-     * Chỉ cho phép hủy khi đơn hàng ở trạng thái PENDING hoặc CONFIRMED.
+     * Phụ trách: Vũ Đức Huy Hoàng (VDHH)
+     * Phối hợp: Đặng Thanh Bình [DTB] - gọi InventoryService.restoreStockForOrder()
+     *
+     * Điều kiện: Chỉ cho phép hủy khi đơn hàng ở trạng thái PENDING hoặc CONFIRMED.
+     *
+     * @param id ID của đơn hàng cần hủy
+     * @param userEmail Email người dùng yêu cầu hủy
+     * @return OrderResponse thông tin đơn hàng sau khi cập nhật trạng thái CANCELLED
      */
     @Transactional(rollbackFor = Exception.class)
     public OrderResponse cancelOrder(Long id, String userEmail) {
         log.info("Yêu cầu hủy đơn hàng ID: {} từ người dùng: {}", id, userEmail);
 
-        Order order = orderRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + id));
+        Order order = orderRepository.findByIdWithItems(id)
+                .orElseGet(() -> orderRepository.findById(id)
+                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + id)));
 
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + userEmail));
 
         if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
-            throw new BusinessException("Bạn không có quyền hủy đơn hàng này");
+            throw new AccessDeniedException("Bạn không có quyền hủy đơn hàng này");
         }
 
+        // Kiểm tra điều kiện: chỉ cho phép hủy khi ở trạng thái PENDING hoặc CONFIRMED
         if (order.getOrderStatus() != OrderStatus.PENDING && order.getOrderStatus() != OrderStatus.CONFIRMED) {
-            throw new BusinessException(String.format("Không thể hủy đơn hàng ở trạng thái '%s'",
+            log.warn("Không thể hủy đơn hàng #{} do đang ở trạng thái {}", id, order.getOrderStatus());
+            throw new BusinessException(String.format("Không thể hủy đơn hàng ở trạng thái '%s'. Chỉ được hủy khi đơn ở trạng thái Chờ xác nhận hoặc Đã xác nhận.",
                     order.getOrderStatus().getDescription()));
         }
 
         order.setOrderStatus(OrderStatus.CANCELLED);
 
-        // Hoàn lại tồn kho và ghi nhật ký ORDER_CANCELLED
+        // Gọi Đặng Thanh Bình [DTB] - restoreStockForOrder() hoàn lại tồn kho và ghi log ORDER_CANCELLED
         inventoryService.restoreStockForOrder(order);
 
         // Hoàn tiền nếu đơn hàng đã được thanh toán
@@ -234,7 +290,7 @@ public class OrderService {
         }
 
         Order updatedOrder = orderRepository.save(order);
-        log.info("Hủy đơn hàng thành công: mã {}, kho đã được hoàn lại", updatedOrder.getOrderCode());
+        log.info("Hủy đơn hàng thành công: mã {}, kho đã được hoàn lại đầy đủ", updatedOrder.getOrderCode());
 
         return mapToOrderResponse(updatedOrder);
     }
@@ -253,7 +309,7 @@ public class OrderService {
     }
 
     /**
-     * Chuyển đổi Order entity sang OrderResponse DTO.
+     * Chuyển đổi Order entity sang OrderResponse DTO (bao gồm danh sách OrderItem snapshot).
      */
     public OrderResponse mapToOrderResponse(Order order) {
         Payment payment = order.getPayment();
@@ -310,4 +366,3 @@ public class OrderService {
                 .build();
     }
 }
-

@@ -203,7 +203,7 @@ export const ProfilePage = () => {
         <div className="md:col-span-4 space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 text-center">
             {/* Avatar */}
-            <div className="w-20 h-20 rounded-2xl bg-orange-600 text-white font-extrabold text-2xl flex items-center justify-center mx-auto mb-4 shadow-2xs">
+            <div className="w-20 h-20 rounded-2xl bg-zinc-900 text-zinc-50 font-bold text-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
               {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
             </div>
 
@@ -256,7 +256,7 @@ export const ProfilePage = () => {
               onClick={() => setActiveTab('profile')}
               className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 cursor-pointer ${
                 activeTab === 'profile'
-                  ? 'bg-orange-50 text-orange-600 shadow-2xs'
+                  ? 'bg-zinc-100 text-zinc-950 font-medium'
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -267,7 +267,7 @@ export const ProfilePage = () => {
               onClick={() => setActiveTab('password')}
               className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 cursor-pointer ${
                 activeTab === 'password'
-                  ? 'bg-orange-50 text-orange-600 shadow-2xs'
+                  ? 'bg-zinc-100 text-zinc-950 font-medium'
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -338,7 +338,7 @@ export const ProfilePage = () => {
                       className={`w-full pl-10 pr-4 py-2.5 text-xs bg-slate-50/70 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all ${
                         profileErrors.fullName
                           ? 'border-red-300 focus:ring-red-400 text-red-900 bg-red-50/20'
-                          : 'border-slate-200 focus:ring-orange-500/20 focus:border-orange-500 text-slate-800'
+                          : 'border-slate-200 focus:ring-zinc-950/20 focus:border-zinc-900 text-slate-800'
                       }`}
                     />
                   </div>
@@ -366,7 +366,7 @@ export const ProfilePage = () => {
                       className={`w-full pl-10 pr-4 py-2.5 text-xs bg-slate-50/70 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all ${
                         profileErrors.phone
                           ? 'border-red-300 focus:ring-red-400 text-red-900 bg-red-50/20'
-                          : 'border-slate-200 focus:ring-orange-500/20 focus:border-orange-500 text-slate-800'
+                          : 'border-slate-200 focus:ring-zinc-950/20 focus:border-zinc-900 text-slate-800'
                       }`}
                     />
                   </div>
@@ -391,7 +391,7 @@ export const ProfilePage = () => {
                       value={profileData.address}
                       onChange={handleProfileChange}
                       placeholder="Nhập số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành..."
-                      className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-50/70 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 text-slate-800 transition-all resize-none"
+                      className="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-50/70 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-950/20 focus:border-zinc-900 text-slate-800 transition-all resize-none"
                     />
                   </div>
                 </div>
@@ -400,7 +400,7 @@ export const ProfilePage = () => {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="bg-orange-600 hover:bg-orange-700 text-white font-bold py-2.5 px-6 rounded-xl shadow-2xs hover:shadow-xs active:scale-[0.99] transition-all text-xs flex items-center gap-2 cursor-pointer disabled:opacity-60"
+                    className="btn-primary text-xs flex items-center gap-2"
                   >
                     {isLoading ? (
                       <>
@@ -460,7 +460,7 @@ export const ProfilePage = () => {
                       className={`w-full pl-10 pr-11 py-2.5 text-xs bg-slate-50/70 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all ${
                         passwordErrors.currentPassword
                           ? 'border-red-300 focus:ring-red-400 text-red-900 bg-red-50/20'
-                          : 'border-slate-200 focus:ring-orange-500/20 focus:border-orange-500 text-slate-800'
+                          : 'border-slate-200 focus:ring-zinc-950/20 focus:border-zinc-900 text-slate-800'
                       }`}
                     />
                     <button
@@ -497,7 +497,7 @@ export const ProfilePage = () => {
                       className={`w-full pl-10 pr-11 py-2.5 text-xs bg-slate-50/70 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all ${
                         passwordErrors.newPassword
                           ? 'border-red-300 focus:ring-red-400 text-red-900 bg-red-50/20'
-                          : 'border-slate-200 focus:ring-orange-500/20 focus:border-orange-500 text-slate-800'
+                          : 'border-slate-200 focus:ring-zinc-950/20 focus:border-zinc-900 text-slate-800'
                       }`}
                     />
                     <button
@@ -534,7 +534,7 @@ export const ProfilePage = () => {
                       className={`w-full pl-10 pr-11 py-2.5 text-xs bg-slate-50/70 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all ${
                         passwordErrors.confirmPassword
                           ? 'border-red-300 focus:ring-red-400 text-red-900 bg-red-50/20'
-                          : 'border-slate-200 focus:ring-orange-500/20 focus:border-orange-500 text-slate-800'
+                          : 'border-slate-200 focus:ring-zinc-950/20 focus:border-zinc-900 text-slate-800'
                       }`}
                     />
                     <button
