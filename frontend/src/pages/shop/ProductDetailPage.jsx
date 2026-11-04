@@ -15,12 +15,14 @@ import {
 } from 'lucide-react'
 import productService from '../../services/productService'
 import { useCartStore } from '../../store/useCartStore'
+import { useAuthStore } from '../../store/useAuthStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 
 export const ProductDetailPage = () => {
   const { id } = useParams()
   const navigate = useNavigate()
   const addToCart = useCartStore((state) => state.addToCart)
+  const { isAuthenticated } = useAuthStore()
 
   const [product, setProduct] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -57,15 +59,51 @@ export const ProductDetailPage = () => {
   }
 
   const handleAddToCart = async () => {
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: { pathname: `/products/${id}` },
+          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để thêm sản phẩm vào giỏ hàng.',
+        },
+      })
+      return
+    }
     if (!product || product.stockQuantity <= 0) return
-    await addToCart(product, quantity)
+    const res = await addToCart(product, quantity)
+    if (res?.requireLogin) {
+      navigate('/login', {
+        state: {
+          from: { pathname: `/products/${id}` },
+          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để thêm sản phẩm vào giỏ hàng.',
+        },
+      })
+      return
+    }
     setCartNotice(`Đã thêm ${quantity} sản phẩm vào giỏ hàng thành công!`)
     setTimeout(() => setCartNotice(null), 5000)
   }
 
   const handleBuyNow = async () => {
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: { pathname: `/products/${id}` },
+          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để mua hàng.',
+        },
+      })
+      return
+    }
     if (!product || product.stockQuantity <= 0) return
-    await addToCart(product, quantity)
+    const res = await addToCart(product, quantity)
+    if (res?.requireLogin) {
+      navigate('/login', {
+        state: {
+          from: { pathname: `/products/${id}` },
+          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để mua hàng.',
+        },
+      })
+      return
+    }
     navigate('/checkout')
   }
 

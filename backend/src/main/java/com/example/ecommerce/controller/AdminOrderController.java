@@ -19,7 +19,7 @@ import java.util.List;
  * Phụ trách: Đỗ Hoàng Anh [DHA] - TSK-D08-DHA
  */
 @RestController
-@RequestMapping("/api/v1/admin/orders")
+@RequestMapping({"/api/v1/admin/orders", "/admin/orders"})
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminOrderController {

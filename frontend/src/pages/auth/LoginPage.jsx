@@ -8,6 +8,7 @@ import {
   AlertCircle,
   CheckCircle2,
   ShieldAlert,
+  Info,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -93,6 +94,22 @@ export const LoginPage = () => {
               Nhập email và mật khẩu để truy cập tài khoản của bạn
             </p>
           </div>
+
+          {/* Require Login / Cart Prompt Banner */}
+          {location.state?.message && (
+            <div className="p-3 rounded-md bg-zinc-100 border border-zinc-200 text-zinc-800 text-xs flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <Info className="w-4 h-4 text-zinc-600 shrink-0" />
+                <span className="font-medium">{location.state.message}</span>
+              </div>
+              <Link
+                to="/register"
+                className="text-xs font-semibold text-zinc-950 underline underline-offset-2 shrink-0 hover:text-zinc-700"
+              >
+                Đăng ký ngay &rarr;
+              </Link>
+            </div>
+          )}
 
           {/* Success Banner */}
           {location.state?.successMessage && (
