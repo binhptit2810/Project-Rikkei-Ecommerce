@@ -7,6 +7,7 @@ import com.example.ecommerce.dto.response.OrderResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
+import com.example.ecommerce.exception.ConflictException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import org.springframework.security.access.AccessDeniedException;
 import com.example.ecommerce.repository.OrderRepository;
@@ -18,7 +19,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,7 +53,7 @@ public class OrderService {
     private final PaymentService paymentService;
 
     private static final int DEFAULT_PAGE_SIZE = 10;
-    private static final int MAX_PAGE_SIZE = 50;
+    private static final int MAX_PAGE_SIZE = 100;
 
     /**
      * Tạo đơn hàng mới từ giỏ hàng.
@@ -159,7 +159,7 @@ public class OrderService {
      *
      * @param userEmail Email người dùng đăng nhập
      * @param page Số thứ tự trang (0-based)
-     * @param size Số phần tử mỗi trang
+     * @param size Số phần tử mỗi trang (tối đa 100)
      * @param sortBy Trường sắp xếp (mặc định createdAt)
      * @param sortDir Hướng sắp xếp (asc/desc)
      * @return PageResponse<OrderResponse>
@@ -251,6 +251,9 @@ public class OrderService {
      * Phối hợp: Đặng Thanh Bình [DTB] - gọi InventoryService.restoreStockForOrder()
      *
      * Điều kiện: Chỉ cho phép hủy khi đơn hàng ở trạng thái PENDING hoặc CONFIRMED.
+     * Nếu đơn ở trạng thái khác (PROCESSING, SHIPPING, COMPLETED, CANCELLED): ném ConflictException (HTTP 409).
+     * Áp dụng khóa bi quan PESSIMISTIC_WRITE để chống Race Condition khi có 2 request đồng thời hủy cùng 1 đơn.
+     * Tự động hoàn tiền (chuyển sang REFUNDED) nếu đơn trước đó đã thanh toán thành công (PAID).
      *
      * @param id ID của đơn hàng cần hủy
      * @param userEmail Email người dùng yêu cầu hủy
@@ -260,9 +263,11 @@ public class OrderService {
     public OrderResponse cancelOrder(Long id, String userEmail) {
         log.info("Yêu cầu hủy đơn hàng ID: {} từ người dùng: {}", id, userEmail);
 
-        Order order = orderRepository.findByIdWithItems(id)
-                .orElseGet(() -> orderRepository.findById(id)
-                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + id)));
+        // Khóa bi quan chống Race Condition khi có 2 request đồng thời hủy cùng đơn
+        Order order = orderRepository.findByIdForUpdate(id)
+                .or(() -> orderRepository.findByIdWithItems(id))
+                .or(() -> orderRepository.findById(id))
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + id));
 
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + userEmail));
@@ -272,9 +277,10 @@ public class OrderService {
         }
 
         // Kiểm tra điều kiện: chỉ cho phép hủy khi ở trạng thái PENDING hoặc CONFIRMED
+        // Ném ConflictException (HTTP 409) nếu đơn hàng đã được giao, hoàn thành, đang xử lý hoặc đã hủy trước đó
         if (order.getOrderStatus() != OrderStatus.PENDING && order.getOrderStatus() != OrderStatus.CONFIRMED) {
             log.warn("Không thể hủy đơn hàng #{} do đang ở trạng thái {}", id, order.getOrderStatus());
-            throw new BusinessException(String.format("Không thể hủy đơn hàng ở trạng thái '%s'. Chỉ được hủy khi đơn ở trạng thái Chờ xác nhận hoặc Đã xác nhận.",
+            throw new ConflictException(String.format("Không thể hủy đơn hàng ở trạng thái '%s'. Chỉ được hủy khi đơn ở trạng thái Chờ xác nhận hoặc Đã xác nhận.",
                     order.getOrderStatus().getDescription()));
         }
 
@@ -283,10 +289,18 @@ public class OrderService {
         // Gọi Đặng Thanh Bình [DTB] - restoreStockForOrder() hoàn lại tồn kho và ghi log ORDER_CANCELLED
         inventoryService.restoreStockForOrder(order);
 
-        // Hoàn tiền nếu đơn hàng đã được thanh toán
-        if (order.getPayment() != null && order.getPayment().getStatus() == PaymentStatus.PAID) {
-            order.getPayment().setStatus(PaymentStatus.REFUNDED);
+        // Tự động chuyển trạng thái thanh toán sang REFUNDED nếu đơn hàng trước đó đã thanh toán
+        if (order.getPaymentStatus() == PaymentStatus.PAID ||
+                (order.getPayment() != null && order.getPayment().getStatus() == PaymentStatus.PAID)) {
             order.setPaymentStatus(PaymentStatus.REFUNDED);
+            if (order.getPayment() != null) {
+                order.getPayment().setStatus(PaymentStatus.REFUNDED);
+                order.getPayment().setTransactionNote(
+                        (order.getPayment().getTransactionNote() != null ? order.getPayment().getTransactionNote() + " - " : "")
+                                + "Đã hoàn tiền do hủy đơn hàng " + order.getOrderCode()
+                );
+            }
+            log.info("Đã tự động chuyển trạng thái thanh toán đơn #{} sang REFUNDED", order.getOrderCode());
         }
 
         Order updatedOrder = orderRepository.save(order);
@@ -328,6 +342,10 @@ public class OrderService {
                 ? order.getItems().stream().map(this::mapToOrderItemResponse).toList()
                 : List.of();
 
+        int itemCount = itemResponses != null
+                ? itemResponses.stream().mapToInt(i -> i.getQuantity() != null ? i.getQuantity() : 0).sum()
+                : 0;
+
         return OrderResponse.builder()
                 .id(order.getId())
                 .orderCode(order.getOrderCode())
@@ -345,6 +363,7 @@ public class OrderService {
                 .paymentMethodDescription(paymentMethodDesc)
                 .transactionCode(transactionCode)
                 .note(order.getNote())
+                .itemCount(itemCount)
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())
                 .items(itemResponses)

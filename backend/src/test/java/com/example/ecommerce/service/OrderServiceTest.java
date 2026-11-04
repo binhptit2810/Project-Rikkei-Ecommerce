@@ -6,6 +6,7 @@ import com.example.ecommerce.dto.response.OrderResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
+import com.example.ecommerce.exception.ConflictException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import org.springframework.security.access.AccessDeniedException;
 import com.example.ecommerce.repository.OrderRepository;
@@ -152,6 +153,7 @@ class OrderServiceTest {
         assertThat(response.getPaymentMethod()).isEqualTo(PaymentMethod.COD);
         assertThat(response.getTransactionCode()).isEqualTo("PAY-20261102-12345678");
         assertThat(response.getItems()).hasSize(2);
+        assertThat(response.getItemCount()).isEqualTo(3);
 
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(orderCaptor.capture());
@@ -263,6 +265,35 @@ class OrderServiceTest {
         assertThat(response.getTotalElements()).isEqualTo(1);
     }
 
+  @Test
+@DisplayName("Customer chưa có đơn hàng: trả về PageResponse rỗng hợp lệ")
+void getMyOrders_EmptyList_ReturnsValidEmptyPage() {
+
+    Page<Order> emptyPage = Page.empty(
+            org.springframework.data.domain.PageRequest.of(0, 10)
+    );
+
+    when(userRepository.findByEmail("customer@example.com"))
+            .thenReturn(Optional.of(testUser));
+
+    when(orderRepository.findByUserId(eq(1L), any(Pageable.class)))
+            .thenReturn(emptyPage);
+
+    PageResponse<OrderResponse> response =
+            orderService.getMyOrders(
+                    "customer@example.com",
+                    0,
+                    10,
+                    "createdAt",
+                    "desc"
+            );
+
+    assertThat(response).isNotNull();
+    assertThat(response.getContent()).isEmpty();
+    assertThat(response.getTotalElements()).isEqualTo(0);
+    assertThat(response.getTotalPages()).isEqualTo(0);
+}
+
     @Test
     @DisplayName("Lấy chi tiết đơn hàng (getOrderDetail) kèm danh sách món hàng thành công")
     void getOrderDetail_Success_ReturnsDetailWithItems() {
@@ -292,6 +323,7 @@ class OrderServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getId()).isEqualTo(1L);
         assertThat(response.getItems()).hasSize(1);
+        assertThat(response.getItemCount()).isEqualTo(2);
         assertThat(response.getItems().get(0).getProductName()).isEqualTo("Áo Thun Nam Cotton");
         assertThat(response.getItems().get(0).getQuantity()).isEqualTo(2);
         assertThat(response.getItems().get(0).getSubtotal()).isEqualByComparingTo(BigDecimal.valueOf(500000));
@@ -308,7 +340,7 @@ class OrderServiceTest {
                 .items(new ArrayList<>())
                 .build();
 
-        when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(existingOrder));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
         when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -330,7 +362,7 @@ class OrderServiceTest {
                 .items(new ArrayList<>())
                 .build();
 
-        when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(existingOrder));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
         when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -342,7 +374,42 @@ class OrderServiceTest {
     }
 
     @Test
-    @DisplayName("Hủy đơn hàng thất bại khi trạng thái là PROCESSING (không cho phép hủy)")
+    @DisplayName("Tự động chuyển trạng thái thanh toán sang REFUNDED khi đơn hàng đã thanh toán (PAID)")
+    void cancelOrder_Success_AutoRefundsPayment_WhenPaid() {
+        Payment payment = Payment.builder()
+                .id(50L)
+                .status(PaymentStatus.PAID)
+                .paymentMethod(PaymentMethod.SIMULATED)
+                .amount(BigDecimal.valueOf(500000))
+                .build();
+
+        Order existingOrder = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-111111")
+                .user(testUser)
+                .orderStatus(OrderStatus.CONFIRMED)
+                .paymentStatus(PaymentStatus.PAID)
+                .payment(payment)
+                .items(new ArrayList<>())
+                .build();
+        payment.setOrder(existingOrder);
+
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse result = orderService.cancelOrder(1L, "customer@example.com");
+
+        assertThat(result.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(result.getPaymentStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(existingOrder.getPayment().getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        assertThat(existingOrder.getPayment().getTransactionNote()).contains("Đã hoàn tiền do hủy đơn hàng");
+        verify(inventoryService).restoreStockForOrder(existingOrder);
+        verify(orderRepository).save(existingOrder);
+    }
+
+    @Test
+    @DisplayName("Hủy đơn hàng thất bại với ConflictException (409) khi trạng thái là PROCESSING (không cho phép hủy)")
     void cancelOrder_ThrowsException_WhenProcessing() {
         Order existingOrder = Order.builder()
                 .id(1L)
@@ -351,18 +418,18 @@ class OrderServiceTest {
                 .orderStatus(OrderStatus.PROCESSING)
                 .build();
 
-        when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(existingOrder));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
         when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
 
         assertThatThrownBy(() -> orderService.cancelOrder(1L, "customer@example.com"))
-                .isInstanceOf(BusinessException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Không thể hủy đơn hàng ở trạng thái 'Đang xử lý'");
 
         verify(inventoryService, never()).restoreStockForOrder(any());
     }
 
     @Test
-    @DisplayName("Hủy đơn hàng thất bại khi trạng thái đã SHIPPING")
+    @DisplayName("Hủy đơn hàng thất bại với ConflictException (409) khi trạng thái đã SHIPPING")
     void cancelOrder_ThrowsException_WhenShipping() {
         Order existingOrder = Order.builder()
                 .id(1L)
@@ -371,14 +438,77 @@ class OrderServiceTest {
                 .orderStatus(OrderStatus.SHIPPING)
                 .build();
 
-        when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(existingOrder));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
         when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
 
         assertThatThrownBy(() -> orderService.cancelOrder(1L, "customer@example.com"))
-                .isInstanceOf(BusinessException.class)
+                .isInstanceOf(ConflictException.class)
                 .hasMessageContaining("Không thể hủy đơn hàng ở trạng thái 'Đang giao hàng'");
 
         verify(inventoryService, never()).restoreStockForOrder(any());
+    }
+
+    @Test
+    @DisplayName("Hủy đơn hàng thất bại với ConflictException (409) khi trạng thái đã COMPLETED")
+    void cancelOrder_ThrowsException_WhenCompleted() {
+        Order existingOrder = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-111111")
+                .user(testUser)
+                .orderStatus(OrderStatus.COMPLETED)
+                .build();
+
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
+
+        assertThatThrownBy(() -> orderService.cancelOrder(1L, "customer@example.com"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Không thể hủy đơn hàng ở trạng thái 'Đã hoàn thành'");
+
+        verify(inventoryService, never()).restoreStockForOrder(any());
+    }
+
+    @Test
+    @DisplayName("Hủy đơn hàng CANCELLED lần nữa: ném ConflictException (409), không hoàn kho lần 2")
+    void cancelOrder_ThrowsConflict_WhenAlreadyCancelled_DoesNotRestoreStockAgain() {
+        Order existingOrder = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-111111")
+                .user(testUser)
+                .orderStatus(OrderStatus.CANCELLED)
+                .build();
+
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
+
+        assertThatThrownBy(() -> orderService.cancelOrder(1L, "customer@example.com"))
+                .isInstanceOf(ConflictException.class)
+                .hasMessageContaining("Không thể hủy đơn hàng ở trạng thái 'Đã hủy'");
+
+        verify(inventoryService, never()).restoreStockForOrder(any());
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Hoàn kho thất bại khi hủy: ném ngoại lệ và rollback transaction")
+    void cancelOrder_Rollback_WhenInventoryRestoreFails() {
+        Order existingOrder = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-111111")
+                .user(testUser)
+                .orderStatus(OrderStatus.PENDING)
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
+        doThrow(new BusinessException("Lỗi dịch vụ tồn kho")).when(inventoryService).restoreStockForOrder(existingOrder);
+
+        assertThatThrownBy(() -> orderService.cancelOrder(1L, "customer@example.com"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Lỗi dịch vụ tồn kho");
+
+        verify(orderRepository, never()).save(any());
     }
 
     @Test
@@ -454,7 +584,7 @@ class OrderServiceTest {
                 .orderStatus(OrderStatus.PENDING)
                 .build();
 
-        when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(existingOrder));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
         when(userRepository.findByEmail("other@example.com")).thenReturn(Optional.of(otherUser));
 
         assertThatThrownBy(() -> orderService.cancelOrder(1L, "other@example.com"))
@@ -477,7 +607,7 @@ class OrderServiceTest {
                 .items(new ArrayList<>())
                 .build();
 
-        when(orderRepository.findByIdWithItems(1L)).thenReturn(Optional.of(existingOrder));
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
         when(userRepository.findByEmail("admin@example.com")).thenReturn(Optional.of(adminUser));
         when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

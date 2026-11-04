@@ -2,6 +2,7 @@ package com.example.ecommerce.entity;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.BatchSize;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -62,6 +63,7 @@ public class Order {
 
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
+    @BatchSize(size = 30)
     private List<OrderItem> items = new ArrayList<>();
 
     @OneToOne(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true)

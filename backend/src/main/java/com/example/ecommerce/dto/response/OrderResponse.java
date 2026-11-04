@@ -34,7 +34,15 @@ public class OrderResponse {
     private String paymentMethodDescription;
     private String transactionCode;
     private String note;
+    private Integer itemCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
     private List<OrderItemResponse> items;
+
+    /**
+     * Alias trả về trạng thái đơn hàng (tương thích cho client dùng field "status").
+     */
+    public OrderStatus getStatus() {
+        return orderStatus;
+    }
 }

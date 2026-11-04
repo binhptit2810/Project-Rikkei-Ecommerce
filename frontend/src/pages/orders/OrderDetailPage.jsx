@@ -126,6 +126,19 @@ export const OrderDetailPage = () => {
         setPaymentInfo(null)
       }
     } catch (err) {
+      if (err.response?.status === 401) {
+        showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error')
+        navigate('/login')
+        return
+      }
+      if (err.response?.status === 403) {
+        setError('Bạn không có quyền truy cập thông tin đơn hàng này.')
+        return
+      }
+      if (err.response?.status === 404) {
+        setError('Đơn hàng không tồn tại hoặc đã bị xóa.')
+        return
+      }
       const msg =
         err.response?.data?.message ||
         err.message ||
@@ -134,7 +147,7 @@ export const OrderDetailPage = () => {
     } finally {
       setLoading(false)
     }
-  }, [id])
+  }, [id, navigate])
 
   useEffect(() => {
     fetchOrderDetail()
@@ -150,7 +163,7 @@ export const OrderDetailPage = () => {
     }
   }
 
-  // Xử lý hủy đơn hàng
+  // Xử lý hủy đơn hàng với đầy đủ xử lý các mã lỗi 401, 403, 404, 409
   const handleConfirmCancel = async () => {
     if (!order?.id) return
     setCancelling(true)
@@ -164,20 +177,39 @@ export const OrderDetailPage = () => {
         orderStatus: updatedOrder.orderStatus || 'CANCELLED',
         orderStatusDescription:
           updatedOrder.orderStatusDescription || 'Đã hủy',
+        paymentStatus: updatedOrder.paymentStatus || prev.paymentStatus,
+        paymentStatusDescription:
+          updatedOrder.paymentStatusDescription || prev.paymentStatusDescription,
         updatedAt: updatedOrder.updatedAt || new Date().toISOString(),
       }))
 
       showToast(
-        `Đã hủy đơn hàng #${order.orderCode} thành công! Số lượng sản phẩm đã được hoàn lại vào kho.`,
+        `Đã hủy đơn hàng #${order.orderCode} thành công! Số lượng sản phẩm đã được tự động hoàn lại vào kho.`,
         'success'
       )
       setCancelModalOpen(false)
     } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        'Không thể hủy đơn hàng. Vui lòng thử lại.'
-      showToast(msg, 'error')
+      if (err.response?.status === 409) {
+        showToast(
+          err.response?.data?.message ||
+            'Không thể hủy đơn hàng do trạng thái đơn hàng đã thay đổi.',
+          'error'
+        )
+        fetchOrderDetail()
+      } else if (err.response?.status === 403) {
+        showToast('Bạn không có quyền hủy đơn hàng này.', 'error')
+      } else if (err.response?.status === 404) {
+        showToast('Đơn hàng không tồn tại.', 'error')
+      } else if (err.response?.status === 401) {
+        showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error')
+        navigate('/login')
+      } else {
+        const msg =
+          err.response?.data?.message ||
+          err.message ||
+          'Không thể hủy đơn hàng. Vui lòng thử lại.'
+        showToast(msg, 'error')
+      }
     } finally {
       setCancelling(false)
     }
@@ -233,6 +265,12 @@ export const OrderDetailPage = () => {
                 {toast.message}
               </p>
             </div>
+            <button
+              onClick={() => setToast(null)}
+              className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
@@ -320,7 +358,7 @@ export const OrderDetailPage = () => {
             </div>
             <div>
               <h3 className="text-base font-bold text-slate-900">
-                Không tìm thấy đơn hàng
+                Không thể tải đơn hàng
               </h3>
               <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
                 {error || 'Đơn hàng không tồn tại hoặc bạn không có quyền truy cập.'}
@@ -662,7 +700,7 @@ export const OrderDetailPage = () => {
 
                     {paymentInfo?.paidAt && (
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-500">Thời gian trả lời</span>
+                        <span className="text-slate-500">Thời gian thanh toán</span>
                         <span className="font-semibold text-slate-700">
                           {formatDateTime(paymentInfo.paidAt)}
                         </span>
