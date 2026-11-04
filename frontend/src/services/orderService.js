@@ -2,7 +2,7 @@ import apiClient from './apiClient'
 
 /**
  * Service quản lý Đơn hàng (Order Module).
- * Phụ trách: Vũ Đức Huy Hoàng (Thành viên 3 - VDHH)
+ * Phụ trách: Vũ Đức Huy Hoàng (Thành viên 3 - VDHH) & Đỗ Hoàng Anh [DHA] (TSK-D08-DHA)
  */
 export const orderService = {
   /**
@@ -18,7 +18,7 @@ export const orderService = {
 
   /**
    * Lấy danh sách lịch sử đơn hàng của người dùng hiện tại
-   * @param {Object} [params={}]
+   * @param {Object} [params={}] { page, size, sortBy, sortDir }
    */
   getMyOrders: async (params = {}) => {
     const response = await apiClient.get('/orders/my', { params })
@@ -35,11 +35,47 @@ export const orderService = {
   },
 
   /**
-   * Hủy đơn hàng (khi còn ở trạng thái PENDING hoặc CONFIRMED)
+   * Hủy đơn hàng (khi còn ở trạng thái PENDING hoặc CONFIRMED) kèm lý do hủy (note/reason)
+   * @param {number|string} id ID đơn hàng
+   * @param {string|Object} [reasonOrData] Chuỗi lý do hủy hoặc object { reason: string }
+   */
+  cancelOrder: async (id, reasonOrData) => {
+    const payload =
+      typeof reasonOrData === 'string'
+        ? { reason: reasonOrData }
+        : reasonOrData || {}
+    const response = await apiClient.patch(`/orders/${id}/cancel`, payload)
+    return response.data
+  },
+
+  // ================= ADMIN APIS =================
+
+  /**
+   * Lấy danh sách toàn bộ đơn hàng trong hệ thống (dành cho Admin)
+   * @param {Object} [params={}] { page, size, status, search, sortBy, sortDir }
+   */
+  getAdminOrders: async (params = {}) => {
+    const response = await apiClient.get('/admin/orders', { params })
+    return response.data
+  },
+
+  /**
+   * Lấy chi tiết đơn hàng dành cho Admin
    * @param {number|string} id
    */
-  cancelOrder: async (id) => {
-    const response = await apiClient.patch(`/orders/${id}/cancel`)
+  getAdminOrderById: async (id) => {
+    const response = await apiClient.get(`/admin/orders/${id}`)
+    return response.data
+  },
+
+  /**
+   * Cập nhật trạng thái đơn hàng (dành cho Admin)
+   * Quy trình chuẩn: PENDING → CONFIRMED → PROCESSING → SHIPPING → COMPLETED / CANCELLED
+   * @param {number|string} id
+   * @param {string} status Trạng thái mới (CONFIRMED, PROCESSING, SHIPPING, COMPLETED, CANCELLED)
+   */
+  updateAdminOrderStatus: async (id, status) => {
+    const response = await apiClient.patch(`/admin/orders/${id}/status`, { status })
     return response.data
   },
 }

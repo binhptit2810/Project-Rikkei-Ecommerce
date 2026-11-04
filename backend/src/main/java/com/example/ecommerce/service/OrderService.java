@@ -24,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,14 +33,15 @@ import java.util.UUID;
 
 /**
  * Service quản lý đơn hàng (Order Module).
- * Người phụ trách: Vũ Đức Huy Hoàng (Thành viên 3 - VDHH)
- * Người phối hợp: Đặng Thanh Bình [DTB] (Inventory & Payment)
+ * Phụ trách: Vũ Đức Huy Hoàng (Thành viên 3 - VDHH)
+ * Phối hợp: Đặng Thanh Bình [DTB] (Inventory & Payment)
  *
  * Chức năng:
  * - Tạo đơn hàng từ giỏ hàng (createOrder) bọc trong 1 @Transactional duy nhất.
  * - Lấy lịch sử đơn hàng của tôi có phân trang (getMyOrders).
  * - Lấy chi tiết đơn hàng kèm danh sách món hàng OrderItem (getOrderDetail).
  * - Hủy đơn hàng và hoàn lại tồn kho qua restoreStockForOrder() (cancelOrder).
+ * - Quản trị viên lấy danh sách đơn hàng hệ thống và cập nhật trạng thái (updateOrderStatus).
  */
 @Service
 @RequiredArgsConstructor
@@ -156,13 +158,6 @@ public class OrderService {
     /**
      * Lấy danh sách lịch sử đơn hàng của người dùng đang đăng nhập có phân trang.
      * Phụ trách: Vũ Đức Huy Hoàng (VDHH)
-     *
-     * @param userEmail Email người dùng đăng nhập
-     * @param page Số thứ tự trang (0-based)
-     * @param size Số phần tử mỗi trang (tối đa 100)
-     * @param sortBy Trường sắp xếp (mặc định createdAt)
-     * @param sortDir Hướng sắp xếp (asc/desc)
-     * @return PageResponse<OrderResponse>
      */
     @Transactional(readOnly = true)
     public PageResponse<OrderResponse> getMyOrders(String userEmail, int page, int size, String sortBy, String sortDir) {
@@ -196,11 +191,6 @@ public class OrderService {
 
     /**
      * Lấy chi tiết đơn hàng theo ID kèm danh sách món hàng (OrderItem) và thông tin thanh toán.
-     * Phụ trách: Vũ Đức Huy Hoàng (VDHH)
-     *
-     * @param id ID của đơn hàng
-     * @param userEmail Email người dùng đang đăng nhập
-     * @return OrderResponse thông tin chi tiết đơn hàng kèm OrderItem
      */
     @Transactional(readOnly = true)
     public OrderResponse getOrderDetail(Long id, String userEmail) {
@@ -246,8 +236,15 @@ public class OrderService {
     }
 
     /**
-     * Hủy đơn hàng và hoàn lại số lượng tồn kho.
-     * Phụ trách: Vũ Đức Huy Hoàng (VDHH)
+     * Hủy đơn hàng và hoàn lại số lượng tồn kho (không kèm lý do).
+     */
+    public OrderResponse cancelOrder(Long id, String userEmail) {
+        return cancelOrder(id, userEmail, null);
+    }
+
+    /**
+     * Hủy đơn hàng và hoàn lại số lượng tồn kho kèm lý do hủy.
+     * Phụ trách: Vũ Đức Huy Hoàng (VDHH) & Hoàng Anh [DHA]
      * Phối hợp: Đặng Thanh Bình [DTB] - gọi InventoryService.restoreStockForOrder()
      *
      * Điều kiện: Chỉ cho phép hủy khi đơn hàng ở trạng thái PENDING hoặc CONFIRMED.
@@ -257,11 +254,12 @@ public class OrderService {
      *
      * @param id ID của đơn hàng cần hủy
      * @param userEmail Email người dùng yêu cầu hủy
+     * @param reason Lý do hủy đơn hàng từ người dùng
      * @return OrderResponse thông tin đơn hàng sau khi cập nhật trạng thái CANCELLED
      */
     @Transactional(rollbackFor = Exception.class)
-    public OrderResponse cancelOrder(Long id, String userEmail) {
-        log.info("Yêu cầu hủy đơn hàng ID: {} từ người dùng: {}", id, userEmail);
+    public OrderResponse cancelOrder(Long id, String userEmail, String reason) {
+        log.info("Yêu cầu hủy đơn hàng ID: {} từ người dùng: {}, lý do: {}", id, userEmail, reason);
 
         // Khóa bi quan chống Race Condition khi có 2 request đồng thời hủy cùng đơn
         Order order = orderRepository.findByIdForUpdate(id)
@@ -277,7 +275,6 @@ public class OrderService {
         }
 
         // Kiểm tra điều kiện: chỉ cho phép hủy khi ở trạng thái PENDING hoặc CONFIRMED
-        // Ném ConflictException (HTTP 409) nếu đơn hàng đã được giao, hoàn thành, đang xử lý hoặc đã hủy trước đó
         if (order.getOrderStatus() != OrderStatus.PENDING && order.getOrderStatus() != OrderStatus.CONFIRMED) {
             log.warn("Không thể hủy đơn hàng #{} do đang ở trạng thái {}", id, order.getOrderStatus());
             throw new ConflictException(String.format("Không thể hủy đơn hàng ở trạng thái '%s'. Chỉ được hủy khi đơn ở trạng thái Chờ xác nhận hoặc Đã xác nhận.",
@@ -285,6 +282,17 @@ public class OrderService {
         }
 
         order.setOrderStatus(OrderStatus.CANCELLED);
+
+        // Cập nhật lý do hủy vào ghi chú đơn hàng nếu có
+        if (reason != null && !reason.trim().isEmpty()) {
+            String cleanReason = reason.trim();
+            String existingNote = order.getNote();
+            if (existingNote != null && !existingNote.isEmpty()) {
+                order.setNote(existingNote + " [Lý do hủy: " + cleanReason + "]");
+            } else {
+                order.setNote("Lý do hủy: " + cleanReason);
+            }
+        }
 
         // Gọi Đặng Thanh Bình [DTB] - restoreStockForOrder() hoàn lại tồn kho và ghi log ORDER_CANCELLED
         inventoryService.restoreStockForOrder(order);
@@ -307,6 +315,135 @@ public class OrderService {
         log.info("Hủy đơn hàng thành công: mã {}, kho đã được hoàn lại đầy đủ", updatedOrder.getOrderCode());
 
         return mapToOrderResponse(updatedOrder);
+    }
+
+    /**
+     * Dành cho Admin: Lấy danh sách toàn bộ đơn hàng trong hệ thống có phân trang, tìm kiếm và lọc.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<OrderResponse> getAdminOrders(int page, int size, OrderStatus status, String search, String sortBy, String sortDir) {
+        int pageIndex = Math.max(0, page);
+        int pageSize = size <= 0 ? DEFAULT_PAGE_SIZE : Math.min(size, MAX_PAGE_SIZE);
+        String validSortBy = (sortBy != null && !sortBy.trim().isEmpty()) ? sortBy.trim() : "createdAt";
+        Sort.Direction direction = "asc".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
+        Pageable pageable = PageRequest.of(pageIndex, pageSize, Sort.by(direction, validSortBy));
+
+        String searchKeyword = (search != null && !search.trim().isEmpty()) ? search.trim() : null;
+        Page<Order> orderPage = orderRepository.searchOrdersAdmin(status, searchKeyword, pageable);
+        return PageResponse.from(orderPage, this::mapToOrderResponse);
+    }
+
+    /**
+     * Dành cho Admin: Lấy toàn bộ đơn hàng trong hệ thống (không phân trang).
+     */
+    @Transactional(readOnly = true)
+    public List<OrderResponse> getAllOrders() {
+        return orderRepository.findAllByOrderByCreatedAtDesc()
+                .stream()
+                .map(this::mapToOrderResponse)
+                .toList();
+    }
+
+    /**
+     * Dành cho Admin: Lấy chi tiết đơn hàng theo ID (không kiểm tra quyền sở hữu user).
+     */
+    @Transactional(readOnly = true)
+    public OrderResponse getOrderById(Long id) {
+        Order order = orderRepository.findByIdWithItems(id)
+                .orElseGet(() -> orderRepository.findById(id)
+                        .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + id)));
+        return mapToOrderResponse(order);
+    }
+
+    /**
+     * Dành cho Admin: Cập nhật trạng thái đơn hàng (tuân thủ State Machine).
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public OrderResponse updateOrderStatus(Long orderId, OrderStatus newStatus) {
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với ID: " + orderId));
+
+        OrderStatus currentStatus = order.getOrderStatus();
+        if (currentStatus == newStatus) {
+            return mapToOrderResponse(order);
+        }
+
+        // Kiểm tra tính hợp lệ của luồng chuyển trạng thái (State Machine)
+        validateStatusTransition(currentStatus, newStatus);
+
+        // Nếu admin chuyển trạng thái sang CANCELLED mà đơn chưa hủy: hoàn tồn kho
+        if (newStatus == OrderStatus.CANCELLED && currentStatus != OrderStatus.CANCELLED) {
+            inventoryService.restoreStockForOrder(order);
+            if (order.getPaymentStatus() == PaymentStatus.PAID) {
+                order.setPaymentStatus(PaymentStatus.REFUNDED);
+                if (order.getPayment() != null) {
+                    order.getPayment().setStatus(PaymentStatus.REFUNDED);
+                    order.getPayment().setTransactionNote(
+                            (order.getPayment().getTransactionNote() != null ? order.getPayment().getTransactionNote() + " - " : "")
+                                    + "Đã hoàn tiền do hủy đơn hàng " + order.getOrderCode()
+                    );
+                }
+            }
+        }
+
+        // Nếu admin xác nhận hoàn thành và đơn COD: cập nhật payment status sang PAID
+        if (newStatus == OrderStatus.COMPLETED && order.getPaymentStatus() == PaymentStatus.UNPAID) {
+            order.setPaymentStatus(PaymentStatus.PAID);
+            if (order.getPayment() != null) {
+                order.getPayment().setStatus(PaymentStatus.PAID);
+                order.getPayment().setPaidAt(LocalDateTime.now());
+            }
+        }
+
+        order.setOrderStatus(newStatus);
+        Order savedOrder = orderRepository.save(order);
+
+        log.info("Admin cập nhật trạng thái đơn hàng {} từ {} sang {}",
+                order.getOrderCode(), currentStatus, newStatus);
+
+        return mapToOrderResponse(savedOrder);
+    }
+
+    /**
+     * Xác thực tính hợp lệ của luồng chuyển trạng thái đơn hàng (State Machine).
+     * Luồng chuẩn: PENDING -> CONFIRMED -> PROCESSING -> SHIPPING -> COMPLETED
+     * Hủy đơn (CANCELLED) chỉ được phép từ PENDING hoặc CONFIRMED.
+     */
+    public void validateStatusTransition(OrderStatus current, OrderStatus next) {
+        if (current == next) {
+            return;
+        }
+
+        if (current == OrderStatus.COMPLETED) {
+            throw new BusinessException("Đơn hàng đã hoàn thành, không thể thay đổi trạng thái.");
+        }
+
+        if (current == OrderStatus.CANCELLED) {
+            throw new BusinessException("Đơn hàng đã bị hủy, không thể thay đổi trạng thái.");
+        }
+
+        boolean valid = false;
+        switch (current) {
+            case PENDING:
+                valid = (next == OrderStatus.CONFIRMED || next == OrderStatus.CANCELLED);
+                break;
+            case CONFIRMED:
+                valid = (next == OrderStatus.PROCESSING || next == OrderStatus.CANCELLED);
+                break;
+            case PROCESSING:
+                valid = (next == OrderStatus.SHIPPING);
+                break;
+            case SHIPPING:
+                valid = (next == OrderStatus.COMPLETED);
+                break;
+            default:
+                break;
+        }
+
+        if (!valid) {
+            throw new BusinessException(String.format("Không thể chuyển đổi trạng thái từ '%s' sang '%s'. Luồng chuyển đổi chuẩn: PENDING -> CONFIRMED -> PROCESSING -> SHIPPING -> COMPLETED (hoặc CANCELLED từ PENDING/CONFIRMED).",
+                    current.getDescription(), next.getDescription()));
+        }
     }
 
     /**

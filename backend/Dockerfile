@@ -12,7 +12,7 @@ COPY gradlew settings.gradle build.gradle ./
 COPY gradle/ gradle/
 
 # Tải dependencies (sẽ cache nếu build.gradle không thay đổi)
-RUN chmod +x ./gradlew && ./gradlew dependencies --no-daemon || true
+RUN sed -i 's/\r$//' ./gradlew && chmod +x ./gradlew && ./gradlew dependencies --no-daemon || true
 
 # Copy source code
 COPY src/ src/
