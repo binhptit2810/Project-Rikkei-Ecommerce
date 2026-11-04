@@ -5,6 +5,7 @@ import {
   Search,
   X,
   ChevronRight,
+  ChevronLeft,
   AlertCircle,
   PackageOpen,
   Calendar,
@@ -41,6 +42,12 @@ export const OrderHistoryPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // Pagination state (hỗ trợ phân trang từ backend)
+  const [page, setPage] = useState(0)
+  const [pageSize] = useState(10)
+  const [totalPages, setTotalPages] = useState(0)
+  const [totalElements, setTotalElements] = useState(0)
+
   // Filter & Search
   const [activeTab, setActiveTab] = useState('ALL')
   const [searchQuery, setSearchQuery] = useState('')
@@ -59,24 +66,45 @@ export const OrderHistoryPage = () => {
     }, 3500)
   }
 
-  // Tải danh sách đơn hàng của người dùng hiện tại
-  const fetchOrders = useCallback(async () => {
+  // Tải danh sách đơn hàng của người dùng hiện tại có phân trang
+  const fetchOrders = useCallback(async (targetPage = page) => {
     setLoading(true)
     setError(null)
     try {
-      const res = await orderService.getMyOrders()
+      const res = await orderService.getMyOrders({
+        page: targetPage,
+        size: pageSize,
+        sortBy: 'createdAt',
+        sortDir: 'desc',
+      })
+
       let orderList = []
-      if (Array.isArray(res)) {
-        orderList = res
-      } else if (res?.data && Array.isArray(res.data)) {
-        orderList = res.data
-      } else if (res?.data?.content && Array.isArray(res.data.content)) {
-        orderList = res.data.content
-      } else if (res?.content && Array.isArray(res.content)) {
-        orderList = res.content
+      let tPages = 0
+      let tElements = 0
+      let currentPageNum = targetPage
+
+      const dataObj = res?.data || res
+      if (dataObj && Array.isArray(dataObj.content)) {
+        orderList = dataObj.content
+        tPages = dataObj.totalPages ?? 1
+        tElements = dataObj.totalElements ?? dataObj.content.length
+        currentPageNum = dataObj.page ?? dataObj.pageNumber ?? targetPage
+      } else if (Array.isArray(dataObj)) {
+        orderList = dataObj
+        tPages = Math.ceil(dataObj.length / pageSize) || 1
+        tElements = dataObj.length
       }
+
       setOrders(orderList)
+      setTotalPages(tPages)
+      setTotalElements(tElements)
+      setPage(currentPageNum)
     } catch (err) {
+      if (err.response?.status === 401) {
+        showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error')
+        navigate('/login')
+        return
+      }
       const msg =
         err.response?.data?.message ||
         err.message ||
@@ -85,13 +113,13 @@ export const OrderHistoryPage = () => {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [page, pageSize, navigate])
 
   useEffect(() => {
-    fetchOrders()
-  }, [fetchOrders])
+    fetchOrders(0)
+  }, [])
 
-  // Tính số lượng đơn cho từng tab trạng thái
+  // Tính số lượng đơn cho từng tab trạng thái trong trang hiện tại
   const tabCounts = useMemo(() => {
     const counts = { ALL: orders.length }
     STATUS_TABS.forEach((tab) => {
@@ -137,7 +165,7 @@ export const OrderHistoryPage = () => {
     })
   }, [orders, activeTab, searchQuery])
 
-  // Xử lý hủy đơn hàng
+  // Xử lý hủy đơn hàng với xử lý đầy đủ các mã lỗi 401, 403, 404, 409
   const handleConfirmCancel = async () => {
     if (!cancelModalOrder) return
 
@@ -155,6 +183,9 @@ export const OrderHistoryPage = () => {
                 orderStatus: updatedOrder.orderStatus || 'CANCELLED',
                 orderStatusDescription:
                   updatedOrder.orderStatusDescription || 'Đã hủy',
+                paymentStatus: updatedOrder.paymentStatus || o.paymentStatus,
+                paymentStatusDescription:
+                  updatedOrder.paymentStatusDescription || o.paymentStatusDescription,
                 updatedAt: updatedOrder.updatedAt || new Date().toISOString(),
               }
             : o
@@ -162,16 +193,32 @@ export const OrderHistoryPage = () => {
       )
 
       showToast(
-        `Đã hủy đơn hàng #${cancelModalOrder.orderCode} thành công! Số lượng sản phẩm đã được hoàn lại vào kho.`,
+        `Đã hủy đơn hàng #${cancelModalOrder.orderCode} thành công! Số lượng sản phẩm đã được tự động hoàn lại vào kho.`,
         'success'
       )
       setCancelModalOrder(null)
     } catch (err) {
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        'Không thể hủy đơn hàng. Vui lòng thử lại.'
-      showToast(msg, 'error')
+      if (err.response?.status === 409) {
+        showToast(
+          err.response?.data?.message ||
+            'Không thể hủy đơn hàng do trạng thái đơn hàng đã thay đổi.',
+          'error'
+        )
+        fetchOrders(page)
+      } else if (err.response?.status === 403) {
+        showToast('Bạn không có quyền hủy đơn hàng này.', 'error')
+      } else if (err.response?.status === 404) {
+        showToast('Đơn hàng không tồn tại.', 'error')
+      } else if (err.response?.status === 401) {
+        showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error')
+        navigate('/login')
+      } else {
+        const msg =
+          err.response?.data?.message ||
+          err.message ||
+          'Không thể hủy đơn hàng. Vui lòng thử lại.'
+        showToast(msg, 'error')
+      }
     } finally {
       setCancelling(false)
     }
@@ -195,7 +242,7 @@ export const OrderHistoryPage = () => {
             </div>
             <button
               onClick={() => setToast(null)}
-              className="text-slate-400 hover:text-slate-600 p-0.5"
+              className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
             >
               <X className="w-4 h-4" />
             </button>
@@ -271,9 +318,9 @@ export const OrderHistoryPage = () => {
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
               <span>Lịch sử đơn hàng</span>
-              {orders.length > 0 && (
+              {totalElements > 0 && (
                 <span className="text-xs font-bold bg-zinc-100 text-zinc-800 px-3 py-1 rounded-full border border-zinc-200 tabular-nums">
-                  {orders.length} đơn
+                  {totalElements} đơn
                 </span>
               )}
             </h1>
@@ -284,7 +331,7 @@ export const OrderHistoryPage = () => {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={fetchOrders}
+              onClick={() => fetchOrders(page)}
               disabled={loading}
               className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-zinc-950 bg-white hover:bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 transition-colors cursor-pointer shadow-2xs"
               title="Làm mới danh sách"
@@ -319,7 +366,7 @@ export const OrderHistoryPage = () => {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -379,7 +426,7 @@ export const OrderHistoryPage = () => {
               </p>
             </div>
             <button
-              onClick={fetchOrders}
+              onClick={() => fetchOrders(page)}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-zinc-900 hover:bg-zinc-800 transition-colors cursor-pointer"
             >
               <RefreshCw className="w-3.5 h-3.5" />
@@ -574,6 +621,57 @@ export const OrderHistoryPage = () => {
                 </div>
               )
             })}
+          </div>
+        )}
+
+        {/* Phân trang Previous/Next */}
+        {totalPages > 1 && (
+          <div className="mt-8 flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-white rounded-2xl border border-slate-200/80 shadow-2xs">
+            <div className="text-xs text-slate-500 font-medium">
+              Hiển thị trang <span className="font-bold text-slate-900">{page + 1}</span> /{' '}
+              <span className="font-bold text-slate-900">{totalPages}</span> (Tổng{' '}
+              <span className="font-bold text-slate-900">{totalElements}</span> đơn hàng)
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => fetchOrders(page - 1)}
+                disabled={page <= 0 || loading}
+                className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span>Trước</span>
+              </button>
+
+              <div className="hidden sm:flex items-center gap-1">
+                {Array.from({ length: totalPages }, (_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => fetchOrders(i)}
+                    disabled={loading}
+                    className={`w-8 h-8 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      page === i
+                        ? 'bg-zinc-900 text-white shadow-2xs'
+                        : 'text-slate-600 hover:bg-slate-100'
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => fetchOrders(page + 1)}
+                disabled={page >= totalPages - 1 || loading}
+                className="inline-flex items-center gap-1 px-3.5 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer shadow-2xs"
+              >
+                <span>Sau</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         )}
       </div>
