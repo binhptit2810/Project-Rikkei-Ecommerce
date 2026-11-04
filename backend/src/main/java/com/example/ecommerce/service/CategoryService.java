@@ -75,7 +75,7 @@ public class CategoryService {
                 .name(trimmedName)
                 .description(request.getDescription())
                 .imageUrl(request.getImageUrl())
-                .active(request.getActive() != null ? request.getActive() : true)
+                .active(true)
                 .build();
 
         Category savedCategory = categoryRepository.save(category);

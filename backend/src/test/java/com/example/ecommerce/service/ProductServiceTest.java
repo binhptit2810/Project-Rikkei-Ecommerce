@@ -18,9 +18,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -34,9 +32,11 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit Test cho ProductService.
+ * Unit Test chuyên sâu cho ProductService.
  * Phụ trách: Đỗ Đức Mạnh (DDM)
- * Task ID: [TSK-D06-DDM] Xây dựng API Quản trị Sản phẩm & Danh mục (Admin CRUD)
+ * Phối hợp: Đỗ Hoàng Anh (DHA)
+ * Task ID: [TSK-D08-DDM] Tối ưu hóa Bộ lọc Tìm kiếm Sản phẩm & Viết Unit Tests
+ * ProductService
  */
 @ExtendWith(MockitoExtension.class)
 class ProductServiceTest {
@@ -79,29 +79,106 @@ class ProductServiceTest {
     }
 
     // =========================================================================
-    // Public Read-Only Tests
+    // [TSK-D08-DDM] Bộ lọc tìm kiếm đa tiêu chí & Chi tiết sản phẩm
     // =========================================================================
 
     @Test
-    @DisplayName("getProducts: Tìm kiếm và lọc sản phẩm thành công kèm phân trang")
-    void getProducts_validParams_shouldReturnPagedProducts() {
+    @DisplayName("getProducts_WithKeywordAndCategory_ReturnsFilteredPage: Tìm kiếm kết hợp keyword + categoryId")
+    void getProducts_WithKeywordAndCategory_ReturnsFilteredPage() {
         Page<Product> page = new PageImpl<>(List.of(testProduct));
-        when(productRepository.searchProducts(eq("áo"), eq(1L), eq(true), any(Pageable.class)))
+        when(productRepository.searchProducts(eq("áo"), eq(1L), isNull(), isNull(), eq(true), any(Pageable.class)))
                 .thenReturn(page);
 
-        PageResponse<ProductResponse> result = productService.getProducts("áo", 1L, 0, 10, "price", "asc");
+        PageResponse<ProductResponse> result = productService.getProducts("áo", 1L, null, null, 0, 10, "name", "asc");
 
         assertThat(result).isNotNull();
         assertThat(result.getContent()).hasSize(1);
         assertThat(result.getContent().get(0).getName()).isEqualTo("Áo thun nam basic");
         assertThat(result.getContent().get(0).getCategoryName()).isEqualTo("Thời trang");
         assertThat(result.getContent().get(0).getStockQuantity()).isEqualTo(50);
-        verify(productRepository).searchProducts(eq("áo"), eq(1L), eq(true), any(Pageable.class));
+        verify(productRepository).searchProducts(eq("áo"), eq(1L), isNull(), isNull(), eq(true), any(Pageable.class));
     }
 
     @Test
-    @DisplayName("getProductById: Lấy chi tiết sản phẩm thành công khi sản phẩm tồn tại và đang active")
-    void getProductById_existingAndActive_shouldReturnProduct() {
+    @DisplayName("getProducts_SortByPriceAsc_ReturnsSortedPage: Sắp xếp theo giá tăng dần")
+    void getProducts_SortByPriceAsc_ReturnsSortedPage() {
+        Page<Product> page = new PageImpl<>(List.of(testProduct));
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+
+        when(productRepository.searchProducts(any(), any(), any(), any(), eq(true), pageableCaptor.capture()))
+                .thenReturn(page);
+
+        PageResponse<ProductResponse> result = productService.getProducts(null, null, null, null, 0, 10, "price",
+                "asc");
+
+        assertThat(result).isNotNull();
+        Pageable capturedPageable = pageableCaptor.getValue();
+        assertThat(capturedPageable.getSort().getOrderFor("price")).isNotNull();
+        assertThat(capturedPageable.getSort().getOrderFor("price").getDirection()).isEqualTo(Sort.Direction.ASC);
+    }
+
+    @Test
+    @DisplayName("getProducts_SortByPriceDesc_ReturnsSortedPage: Sắp xếp theo giá giảm dần")
+    void getProducts_SortByPriceDesc_ReturnsSortedPage() {
+        Page<Product> page = new PageImpl<>(List.of(testProduct));
+        ArgumentCaptor<Pageable> pageableCaptor = ArgumentCaptor.forClass(Pageable.class);
+
+        when(productRepository.searchProducts(any(), any(), any(), any(), eq(true), pageableCaptor.capture()))
+                .thenReturn(page);
+
+        PageResponse<ProductResponse> result = productService.getProducts(null, null, null, null, 0, 10, "price",
+                "desc");
+
+        assertThat(result).isNotNull();
+        Pageable capturedPageable = pageableCaptor.getValue();
+        assertThat(capturedPageable.getSort().getOrderFor("price")).isNotNull();
+        assertThat(capturedPageable.getSort().getOrderFor("price").getDirection()).isEqualTo(Sort.Direction.DESC);
+    }
+
+    @Test
+    @DisplayName("getProducts_FilterByPriceRange_ReturnsMatchingProducts: Lọc theo khoảng giá min/max")
+    void getProducts_FilterByPriceRange_ReturnsMatchingProducts() {
+        BigDecimal minPrice = new BigDecimal("100000");
+        BigDecimal maxPrice = new BigDecimal("300000");
+        Page<Product> page = new PageImpl<>(List.of(testProduct));
+
+        when(productRepository.searchProducts(isNull(), isNull(), eq(minPrice), eq(maxPrice), eq(true),
+                any(Pageable.class)))
+                .thenReturn(page);
+
+        PageResponse<ProductResponse> result = productService.getProducts(null, null, minPrice, maxPrice, 0, 10,
+                "price", "asc");
+
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getPrice()).isGreaterThanOrEqualTo(minPrice);
+        assertThat(result.getContent().get(0).getPrice()).isLessThanOrEqualTo(maxPrice);
+        verify(productRepository).searchProducts(isNull(), isNull(), eq(minPrice), eq(maxPrice), eq(true),
+                any(Pageable.class));
+    }
+
+    @Test
+    @DisplayName("getProducts_EmptyResult_ReturnsEmptyPage: Tìm kiếm không có kết quả trả về Page rỗng hợp lệ")
+    void getProducts_EmptyResult_ReturnsEmptyPage() {
+        // Sửa tại đây: truyền Pageable kèm total = 0
+        Pageable pageable = PageRequest.of(0, 10, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Page<Product> emptyPage = new PageImpl<>(List.of(), pageable, 0);
+
+        when(productRepository.searchProducts(any(), any(), any(), any(), eq(true), any(Pageable.class)))
+                .thenReturn(emptyPage);
+
+        PageResponse<ProductResponse> result = productService.getProducts("khong_tim_thay_xyz", 999L, null, null, 0, 10,
+                "createdAt", "desc");
+
+        assertThat(result).isNotNull();
+        assertThat(result.getContent()).isEmpty();
+        assertThat(result.getTotalElements()).isEqualTo(0);
+        assertThat(result.getTotalPages()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("getProductById_Success: Tìm chi tiết sản phẩm theo ID thành công")
+    void getProductById_Success() {
         when(productRepository.findByIdWithCategory(10L)).thenReturn(Optional.of(testProduct));
 
         ProductResponse response = productService.getProductById(10L);
@@ -110,20 +187,21 @@ class ProductServiceTest {
         assertThat(response.getId()).isEqualTo(10L);
         assertThat(response.getName()).isEqualTo("Áo thun nam basic");
         assertThat(response.getPrice()).isEqualByComparingTo("199000");
+        assertThat(response.getActive()).isTrue();
     }
 
     @Test
-    @DisplayName("getProductById: Báo lỗi khi sản phẩm không tồn tại")
-    void getProductById_notFound_shouldThrowException() {
-        when(productRepository.findByIdWithCategory(99L)).thenReturn(Optional.empty());
+    @DisplayName("getProductById_NotFound_ThrowsResourceNotFoundException: Ném ngoại lệ 404 chuẩn khi ID không tồn tại")
+    void getProductById_NotFound_ThrowsResourceNotFoundException() {
+        when(productRepository.findByIdWithCategory(999L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> productService.getProductById(99L))
+        assertThatThrownBy(() -> productService.getProductById(999L))
                 .isInstanceOf(ResourceNotFoundException.class)
-                .hasMessageContaining("Sản phẩm không tìm thấy với id: 99");
+                .hasMessageContaining("Sản phẩm không tìm thấy với id: 999");
     }
 
     @Test
-    @DisplayName("getProductById: Báo lỗi khi sản phẩm bị ẩn (active = false)")
+    @DisplayName("getProductById: Báo lỗi khi sản phẩm bị ẩn (active = false) đối với khách hàng")
     void getProductById_inactive_shouldThrowException() {
         testProduct.setActive(false);
         when(productRepository.findByIdWithCategory(10L)).thenReturn(Optional.of(testProduct));
@@ -134,21 +212,22 @@ class ProductServiceTest {
     }
 
     // =========================================================================
-    // Admin CRUD Tests
+    // [TSK-D06-DDM] Admin CRUD Tests
     // =========================================================================
 
     @Test
     @DisplayName("getAdminProducts: Lấy danh sách sản phẩm quản trị (kể cả active và inactive)")
     void getAdminProducts_shouldReturnPagedProducts() {
         Page<Product> page = new PageImpl<>(List.of(testProduct));
-        when(productRepository.searchProducts(eq("áo"), eq(1L), eq(null), any(Pageable.class)))
+        when(productRepository.searchProducts(eq("áo"), eq(1L), isNull(), isNull(), isNull(), any(Pageable.class)))
                 .thenReturn(page);
 
-        PageResponse<ProductResponse> result = productService.getAdminProducts("áo", 1L, null, 0, 10, "createdAt", "desc");
+        PageResponse<ProductResponse> result = productService.getAdminProducts("áo", 1L, null, 0, 10, "createdAt",
+                "desc");
 
         assertThat(result).isNotNull();
         assertThat(result.getContent()).hasSize(1);
-        verify(productRepository).searchProducts(eq("áo"), eq(1L), eq(null), any(Pageable.class));
+        verify(productRepository).searchProducts(eq("áo"), eq(1L), isNull(), isNull(), isNull(), any(Pageable.class));
     }
 
     @Test
