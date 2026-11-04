@@ -19,6 +19,8 @@ import {
   RefreshCw,
   Clock,
   Package,
+  X,
+  HelpCircle,
 } from 'lucide-react'
 import orderService from '../../services/orderService'
 import paymentService from '../../services/paymentService'
@@ -74,6 +76,16 @@ const STATUS_TO_STEP_INDEX = {
   COMPLETED: 4,
 }
 
+// Các lý do hủy đơn hàng gợi ý sẵn
+const PRESET_CANCEL_REASONS = [
+  'Thay đổi địa chỉ nhận hàng',
+  'Muốn thay đổi sản phẩm / số lượng',
+  'Tìm thấy giá tốt hơn ở nơi khác',
+  'Thay đổi phương thức thanh toán',
+  'Đổi ý, không còn nhu cầu mua nữa',
+  'Lý do khác',
+]
+
 export const OrderDetailPage = () => {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -87,8 +99,11 @@ export const OrderDetailPage = () => {
   // Copy mã đơn
   const [copiedCode, setCopiedCode] = useState(false)
 
-  // Cancel order modal
+  // Cancel order modal & reason states
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
+  const [cancelReasonPreset, setCancelReasonPreset] = useState('')
+  const [cancelReasonText, setCancelReasonText] = useState('')
+  const [cancelReasonError, setCancelReasonError] = useState('')
   const [cancelling, setCancelling] = useState(false)
 
   // Reorder loading
@@ -101,7 +116,7 @@ export const OrderDetailPage = () => {
     setToast({ message, type })
     setTimeout(() => {
       setToast(null)
-    }, 3500)
+    }, 4000)
   }
 
   // Tải chi tiết đơn hàng và tra cứu thanh toán tương ứng
@@ -163,12 +178,42 @@ export const OrderDetailPage = () => {
     }
   }
 
-  // Xử lý hủy đơn hàng với đầy đủ xử lý các mã lỗi 401, 403, 404, 409
+  // Mở modal hủy đơn và reset form
+  const handleOpenCancelModal = () => {
+    setCancelReasonPreset('')
+    setCancelReasonText('')
+    setCancelReasonError('')
+    setCancelModalOpen(true)
+  }
+
+  // Chọn lý do gợi ý
+  const handleSelectPresetReason = (reason) => {
+    setCancelReasonPreset(reason)
+    setCancelReasonError('')
+    if (reason === 'Lý do khác') {
+      if (PRESET_CANCEL_REASONS.slice(0, -1).includes(cancelReasonText)) {
+        setCancelReasonText('')
+      }
+    } else {
+      setCancelReasonText(reason)
+    }
+  }
+
+  // Xử lý hủy đơn hàng kèm gửi lý do lên backend
   const handleConfirmCancel = async () => {
     if (!order?.id) return
+
+    const finalReason = (cancelReasonText || cancelReasonPreset || '').trim()
+    if (!finalReason) {
+      setCancelReasonError('Vui lòng chọn hoặc nhập lý do hủy đơn hàng.')
+      return
+    }
+
     setCancelling(true)
+    setCancelReasonError('')
+
     try {
-      const res = await orderService.cancelOrder(order.id)
+      const res = await orderService.cancelOrder(order.id, finalReason)
       const updatedOrder = res?.data || res
 
       setOrder((prev) => ({
@@ -177,9 +222,14 @@ export const OrderDetailPage = () => {
         orderStatus: updatedOrder.orderStatus || 'CANCELLED',
         orderStatusDescription:
           updatedOrder.orderStatusDescription || 'Đã hủy',
-        paymentStatus: updatedOrder.paymentStatus || prev.paymentStatus,
+        paymentStatus: updatedOrder.paymentStatus || prev?.paymentStatus,
         paymentStatusDescription:
-          updatedOrder.paymentStatusDescription || prev.paymentStatusDescription,
+          updatedOrder.paymentStatusDescription || prev?.paymentStatusDescription,
+        note:
+          updatedOrder.note ||
+          (prev?.note
+            ? `${prev.note} [Lý do hủy: ${finalReason}]`
+            : `Lý do hủy: ${finalReason}`),
         updatedAt: updatedOrder.updatedAt || new Date().toISOString(),
       }))
 
@@ -196,6 +246,7 @@ export const OrderDetailPage = () => {
           'error'
         )
         fetchOrderDetail()
+        setCancelModalOpen(false)
       } else if (err.response?.status === 403) {
         showToast('Bạn không có quyền hủy đơn hàng này.', 'error')
       } else if (err.response?.status === 404) {
@@ -243,6 +294,7 @@ export const OrderDetailPage = () => {
 
   const currentStatus = order?.orderStatus || order?.status
   const isCancelled = currentStatus === 'CANCELLED'
+  // Nút hủy chỉ hiển thị khi đơn hàng ở trạng thái PENDING hoặc CONFIRMED
   const canCancel = currentStatus === 'PENDING' || currentStatus === 'CONFIRMED'
   const currentStepIndex =
     STATUS_TO_STEP_INDEX[currentStatus] !== undefined
@@ -267,7 +319,7 @@ export const OrderDetailPage = () => {
             </div>
             <button
               onClick={() => setToast(null)}
-              className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+              className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
@@ -275,52 +327,120 @@ export const OrderDetailPage = () => {
         </div>
       )}
 
-      {/* Cancel Order Modal */}
+      {/* Cancel Order Modal (Tailwind CSS, Backdrop blur, Animation mượt mà) */}
       {cancelModalOpen && order && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-md transition-all duration-300 animate-in fade-in">
+          <div className="bg-white rounded-3xl border border-slate-200/90 shadow-2xl max-w-lg w-full p-6 sm:p-7 space-y-5 animate-in zoom-in-95 duration-200">
+            {/* Header Modal */}
+            <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center shrink-0 border border-red-100 shadow-2xs">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-extrabold text-slate-900">
+                    Xác nhận hủy đơn hàng
+                  </h3>
+                  <p className="text-xs text-slate-500 font-mono mt-0.5">
+                    Mã đơn: #{order.orderCode}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Xác nhận hủy đơn hàng
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Mã đơn hàng: #{order.orderCode}
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Bạn có chắc chắn muốn hủy đơn hàng này không? Sau khi xác nhận hủy,
-              toàn bộ số lượng sản phẩm trong đơn sẽ được tự động hoàn lại vào kho
-              và không thể hoàn tác hành động này.
-            </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
                 onClick={() => setCancelModalOpen(false)}
                 disabled={cancelling}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
               >
-                Không hủy
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Warning notice */}
+            <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-xs text-amber-900 flex items-start gap-2.5 leading-relaxed">
+              <HelpCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <span>
+                Sau khi xác nhận hủy, đơn hàng sẽ chuyển sang trạng thái <strong>Đã hủy</strong>.
+                Toàn bộ số lượng sản phẩm sẽ được <strong>tự động hoàn lại vào kho</strong>.
+              </span>
+            </div>
+
+            {/* Lý do hủy: Chọn nhanh hoặc Tự nhập */}
+            <div className="space-y-3">
+              <label className="block text-xs font-bold text-slate-800">
+                Lý do hủy đơn hàng <span className="text-red-500">*</span>
+              </label>
+
+              {/* Chips chọn nhanh */}
+              <div className="flex flex-wrap gap-2">
+                {PRESET_CANCEL_REASONS.map((reason) => {
+                  const isSelected =
+                    cancelReasonPreset === reason || cancelReasonText === reason
+                  return (
+                    <button
+                      key={reason}
+                      type="button"
+                      onClick={() => handleSelectPresetReason(reason)}
+                      className={`text-xs px-3 py-1.5 rounded-xl border transition-all text-left cursor-pointer ${
+                        isSelected
+                          ? 'bg-zinc-900 text-white border-zinc-900 shadow-2xs font-semibold'
+                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {reason}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Textarea nhập chi tiết */}
+              <div className="relative">
+                <textarea
+                  rows={3}
+                  value={cancelReasonText}
+                  onChange={(e) => {
+                    setCancelReasonText(e.target.value)
+                    if (cancelReasonError) setCancelReasonError('')
+                  }}
+                  placeholder="Vui lòng cung cấp thêm chi tiết lý do hủy đơn của bạn..."
+                  className="w-full text-xs p-3 rounded-2xl border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:border-transparent transition-all placeholder:text-slate-400 resize-none"
+                />
+              </div>
+
+              {cancelReasonError && (
+                <p className="text-[11px] font-semibold text-red-600 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  <span>{cancelReasonError}</span>
+                </p>
+              )}
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setCancelModalOpen(false)}
+                disabled={cancelling}
+                className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
+              >
+                Giữ lại đơn hàng
               </button>
               <button
                 type="button"
                 onClick={handleConfirmCancel}
                 disabled={cancelling}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-red-600 hover:bg-red-700 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer shadow-sm shadow-red-200"
               >
                 {cancelling ? (
                   <>
                     <LoadingSpinner size="sm" className="text-white" />
-                    <span>Đang xử lý...</span>
+                    <span>Đang xử lý hủy...</span>
                   </>
                 ) : (
-                  <span>Xác nhận hủy đơn</span>
+                  <>
+                    <XCircle className="w-4 h-4" />
+                    <span>Xác nhận hủy đơn</span>
+                  </>
                 )}
               </button>
             </div>
@@ -455,6 +575,11 @@ export const OrderDetailPage = () => {
                         {formatDateTime(order.updatedAt || order.createdAt)}. Toàn bộ số
                         lượng sản phẩm trong đơn đã được tự động hoàn lại vào kho hàng.
                       </p>
+                      {order.note && order.note.includes('Lý do hủy:') && (
+                        <p className="text-xs font-semibold text-red-800 mt-2 bg-red-100/60 px-3 py-1.5 rounded-xl border border-red-200/60 inline-block">
+                          {order.note}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <OrderStatusBadge
@@ -762,14 +887,15 @@ export const OrderDetailPage = () => {
                       )}
                     </button>
 
-                    {/* Nút Hủy đơn */}
+                    {/* Nút Hủy đơn có điều kiện: chỉ hiển thị khi PENDING hoặc CONFIRMED */}
                     {canCancel && (
                       <button
                         type="button"
-                        onClick={() => setCancelModalOpen(true)}
-                        className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 border border-red-200 transition-colors cursor-pointer"
+                        onClick={handleOpenCancelModal}
+                        className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 hover:border-red-300 border border-red-200 transition-all cursor-pointer flex items-center justify-center gap-2"
                       >
-                        Hủy đơn hàng
+                        <XCircle className="w-4 h-4 text-red-500" />
+                        <span>Hủy đơn hàng</span>
                       </button>
                     )}
 

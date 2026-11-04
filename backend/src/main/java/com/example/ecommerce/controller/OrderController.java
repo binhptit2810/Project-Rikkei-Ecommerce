@@ -1,5 +1,6 @@
 package com.example.ecommerce.controller;
 
+import com.example.ecommerce.dto.request.CancelOrderRequest;
 import com.example.ecommerce.dto.request.CreateOrderRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.OrderResponse;
@@ -92,14 +93,19 @@ public class OrderController {
      * PATCH /api/v1/orders/{id}/cancel
      *
      * @param id ID của đơn hàng cần hủy
+     * @param request Lý do hủy đơn hàng (tùy chọn)
      * @param userDetails Thông tin tài khoản người dùng đang đăng nhập
      */
     @PatchMapping("/{id}/cancel")
     @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<OrderResponse>> cancelOrder(
             @PathVariable Long id,
+            @RequestBody(required = false) CancelOrderRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
-        OrderResponse order = orderService.cancelOrder(id, userDetails.getUsername());
+        String reason = (request != null) ? request.getReason() : null;
+        OrderResponse order = (reason != null && !reason.trim().isEmpty())
+                ? orderService.cancelOrder(id, userDetails.getUsername(), reason.trim())
+                : orderService.cancelOrder(id, userDetails.getUsername());
         return ResponseEntity.ok(ApiResponse.success("Hủy đơn hàng thành công", order));
     }
 }

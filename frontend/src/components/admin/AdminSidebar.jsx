@@ -60,7 +60,7 @@ export const AdminSidebar = ({ onClose }) => {
           label: 'Quản lý đơn hàng',
           path: '/admin/orders',
           icon: ClipboardList,
-          isImplemented: false,
+          isImplemented: true,
         },
         {
           key: 'inventory',
