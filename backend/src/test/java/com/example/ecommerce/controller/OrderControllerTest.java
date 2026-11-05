@@ -1,5 +1,6 @@
 package com.example.ecommerce.controller;
 
+import com.example.ecommerce.dto.request.CancelOrderRequest;
 import com.example.ecommerce.dto.request.CreateOrderRequest;
 import com.example.ecommerce.dto.request.OrderItemRequest;
 import com.example.ecommerce.dto.response.OrderItemResponse;
@@ -220,6 +221,28 @@ class OrderControllerTest {
         when(orderService.cancelOrder(eq(1L), eq("customer@example.com"))).thenReturn(response);
 
         mockMvc.perform(patch("/api/v1/orders/1/cancel"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.orderStatus").value("CANCELLED"));
+    }
+
+    @Test
+    @DisplayName("PATCH /api/v1/orders/{id}/cancel: Hủy đơn hàng kèm lý do trong CancelOrderRequest thành công")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void cancelOrder_WithReason_Returns200() throws Exception {
+        CancelOrderRequest request = new CancelOrderRequest("Đổi ý không mua nữa");
+        OrderResponse response = OrderResponse.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-123456")
+                .orderStatus(OrderStatus.CANCELLED)
+                .note("Lý do hủy: Đổi ý không mua nữa")
+                .build();
+
+        when(orderService.cancelOrder(eq(1L), eq("customer@example.com"), eq("Đổi ý không mua nữa"))).thenReturn(response);
+
+        mockMvc.perform(patch("/api/v1/orders/1/cancel")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.orderStatus").value("CANCELLED"));

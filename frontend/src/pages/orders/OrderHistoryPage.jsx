@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import orderService from '../../services/orderService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import CancelOrderModal from './CancelOrderModal'
 import {
   OrderStatusBadge,
   PaymentStatusBadge,
@@ -54,7 +55,6 @@ export const OrderHistoryPage = () => {
 
   // Cancel order modal
   const [cancelModalOrder, setCancelModalOrder] = useState(null)
-  const [cancelling, setCancelling] = useState(false)
 
   // Toast notification
   const [toast, setToast] = useState(null)
@@ -165,62 +165,45 @@ export const OrderHistoryPage = () => {
     })
   }, [orders, activeTab, searchQuery])
 
-  // Xử lý hủy đơn hàng với xử lý đầy đủ các mã lỗi 401, 403, 404, 409
-  const handleConfirmCancel = async () => {
+  // Xử lý khi hủy đơn hàng thành công từ CancelOrderModal (dùng chung logic với OrderDetailPage)
+  const handleCancelSuccess = (updatedOrder, finalReason) => {
     if (!cancelModalOrder) return
 
-    setCancelling(true)
-    try {
-      const res = await orderService.cancelOrder(cancelModalOrder.id)
-      const updatedOrder = res?.data || res
-
-      // Cập nhật state trực tiếp để UI phản hồi ngay lập tức
-      setOrders((prev) =>
-        prev.map((o) =>
-          o.id === cancelModalOrder.id
-            ? {
-                ...o,
-                orderStatus: updatedOrder.orderStatus || 'CANCELLED',
-                orderStatusDescription:
-                  updatedOrder.orderStatusDescription || 'Đã hủy',
-                paymentStatus: updatedOrder.paymentStatus || o.paymentStatus,
-                paymentStatusDescription:
-                  updatedOrder.paymentStatusDescription || o.paymentStatusDescription,
-                updatedAt: updatedOrder.updatedAt || new Date().toISOString(),
-              }
-            : o
-        )
+    setOrders((prev) =>
+      prev.map((o) =>
+        o.id === cancelModalOrder.id
+          ? {
+              ...o,
+              ...updatedOrder,
+              orderStatus: updatedOrder.orderStatus || 'CANCELLED',
+              orderStatusDescription:
+                updatedOrder.orderStatusDescription || 'Đã hủy',
+              paymentStatus: updatedOrder.paymentStatus || o.paymentStatus,
+              paymentStatusDescription:
+                updatedOrder.paymentStatusDescription || o.paymentStatusDescription,
+              note:
+                updatedOrder.note ||
+                (o.note
+                  ? `${o.note} [Lý do hủy: ${finalReason}]`
+                  : `Lý do hủy: ${finalReason}`),
+              updatedAt: updatedOrder.updatedAt || new Date().toISOString(),
+            }
+          : o
       )
+    )
 
-      showToast(
-        `Đã hủy đơn hàng #${cancelModalOrder.orderCode} thành công! Số lượng sản phẩm đã được tự động hoàn lại vào kho.`,
-        'success'
-      )
-      setCancelModalOrder(null)
-    } catch (err) {
-      if (err.response?.status === 409) {
-        showToast(
-          err.response?.data?.message ||
-            'Không thể hủy đơn hàng do trạng thái đơn hàng đã thay đổi.',
-          'error'
-        )
-        fetchOrders(page)
-      } else if (err.response?.status === 403) {
-        showToast('Bạn không có quyền hủy đơn hàng này.', 'error')
-      } else if (err.response?.status === 404) {
-        showToast('Đơn hàng không tồn tại.', 'error')
-      } else if (err.response?.status === 401) {
-        showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error')
-        navigate('/login')
-      } else {
-        const msg =
-          err.response?.data?.message ||
-          err.message ||
-          'Không thể hủy đơn hàng. Vui lòng thử lại.'
-        showToast(msg, 'error')
-      }
-    } finally {
-      setCancelling(false)
+    showToast(
+      `Đã hủy đơn hàng #${cancelModalOrder.orderCode || cancelModalOrder.id} thành công! Số lượng sản phẩm đã được tự động hoàn lại vào kho.`,
+      'success'
+    )
+    setCancelModalOrder(null)
+  }
+
+  // Xử lý khi hủy đơn hàng thất bại từ CancelOrderModal
+  const handleCancelError = (errorMsg) => {
+    showToast(errorMsg, 'error')
+    if (errorMsg && errorMsg.includes('trạng thái')) {
+      fetchOrders(page)
     }
   }
 
@@ -250,58 +233,14 @@ export const OrderHistoryPage = () => {
         </div>
       )}
 
-      {/* Cancel Confirmation Modal */}
-      {cancelModalOrder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl border border-slate-200/90 shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Xác nhận hủy đơn hàng
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Mã đơn hàng: #{cancelModalOrder.orderCode}
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-slate-600 leading-relaxed">
-              Bạn có chắc chắn muốn hủy đơn hàng này không? Sau khi xác nhận hủy,
-              toàn bộ số lượng sản phẩm trong đơn sẽ được tự động hoàn lại vào kho
-              và không thể hoàn tác hành động này.
-            </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setCancelModalOrder(null)}
-                disabled={cancelling}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                Không hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmCancel}
-                disabled={cancelling}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-[0.98] transition-all disabled:opacity-50 cursor-pointer shadow-2xs"
-              >
-                {cancelling ? (
-                  <>
-                    <LoadingSpinner size="sm" className="text-white" />
-                    <span>Đang xử lý...</span>
-                  </>
-                ) : (
-                  <span>Xác nhận hủy đơn</span>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal Hủy đơn hàng dùng chung với OrderDetailPage */}
+      <CancelOrderModal
+        isOpen={Boolean(cancelModalOrder)}
+        order={cancelModalOrder}
+        onClose={() => setCancelModalOrder(null)}
+        onSuccess={handleCancelSuccess}
+        onError={handleCancelError}
+      />
 
       <div className="max-w-7xl mx-auto">
         {/* Breadcrumb */}

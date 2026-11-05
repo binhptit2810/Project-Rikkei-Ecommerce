@@ -11,16 +11,16 @@ import {
   MapPin,
   FileText,
   Lock,
-  CheckCircle2,
 } from 'lucide-react'
 import { useCartStore } from '../../store/useCartStore'
 import { useAuthStore } from '../../store/useAuthStore'
 import orderService from '../../services/orderService'
+import LoadingSpinner from '../../components/common/LoadingSpinner'
 
 export const CheckoutPage = () => {
   const navigate = useNavigate()
   const { items, getTotalPrice, getTotalCount, clearCart } = useCartStore()
-  const { user } = useAuthStore()
+  const { user, isAuthenticated } = useAuthStore()
 
   const [formData, setFormData] = useState({
     recipientName: '',
@@ -32,7 +32,6 @@ export const CheckoutPage = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
-  const [successInfo, setSuccessInfo] = useState(null)
 
   // Tự động điền thông tin có sẵn từ tài khoản người dùng
   useEffect(() => {
@@ -48,10 +47,10 @@ export const CheckoutPage = () => {
 
   // Nếu giỏ hàng rỗng, điều hướng về trang giỏ hàng
   useEffect(() => {
-    if (items.length === 0 && !successInfo) {
+    if (!isSubmitting && items.length === 0) {
       navigate('/cart')
     }
-  }, [items, successInfo, navigate])
+  }, [items, isSubmitting, navigate])
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0)
@@ -66,6 +65,24 @@ export const CheckoutPage = () => {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
+    // Chống submit trùng lặp khi đang xử lý
+    if (isSubmitting) return
+
+    // Kiểm tra phiên đăng nhập
+    if (!isAuthenticated && !user) {
+      setErrorMessage('Phiên đăng nhập đã hết hạn hoặc bạn chưa đăng nhập. Vui lòng đăng nhập lại.')
+      navigate('/login', { state: { from: '/checkout' } })
+      return
+    }
+
+    // Kiểm tra giỏ hàng
+    if (!items || items.length === 0) {
+      setErrorMessage('Giỏ hàng của bạn đang trống. Vui lòng thêm sản phẩm trước khi thanh toán.')
+      navigate('/cart')
+      return
+    }
+
+    // Validation form
     if (!formData.recipientName.trim()) {
       setErrorMessage('Vui lòng nhập họ tên người nhận hàng')
       return
@@ -83,7 +100,7 @@ export const CheckoutPage = () => {
     }
 
     if (!phoneRegex.test(formData.recipientPhone.trim())) {
-      setErrorMessage('Số điện thoại không hợp lệ (yêu cầu 10 chữ số, ví dụ: 0912345678 hoặc +84912345678)')
+      setErrorMessage('Số điện thoại không đúng định dạng (yêu cầu 10 chữ số, ví dụ: 0912345678 hoặc +84912345678)')
       return
     }
 
@@ -102,7 +119,7 @@ export const CheckoutPage = () => {
       return
     }
 
-    // Validate tồn kho: 1 <= quantity <= stockQuantity
+    // Validate số lượng từng sản phẩm
     for (const item of items) {
       if (!item.quantity || item.quantity < 1) {
         setErrorMessage(`Số lượng đặt của sản phẩm "${item.name}" không hợp lệ (phải >= 1)`)
@@ -116,6 +133,7 @@ export const CheckoutPage = () => {
       }
     }
 
+    // Chuẩn hóa DTO CreateOrderRequest theo đúng cấu trúc Backend
     const orderPayload = {
       recipientName: formData.recipientName.trim(),
       recipientPhone: formData.recipientPhone.trim(),
@@ -123,25 +141,72 @@ export const CheckoutPage = () => {
       paymentMethod: formData.paymentMethod,
       note: formData.note.trim() || null,
       items: items.map((item) => ({
-        productId: item.id,
-        quantity: item.quantity,
+        productId: Number(item.id),
+        quantity: Number(item.quantity),
       })),
     }
 
     setErrorMessage(null)
     setIsSubmitting(true)
+
     try {
+      // Gửi request API thật lên backend: POST /api/v1/orders
       const response = await orderService.createOrder(orderPayload)
       const createdOrder = response?.data || response
+
+      // Kiểm tra phản hồi hợp lệ từ backend có ID đơn hàng
+      if (!createdOrder || !createdOrder.id) {
+        throw new Error('Dữ liệu đơn hàng phản hồi từ máy chủ không hợp lệ.')
+      }
+
+      // Xóa sạch giỏ hàng trong Zustand store & đồng bộ localStorage
       clearCart()
-      setSuccessInfo({
-        message: 'Đặt hàng thành công! Đơn hàng của bạn đã được ghi nhận vào hệ thống.',
-        order: createdOrder,
-        payload: orderPayload,
+
+      // Chuyển hướng sang trang chi tiết đơn hàng kèm state chúc mừng và mã đơn ORD-...
+      navigate(`/orders/${createdOrder.id}`, {
+        state: {
+          orderSuccess: true,
+          justCreated: true,
+          orderCode: createdOrder.orderCode,
+          totalAmount: createdOrder.totalAmount,
+        },
+        replace: true,
       })
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Không thể tạo đơn hàng. Vui lòng thử lại.'
-      setErrorMessage(msg)
+      // Giữ nguyên giỏ hàng khi thất bại, phân tích chi tiết mã lỗi từ Backend
+      let message = 'Không thể tạo đơn hàng. Vui lòng thử lại.'
+
+      if (err.response) {
+        const { status, data } = err.response
+        if (status === 401) {
+          message = 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.'
+          navigate('/login', { state: { from: '/checkout' } })
+        } else if (status === 403) {
+          message = 'Bạn không có quyền thực hiện đặt hàng với tài khoản này.'
+        } else if (status === 400) {
+          // Lỗi validation Bean Validation từ backend (trả về map lỗi các trường)
+          if (data?.data && typeof data.data === 'object' && !Array.isArray(data.data)) {
+            const fieldErrors = Object.values(data.data).join('; ')
+            message = fieldErrors || data?.message || 'Dữ liệu đơn hàng không hợp lệ.'
+          } else {
+            message = data?.message || 'Thông tin đơn hàng không hợp lệ. Vui lòng kiểm tra lại.'
+          }
+        } else if (status === 404) {
+          message = data?.message || 'Một hoặc nhiều sản phẩm trong giỏ hàng không còn tồn tại.'
+        } else if (status === 409) {
+          message = data?.message || 'Xung đột trạng thái đơn hàng hoặc kho hàng. Vui lòng thử lại.'
+        } else if (status === 500) {
+          message = data?.message || 'Lỗi hệ thống máy chủ khi xử lý đơn hàng. Vui lòng thử lại sau.'
+        } else {
+          message = data?.message || `Lỗi yêu cầu (HTTP ${status}). Vui lòng thử lại.`
+        }
+      } else if (err.request) {
+        message = 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng của bạn.'
+      } else if (err.message) {
+        message = err.message
+      }
+
+      setErrorMessage(message)
     } finally {
       setIsSubmitting(false)
     }
@@ -150,7 +215,7 @@ export const CheckoutPage = () => {
   const totalPrice = getTotalPrice()
   const totalCount = getTotalCount()
 
-  if (items.length === 0 && !successInfo) {
+  if (items.length === 0) {
     return null
   }
 
@@ -186,7 +251,7 @@ export const CheckoutPage = () => {
 
         {/* Error Alert */}
         {errorMessage && (
-          <div className="mb-6 p-3.5 bg-red-50 border border-red-200 text-red-800 rounded-md flex items-center justify-between text-xs sm:text-sm shadow-xs">
+          <div className="mb-6 p-3.5 bg-red-50 border border-red-200 text-red-800 rounded-md flex items-center justify-between text-xs sm:text-sm shadow-xs animate-in fade-in duration-200">
             <div className="flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
               <span className="font-medium">{errorMessage}</span>
@@ -197,33 +262,6 @@ export const CheckoutPage = () => {
             >
               Đóng
             </button>
-          </div>
-        )}
-
-        {/* Success Notice with PAY- transactionCode */}
-        {successInfo && (
-          <div className="mb-6 p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-md shadow-xs space-y-2">
-            <div className="flex items-start gap-2.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-medium text-sm">{successInfo.message}</p>
-                {successInfo.order && (
-                  <div className="mt-1 space-y-1">
-                    <p className="text-xs text-emerald-800 font-medium">
-                      Mã đơn hàng: <span className="underline font-semibold">{successInfo.order.orderCode}</span> — Tổng thanh toán: {formatPrice(successInfo.order.totalAmount)}
-                    </p>
-                    {successInfo.order.transactionCode && (
-                      <p className="text-xs text-emerald-800 font-medium">
-                        Mã giao dịch: <span className="font-mono bg-emerald-100 px-1.5 py-0.5 rounded text-emerald-900 font-bold">{successInfo.order.transactionCode}</span> ({successInfo.order.paymentMethodDescription || successInfo.order.paymentMethod})
-                      </p>
-                    )}
-                  </div>
-                )}
-                <p className="text-xs text-emerald-700 mt-1">
-                  Người nhận: <strong>{successInfo.payload?.recipientName}</strong> ({successInfo.payload?.recipientPhone}) - Địa chỉ: <strong>{successInfo.payload?.shippingAddress}</strong>
-                </p>
-              </div>
-            </div>
           </div>
         )}
 
@@ -252,9 +290,10 @@ export const CheckoutPage = () => {
                         name="recipientName"
                         value={formData.recipientName}
                         onChange={handleChange}
+                        disabled={isSubmitting}
                         placeholder="Nguyễn Văn A"
                         required
-                        className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950"
+                        className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:bg-zinc-100 disabled:opacity-70"
                       />
                     </div>
                   </div>
@@ -270,9 +309,10 @@ export const CheckoutPage = () => {
                         name="recipientPhone"
                         value={formData.recipientPhone}
                         onChange={handleChange}
+                        disabled={isSubmitting}
                         placeholder="0912345678"
                         required
-                        className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950"
+                        className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:bg-zinc-100 disabled:opacity-70"
                       />
                     </div>
                   </div>
@@ -288,10 +328,11 @@ export const CheckoutPage = () => {
                       name="shippingAddress"
                       value={formData.shippingAddress}
                       onChange={handleChange}
+                      disabled={isSubmitting}
                       rows="2"
                       placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành..."
                       required
-                      className="flex min-h-[60px] w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-2 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 resize-none"
+                      className="flex min-h-[60px] w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-2 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 resize-none disabled:bg-zinc-100 disabled:opacity-70"
                     />
                   </div>
                 </div>
@@ -307,8 +348,9 @@ export const CheckoutPage = () => {
                       name="note"
                       value={formData.note}
                       onChange={handleChange}
+                      disabled={isSubmitting}
                       placeholder="Giao giờ hành chính, gọi trước khi giao..."
-                      className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950"
+                      className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 disabled:bg-zinc-100 disabled:opacity-70"
                     />
                   </div>
                 </div>
@@ -329,7 +371,7 @@ export const CheckoutPage = () => {
                       formData.paymentMethod === 'COD'
                         ? 'border-zinc-900 bg-zinc-50 shadow-xs'
                         : 'border-zinc-200 hover:border-zinc-300'
-                    }`}
+                    } ${isSubmitting ? 'pointer-events-none opacity-70' : ''}`}
                   >
                     <input
                       type="radio"
@@ -337,6 +379,7 @@ export const CheckoutPage = () => {
                       value="COD"
                       checked={formData.paymentMethod === 'COD'}
                       onChange={handleChange}
+                      disabled={isSubmitting}
                       className="mt-0.5 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
                     />
                     <div className="flex-1">
@@ -355,7 +398,7 @@ export const CheckoutPage = () => {
                       formData.paymentMethod === 'SIMULATED'
                         ? 'border-zinc-900 bg-zinc-50 shadow-xs'
                         : 'border-zinc-200 hover:border-zinc-300'
-                    }`}
+                    } ${isSubmitting ? 'pointer-events-none opacity-70' : ''}`}
                   >
                     <input
                       type="radio"
@@ -363,6 +406,7 @@ export const CheckoutPage = () => {
                       value="SIMULATED"
                       checked={formData.paymentMethod === 'SIMULATED'}
                       onChange={handleChange}
+                      disabled={isSubmitting}
                       className="mt-0.5 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
                     />
                     <div className="flex-1">
@@ -436,14 +480,23 @@ export const CheckoutPage = () => {
                   </div>
                 </div>
 
-                {/* Submit button */}
+                {/* Submit button with Loading Spinner and Duplicate Submission Prevention */}
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || items.length === 0}
                   className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] disabled:opacity-50 disabled:pointer-events-none text-zinc-50 font-medium text-sm rounded-md shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-2"
                 >
-                  <Lock className="w-4 h-4" />
-                  <span>Xác nhận đặt hàng</span>
+                  {isSubmitting ? (
+                    <>
+                      <LoadingSpinner size="sm" className="text-zinc-50" />
+                      <span>Đang xử lý giao dịch...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="w-4 h-4" />
+                      <span>Xác nhận đặt hàng</span>
+                    </>
+                  )}
                 </button>
 
                 <div className="text-center text-[11px] text-zinc-400 leading-relaxed">

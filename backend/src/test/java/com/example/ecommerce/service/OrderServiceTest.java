@@ -352,6 +352,30 @@ void getMyOrders_EmptyList_ReturnsValidEmptyPage() {
     }
 
     @Test
+    @DisplayName("Hủy đơn hàng kèm lý do thành công: cập nhật note và hoàn kho đầy đủ")
+    void cancelOrder_Success_WithReason() {
+        Order existingOrder = Order.builder()
+                .id(1L)
+                .orderCode("ORD-20261102-111111")
+                .user(testUser)
+                .orderStatus(OrderStatus.PENDING)
+                .note("Giao giờ hành chính")
+                .items(new ArrayList<>())
+                .build();
+
+        when(orderRepository.findByIdForUpdate(1L)).thenReturn(Optional.of(existingOrder));
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OrderResponse result = orderService.cancelOrder(1L, "customer@example.com", "Thay đổi địa chỉ nhận hàng");
+
+        assertThat(result.getOrderStatus()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(existingOrder.getNote()).contains("Lý do hủy: Thay đổi địa chỉ nhận hàng");
+        verify(inventoryService).restoreStockForOrder(existingOrder);
+        verify(orderRepository).save(existingOrder);
+    }
+
+    @Test
     @DisplayName("Hủy đơn hàng thành công khi trạng thái là CONFIRMED và gọi restoreStockForOrder()")
     void cancelOrder_Success_WhenConfirmed() {
         Order existingOrder = Order.builder()
