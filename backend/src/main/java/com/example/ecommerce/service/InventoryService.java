@@ -16,6 +16,11 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import com.example.ecommerce.security.CustomUserDetails;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -136,7 +141,27 @@ public class InventoryService {
      */
     @Transactional(rollbackFor = Exception.class)
     public InventoryTransactionResponse adjustStock(Long productId, AdjustInventoryRequest request) {
+        Long adminUserId = resolveCurrentAdminUserId();
+        return adjustStock(productId, request, adminUserId);
+    }
+
+    /**
+     * Admin điều chỉnh kho thủ công với định danh Admin ID rõ ràng.
+     *
+     * @param productId ID sản phẩm cần điều chỉnh
+     * @param request DTO chứa changeQuantity, type (nếu có), reason/note
+     * @param adminUserId ID của Admin thực hiện thao tác
+     * @return DTO kết quả giao dịch kho
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public InventoryTransactionResponse adjustStock(Long productId, AdjustInventoryRequest request, Long adminUserId) {
+        if (adminUserId == null) {
+            adminUserId = resolveCurrentAdminUserId();
+        }
+
         if (request.getChangeQuantity() == null || request.getChangeQuantity() == 0) {
+            log.warn("userId={} | action=ADJUST_INVENTORY | result=FAILURE | productId={} | reason={}",
+                    adminUserId, productId, "Số lượng điều chỉnh phải khác 0");
             throw new BusinessException("Số lượng điều chỉnh phải khác 0");
         }
 
@@ -157,18 +182,26 @@ public class InventoryService {
         }
 
         // Khóa bi quan hàng sản phẩm để chống tranh chấp đồng thời
-        Product product = findProductForUpdateOrRegular(productId);
+        Product product;
+        try {
+            product = findProductForUpdateOrRegular(productId);
+        } catch (ResourceNotFoundException e) {
+            log.warn("userId={} | action=ADJUST_INVENTORY | result=FAILURE | productId={} | reason={}",
+                    adminUserId, productId, sanitize(e.getMessage()));
+            throw e;
+        }
 
         int currentStock = product.getStockQuantity() != null ? product.getStockQuantity() : 0;
         int stockAfter = currentStock + effectiveChange;
 
         // Chặn điều chỉnh xuất quá số lượng tồn hiện có
         if (stockAfter < 0) {
-            log.error("Xuất kho thất bại: sản phẩm #{} '{}' hiện tồn {}, yêu cầu xuất {}",
-                    productId, product.getName(), currentStock, Math.abs(effectiveChange));
-            throw new BusinessException(String.format(
+            String reason = String.format(
                     "Không thể xuất kho vượt quá số lượng tồn hiện có (Hiện tồn: %d, yêu cầu xuất: %d)",
-                    currentStock, Math.abs(effectiveChange)));
+                    currentStock, Math.abs(effectiveChange));
+            log.warn("userId={} | action=ADJUST_INVENTORY | result=FAILURE | productId={} | quantityBefore={} | reason={}",
+                    adminUserId, productId, currentStock, sanitize(reason));
+            throw new BusinessException(reason);
         }
 
         // Cập nhật tồn kho sản phẩm
@@ -194,8 +227,15 @@ public class InventoryService {
 
         InventoryTransaction savedTransaction = inventoryTransactionRepository.save(transaction);
 
-        log.info("Admin điều chỉnh kho thành công: Sản phẩm #{} '{}', biến động: {}, tồn sau: {}, loại: {}, lý do: '{}'",
-                product.getId(), product.getName(), effectiveChange, stockAfter, transactionType, reason);
+        int quantityBefore = currentStock;
+        int quantityAfter = stockAfter;
+        Long pid = product.getId();
+        Long finalAdminId = adminUserId;
+
+        logAfterCommitOrNow(() ->
+            log.info("userId={} | action=ADJUST_INVENTORY | result=SUCCESS | productId={} | quantityBefore={} | quantityAfter={}",
+                    finalAdminId, pid, quantityBefore, quantityAfter)
+        );
 
         return InventoryTransactionResponse.fromEntity(savedTransaction);
     }
@@ -277,5 +317,33 @@ public class InventoryService {
         Sort.Direction direction = "asc".equalsIgnoreCase(sortDir) ? Sort.Direction.ASC : Sort.Direction.DESC;
 
         return PageRequest.of(pageIndex, pageSize, Sort.by(direction, validSortBy));
+    }
+
+    private void logAfterCommitOrNow(Runnable logAction) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    logAction.run();
+                }
+            });
+        } else {
+            logAction.run();
+        }
+    }
+
+    private static String sanitize(String input) {
+        if (input == null) {
+            return "";
+        }
+        return input.replaceAll("[\\r\\n]+", " ").trim();
+    }
+
+    private Long resolveCurrentAdminUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof CustomUserDetails cud) {
+            return cud.getUserId();
+        }
+        return null;
     }
 }

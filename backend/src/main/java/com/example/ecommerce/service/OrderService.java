@@ -21,6 +21,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -72,7 +74,11 @@ public class OrderService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + userEmail));
 
+        Long userId = user.getId();
+
         if (request.getItems() == null || request.getItems().isEmpty()) {
+            log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}",
+                    userId, "Đơn hàng phải chứa ít nhất một sản phẩm");
             throw new BusinessException("Đơn hàng phải chứa ít nhất một sản phẩm");
         }
 
@@ -80,9 +86,13 @@ public class OrderService {
         Map<Long, Integer> consolidatedItems = new LinkedHashMap<>();
         for (OrderItemRequest itemReq : request.getItems()) {
             if (itemReq.getProductId() == null) {
+                log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}",
+                        userId, "Mã sản phẩm không được để trống");
                 throw new BusinessException("Mã sản phẩm không được để trống");
             }
             if (itemReq.getQuantity() == null || itemReq.getQuantity() <= 0) {
+                log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}",
+                        userId, "Số lượng sản phẩm đặt mua phải lớn hơn hoặc bằng 1");
                 throw new BusinessException("Số lượng sản phẩm đặt mua phải lớn hơn hoặc bằng 1");
             }
             consolidatedItems.merge(itemReq.getProductId(), itemReq.getQuantity(), Integer::sum);
@@ -108,17 +118,25 @@ public class OrderService {
             int quantity = entry.getValue();
 
             Product product = productRepository.findById(productId)
-                    .orElseThrow(() -> new ResourceNotFoundException("Sản phẩm không tồn tại với ID: " + productId));
+                    .orElseThrow(() -> {
+                        log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}",
+                                userId, "Sản phẩm không tồn tại với ID: " + productId);
+                        return new ResourceNotFoundException("Sản phẩm không tồn tại với ID: " + productId);
+                    });
 
             if (!Boolean.TRUE.equals(product.getActive())) {
-                throw new BusinessException(String.format("Sản phẩm '%s' (mã #%d) hiện đã ngừng kinh doanh",
-                        product.getName(), productId));
+                String reason = String.format("Sản phẩm '%s' (mã #%d) hiện đã ngừng kinh doanh",
+                        product.getName(), productId);
+                log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}", userId, reason);
+                throw new BusinessException(reason);
             }
 
             // Tuyệt đối lấy giá từ DB, không nhận hay tin tưởng giá từ client
             BigDecimal unitPrice = product.getPrice();
             if (unitPrice == null || unitPrice.compareTo(BigDecimal.ZERO) < 0) {
-                throw new BusinessException("Đơn giá của sản phẩm không hợp lệ: " + product.getName());
+                String reason = "Đơn giá của sản phẩm không hợp lệ: " + product.getName();
+                log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}", userId, reason);
+                throw new BusinessException(reason);
             }
 
             BigDecimal subtotal = unitPrice.multiply(BigDecimal.valueOf(quantity));
@@ -143,14 +161,25 @@ public class OrderService {
         Order savedOrder = orderRepository.save(order);
 
         // 5. Trừ kho an toàn có khóa bi quan (PESSIMISTIC_WRITE) qua InventoryService [Đặng Thanh Bình]
-        inventoryService.deductStockForOrder(savedOrder);
+        try {
+            inventoryService.deductStockForOrder(savedOrder);
+        } catch (BusinessException e) {
+            log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | orderId={} | reason={}",
+                    userId, savedOrder.getId(), sanitize(e.getMessage()));
+            throw e;
+        }
 
         // 6. Khởi tạo bản ghi thanh toán ban đầu (COD hoặc SIMULATED)
         Payment payment = paymentService.createInitialPayment(savedOrder, request.getPaymentMethod());
         savedOrder.setPayment(payment);
 
-        log.info("Tạo đơn hàng thành công! Mã đơn: {}, Tổng tiền: {} VNĐ, Trạng thái: {}",
-                savedOrder.getOrderCode(), savedOrder.getTotalAmount(), savedOrder.getOrderStatus());
+        Long savedOrderId = savedOrder.getId();
+        BigDecimal finalTotalAmount = savedOrder.getTotalAmount();
+
+        logAfterCommitOrNow(() ->
+            log.info("userId={} | action=CREATE_ORDER | result=SUCCESS | orderId={} | totalAmount={}",
+                    userId, savedOrderId, finalTotalAmount)
+        );
 
         return mapToOrderResponse(savedOrder);
     }
@@ -270,22 +299,30 @@ public class OrderService {
         User user = userRepository.findByEmail(userEmail)
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + userEmail));
 
-        if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
+        Long userId = user.getId();
+        Role actorRole = user.getRole();
+        String cleanReason = (reason != null && !reason.trim().isEmpty()) ? sanitize(reason.trim()) : "N/A";
+
+        if (actorRole != Role.ADMIN && !order.getUser().getId().equals(userId)) {
+            log.warn("userId={} | action=CANCEL_ORDER | actorRole={} | result=FAILURE | orderId={} | reason={}",
+                    userId, actorRole, id, "Bạn không có quyền hủy đơn hàng này");
             throw new AccessDeniedException("Bạn không có quyền hủy đơn hàng này");
         }
 
         // Kiểm tra điều kiện: chỉ cho phép hủy khi ở trạng thái PENDING hoặc CONFIRMED
         if (order.getOrderStatus() != OrderStatus.PENDING && order.getOrderStatus() != OrderStatus.CONFIRMED) {
-            log.warn("Không thể hủy đơn hàng #{} do đang ở trạng thái {}", id, order.getOrderStatus());
-            throw new ConflictException(String.format("Không thể hủy đơn hàng ở trạng thái '%s'. Chỉ được hủy khi đơn ở trạng thái Chờ xác nhận hoặc Đã xác nhận.",
-                    order.getOrderStatus().getDescription()));
+            String statusDesc = order.getOrderStatus() != null ? order.getOrderStatus().getDescription() : "Không xác định";
+            String statusMsg = String.format("Không thể hủy đơn hàng ở trạng thái '%s'. Chỉ được hủy khi đơn ở trạng thái Chờ xác nhận hoặc Đã xác nhận.",
+                    statusDesc);
+            log.warn("userId={} | action=CANCEL_ORDER | actorRole={} | result=FAILURE | orderId={} | reason={}",
+                    userId, actorRole, id, sanitize(statusMsg));
+            throw new ConflictException(statusMsg);
         }
 
         order.setOrderStatus(OrderStatus.CANCELLED);
 
         // Cập nhật lý do hủy vào ghi chú đơn hàng nếu có
         if (reason != null && !reason.trim().isEmpty()) {
-            String cleanReason = reason.trim();
             String existingNote = order.getNote();
             if (existingNote != null && !existingNote.isEmpty()) {
                 order.setNote(existingNote + " [Lý do hủy: " + cleanReason + "]");
@@ -312,7 +349,12 @@ public class OrderService {
         }
 
         Order updatedOrder = orderRepository.save(order);
-        log.info("Hủy đơn hàng thành công: mã {}, kho đã được hoàn lại đầy đủ", updatedOrder.getOrderCode());
+        Long orderId = updatedOrder.getId();
+
+        logAfterCommitOrNow(() ->
+            log.warn("userId={} | action=CANCEL_ORDER | actorRole={} | result=SUCCESS | orderId={} | reason={}",
+                    userId, actorRole, orderId, cleanReason)
+        );
 
         return mapToOrderResponse(updatedOrder);
     }
@@ -543,6 +585,26 @@ public class OrderService {
     /**
      * Chuyển đổi OrderItem entity sang OrderItemResponse DTO.
      */
+    private void logAfterCommitOrNow(Runnable logAction) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    logAction.run();
+                }
+            });
+        } else {
+            logAction.run();
+        }
+    }
+
+    private static String sanitize(String input) {
+        if (input == null) {
+            return "";
+        }
+        return input.replaceAll("[\\r\\n]+", " ").trim();
+    }
+
     public OrderItemResponse mapToOrderItemResponse(OrderItem item) {
         return OrderItemResponse.builder()
                 .id(item.getId())

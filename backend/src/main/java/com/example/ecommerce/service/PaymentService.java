@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 
@@ -60,14 +62,17 @@ public class PaymentService {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với id: " + orderId));
 
+        User user = null;
         if (userEmail != null) {
-            User user = userRepository.findByEmail(userEmail)
+            user = userRepository.findByEmail(userEmail)
                     .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
             if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
                 throw new BusinessException("Bạn không có quyền thanh toán đơn hàng này");
             }
         }
+
+        Long userId = (user != null) ? user.getId() : (order.getUser() != null ? order.getUser().getId() : null);
 
         if (order.getOrderStatus() == OrderStatus.CANCELLED) {
             throw new BusinessException("Không thể thanh toán cho đơn hàng đã bị hủy");
@@ -130,8 +135,20 @@ public class PaymentService {
         Payment savedPayment = paymentRepository.save(payment);
         orderRepository.save(order);
 
-        log.info("Xử lý thanh toán hoàn tất cho đơn hàng {}. Mã giao dịch: {}, Trạng thái: {}",
-                order.getOrderCode(), savedPayment.getTransactionCode(), savedPayment.getStatus());
+        Long savedOrderId = order.getId();
+        String txCode = savedPayment.getTransactionCode();
+
+        if (savedPayment.getStatus() == PaymentStatus.FAILED) {
+            logAfterCommitOrNow(() ->
+                log.warn("userId={} | action=PROCESS_PAYMENT | result=FAILURE | orderId={} | transactionCode={}",
+                        userId, savedOrderId, txCode)
+            );
+        } else {
+            logAfterCommitOrNow(() ->
+                log.info("userId={} | action=PROCESS_PAYMENT | result=SUCCESS | orderId={} | transactionCode={}",
+                        userId, savedOrderId, txCode)
+            );
+        }
 
         return mapToPaymentResponse(savedPayment);
     }
@@ -202,5 +219,18 @@ public class PaymentService {
                 .createdAt(payment.getCreatedAt())
                 .updatedAt(payment.getUpdatedAt())
                 .build();
+    }
+
+    private void logAfterCommitOrNow(Runnable logAction) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    logAction.run();
+                }
+            });
+        } else {
+            logAction.run();
+        }
     }
 }
