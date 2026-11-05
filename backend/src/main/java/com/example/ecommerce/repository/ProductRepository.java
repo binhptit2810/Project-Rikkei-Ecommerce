@@ -9,6 +9,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -68,5 +69,10 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     long countByStockQuantity(Integer stockQuantity);
 
+    long countByStockQuantityLessThanEqual(Integer stockQuantity);
+
     long countByStockQuantityLessThanEqualAndStockQuantityGreaterThan(Integer max, Integer min);
+
+    @Query("SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE p.stockQuantity <= :threshold ORDER BY p.stockQuantity ASC")
+    List<Product> findByStockQuantityLessThanEqualOrderByStockQuantityAsc(@Param("threshold") Integer threshold);
 }

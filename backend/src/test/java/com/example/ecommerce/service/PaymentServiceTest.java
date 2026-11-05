@@ -193,6 +193,66 @@ class PaymentServiceTest {
         }
 
         @Test
+        @DisplayName("Thanh toán SIMULATED với status = FAILED: trạng thái FAILED, đơn ghi nhận FAILED")
+        void processPayment_Simulated_StatusFailed() {
+            ProcessPaymentRequest request = ProcessPaymentRequest.builder()
+                    .paymentMethod(PaymentMethod.SIMULATED)
+                    .status(PaymentStatus.FAILED)
+                    .transactionNote("Giao dịch bị từ chối")
+                    .build();
+
+            when(orderRepository.findById(10L)).thenReturn(Optional.of(testOrder));
+            when(userRepository.findByEmail(customer.getEmail())).thenReturn(Optional.of(customer));
+            when(paymentRepository.findByOrderId(10L)).thenReturn(Optional.of(existingPayment));
+            when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            PaymentResponse response = paymentService.processPayment(10L, request, customer.getEmail());
+
+            assertThat(response).isNotNull();
+            assertThat(response.getStatus()).isEqualTo(PaymentStatus.FAILED);
+            assertThat(testOrder.getPaymentStatus()).isEqualTo(PaymentStatus.FAILED);
+        }
+
+        @Test
+        @DisplayName("Thanh toán SIMULATED với status = PAID: trạng thái PAID, đơn chuyển CONFIRMED")
+        void processPayment_Simulated_StatusPaid() {
+            ProcessPaymentRequest request = ProcessPaymentRequest.builder()
+                    .paymentMethod(PaymentMethod.SIMULATED)
+                    .status(PaymentStatus.PAID)
+                    .build();
+
+            when(orderRepository.findById(10L)).thenReturn(Optional.of(testOrder));
+            when(userRepository.findByEmail(customer.getEmail())).thenReturn(Optional.of(customer));
+            when(paymentRepository.findByOrderId(10L)).thenReturn(Optional.of(existingPayment));
+            when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            PaymentResponse response = paymentService.processPayment(10L, request, customer.getEmail());
+
+            assertThat(response).isNotNull();
+            assertThat(response.getStatus()).isEqualTo(PaymentStatus.PAID);
+            assertThat(testOrder.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
+            assertThat(testOrder.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        }
+
+        @Test
+        @DisplayName("Thanh toán với request null: mặc định mô phỏng SIMULATED thành công (PAID)")
+        void processPayment_NullRequest_Success() {
+            when(orderRepository.findById(10L)).thenReturn(Optional.of(testOrder));
+            when(userRepository.findByEmail(customer.getEmail())).thenReturn(Optional.of(customer));
+            when(paymentRepository.findByOrderId(10L)).thenReturn(Optional.of(existingPayment));
+            when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            PaymentResponse response = paymentService.processPayment(10L, null, customer.getEmail());
+
+            assertThat(response).isNotNull();
+            assertThat(response.getStatus()).isEqualTo(PaymentStatus.PAID);
+            assertThat(testOrder.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
+        }
+
+        @Test
         @DisplayName("Ném BusinessException khi đơn hàng đã bị hủy (CANCELLED)")
         void processPayment_ThrowsException_WhenOrderCancelled() {
             testOrder.setOrderStatus(OrderStatus.CANCELLED);

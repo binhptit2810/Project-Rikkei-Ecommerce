@@ -8,10 +8,25 @@ export const paymentService = {
   /**
    * Xử lý thanh toán cho đơn hàng (COD hoặc SIMULATED)
    * @param {number|string} orderId
-   * @param {Object} paymentData { paymentMethod, simulateSuccess, transactionNote }
+   * @param {Object} paymentData { paymentMethod, simulateSuccess, transactionNote, status }
    */
   processPayment: async (orderId, paymentData) => {
-    const response = await apiClient.post(`/payments/${orderId}/pay`, paymentData)
+    const response = await apiClient.post(`/payments/order/${orderId}`, paymentData)
+    return response.data
+  },
+
+  /**
+   * Mô phỏng thanh toán trực tuyến thành công (PAID) hoặc thất bại (FAILED)
+   * @param {number|string} orderId
+   * @param {boolean} simulateSuccess true nếu thành công, false nếu thất bại
+   * @param {string} [transactionNote]
+   */
+  simulatePayment: async (orderId, simulateSuccess = true, transactionNote = '') => {
+    const response = await apiClient.post(`/payments/order/${orderId}`, {
+      paymentMethod: 'SIMULATED',
+      simulateSuccess,
+      transactionNote: transactionNote || (simulateSuccess ? 'Mô phỏng thanh toán trực tuyến thành công' : 'Mô phỏng thanh toán thất bại'),
+    })
     return response.data
   },
 

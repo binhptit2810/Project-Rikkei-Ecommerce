@@ -1,5 +1,5 @@
 @rem Gradle wrapper batch script (Windows)
-@rem Được tạo tự động. Chạy: gradlew.bat <task>
+@rem Auto-generated. Run: gradlew.bat <task>
 
 @if "%DEBUG%"=="" @echo off
 @rem Set local scope
