@@ -17,6 +17,9 @@ import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import com.example.ecommerce.security.CustomUserDetails;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
@@ -103,8 +106,17 @@ public class UserService {
      */
     @Transactional
     public UserResponse lockUser(Long id, LockUserRequest request, UserDetails adminUserDetails) {
-        User targetUser = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với ID: " + id));
+        Long actorUserId = resolveActorUserId(adminUserDetails);
+
+        User targetUser;
+        try {
+            targetUser = userRepository.findById(id)
+                    .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với ID: " + id));
+        } catch (ResourceNotFoundException e) {
+            log.warn("userId={} | action=LOCK_USER | result=FAILURE | targetUserId={} | reason={}",
+                    actorUserId, id, sanitize(e.getMessage()));
+            throw e;
+        }
 
         // [TSK-D04-CCT] - BR-AUTH-04: Ngăn chặn Admin tự khóa tài khoản của chính mình dựa trên ID xác thực phía server
         if (adminUserDetails != null) {
@@ -118,20 +130,28 @@ public class UserService {
                 isSelf = targetUser.getEmail().equalsIgnoreCase(adminUserDetails.getUsername().trim());
             }
             if (isSelf) {
+                log.warn("userId={} | action=LOCK_USER | result=FAILURE | targetUserId={} | reason={}",
+                        actorUserId, id, "Bạn không thể tự khóa tài khoản của chính mình");
                 throw new BusinessException("Bạn không thể tự khóa tài khoản của chính mình");
             }
         }
 
         // Kiểm tra nếu tài khoản đã bị khóa trước đó
         if (Boolean.FALSE.equals(targetUser.getActive())) {
+            log.warn("userId={} | action=LOCK_USER | result=FAILURE | targetUserId={} | reason={}",
+                    actorUserId, id, "Tài khoản này đã bị khóa từ trước");
             throw new BusinessException("Tài khoản này đã bị khóa từ trước");
         }
 
         String reason = (request != null && request.getReason() != null) ? request.getReason().trim() : "";
         if (!StringUtils.hasText(reason)) {
+            log.warn("userId={} | action=LOCK_USER | result=FAILURE | targetUserId={} | reason={}",
+                    actorUserId, id, "Lý do khóa tài khoản không được để trống");
             throw new BusinessException("Lý do khóa tài khoản không được để trống");
         }
         if (reason.length() > 500) {
+            log.warn("userId={} | action=LOCK_USER | result=FAILURE | targetUserId={} | reason={}",
+                    actorUserId, id, "Lý do khóa tài khoản không được vượt quá 500 ký tự");
             throw new BusinessException("Lý do khóa tài khoản không được vượt quá 500 ký tự");
         }
 
@@ -140,9 +160,14 @@ public class UserService {
         targetUser.setLockedAt(LocalDateTime.now());
 
         targetUser = userRepository.save(targetUser);
-        log.info("Admin [{}] đã khóa tài khoản ID={} ({}), lý do: {}",
-                adminUserDetails != null ? adminUserDetails.getUsername() : "UNKNOWN",
-                targetUser.getId(), targetUser.getEmail(), reason);
+
+        Long targetId = targetUser.getId();
+        String cleanReason = sanitize(reason);
+
+        logAfterCommitOrNow(() ->
+            log.info("userId={} | action=LOCK_USER | result=SUCCESS | targetUserId={} | reason={}",
+                    actorUserId, targetId, cleanReason)
+        );
 
         // Thu hồi toàn bộ phiên đăng nhập / refresh tokens hiện có trong Redis cho tài khoản bị khóa
         try {
@@ -170,11 +195,22 @@ public class UserService {
     // [TSK-D04-CCT]
     @Transactional
     public UserResponse unlockUser(Long id, UserDetails adminUserDetails) {
-        User targetUser = userRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với ID: " + id));
+        Long actorUserId = resolveActorUserId(adminUserDetails);
+
+        User targetUser;
+        try {
+            targetUser = userRepository.findById(id)
+                    .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với ID: " + id));
+        } catch (ResourceNotFoundException e) {
+            log.warn("userId={} | action=UNLOCK_USER | result=FAILURE | targetUserId={} | reason={}",
+                    actorUserId, id, sanitize(e.getMessage()));
+            throw e;
+        }
 
         // Kiểm tra nếu tài khoản đang hoạt động
         if (Boolean.TRUE.equals(targetUser.getActive())) {
+            log.warn("userId={} | action=UNLOCK_USER | result=FAILURE | targetUserId={} | reason={}",
+                    actorUserId, id, "Tài khoản này đang hoạt động bình thường, không cần mở khóa");
             throw new BusinessException("Tài khoản này đang hoạt động bình thường, không cần mở khóa");
         }
 
@@ -183,9 +219,13 @@ public class UserService {
         targetUser.setLockedAt(null);
 
         targetUser = userRepository.save(targetUser);
-        log.info("Admin [{}] đã mở khóa tài khoản ID={} ({})",
-                adminUserDetails != null ? adminUserDetails.getUsername() : "UNKNOWN",
-                targetUser.getId(), targetUser.getEmail());
+
+        Long targetId = targetUser.getId();
+
+        logAfterCommitOrNow(() ->
+            log.info("userId={} | action=UNLOCK_USER | result=SUCCESS | targetUserId={}",
+                    actorUserId, targetId)
+        );
 
         return UserResponse.fromEntity(targetUser);
     }
@@ -279,5 +319,32 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException(
                         "Người dùng không tồn tại: " + userDetails.getUsername()
                 ));
+    }
+
+    private void logAfterCommitOrNow(Runnable logAction) {
+        if (TransactionSynchronizationManager.isActualTransactionActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    logAction.run();
+                }
+            });
+        } else {
+            logAction.run();
+        }
+    }
+
+    private static String sanitize(String input) {
+        if (input == null) {
+            return "";
+        }
+        return input.replaceAll("[\\r\\n]+", " ").trim();
+    }
+
+    private Long resolveActorUserId(UserDetails userDetails) {
+        if (userDetails instanceof CustomUserDetails customUserDetails) {
+            return customUserDetails.getUserId();
+        }
+        return null;
     }
 }

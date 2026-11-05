@@ -12,6 +12,9 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import com.example.ecommerce.security.CustomUserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDateTime;
@@ -48,10 +51,13 @@ public class AdminInventoryController {
     @PostMapping("/{id}/adjust")
     public ResponseEntity<ApiResponse<InventoryTransactionResponse>> adjustStock(
             @PathVariable("id") Long id,
-            @Valid @RequestBody AdjustInventoryRequest request
+            @Valid @RequestBody AdjustInventoryRequest request,
+            @AuthenticationPrincipal UserDetails userDetails
     ) {
-        log.info("Admin yêu cầu điều chỉnh kho sản phẩm #{} với dữ liệu: {}", id, request);
-        InventoryTransactionResponse response = inventoryService.adjustStock(id, request);
+        Long adminUserId = (userDetails instanceof CustomUserDetails cud) ? cud.getUserId() : null;
+        InventoryTransactionResponse response = (adminUserId != null)
+                ? inventoryService.adjustStock(id, request, adminUserId)
+                : inventoryService.adjustStock(id, request);
         return ResponseEntity.ok(ApiResponse.success("Điều chỉnh tồn kho thành công", response));
     }
 
