@@ -34,6 +34,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** Kiểm tra email đã được sử dụng để đăng ký tài khoản chưa. */
     boolean existsByEmail(String email);
 
+    /** Đếm tổng số người dùng theo Role. */
+    long countByRole(Role role);
+
     /** Lấy danh sách người dùng theo Role có phân trang (phục vụ lọc Customer không lẫn Admin). */
     Page<User> findByRole(Role role, Pageable pageable);
 

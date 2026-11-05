@@ -82,6 +82,14 @@ public class PaymentService {
             throw new BusinessException("Đơn hàng này đã được thanh toán thành công trước đó");
         }
 
+        if (request == null) {
+            request = ProcessPaymentRequest.builder()
+                    .paymentMethod(PaymentMethod.SIMULATED)
+                    .simulateSuccess(true)
+                    .build();
+        }
+
+        ProcessPaymentRequest finalRequest = request;
         Payment payment = paymentRepository.findByOrderId(orderId)
                 .orElseGet(() -> {
                     Payment p = Payment.builder()
@@ -89,7 +97,7 @@ public class PaymentService {
                             .transactionCode(Payment.generateTransactionCode())
                             .amount(order.getTotalAmount())
                             .status(PaymentStatus.UNPAID)
-                            .paymentMethod(request.getPaymentMethod() != null ? request.getPaymentMethod() : PaymentMethod.COD)
+                            .paymentMethod(finalRequest.getPaymentMethod() != null ? finalRequest.getPaymentMethod() : PaymentMethod.SIMULATED)
                             .build();
                     order.setPayment(p);
                     return p;
@@ -100,6 +108,9 @@ public class PaymentService {
         }
 
         PaymentMethod method = request.getPaymentMethod() != null ? request.getPaymentMethod() : payment.getPaymentMethod();
+        if (method == null) {
+            method = PaymentMethod.SIMULATED;
+        }
         payment.setPaymentMethod(method);
         payment.setAmount(order.getTotalAmount());
 
@@ -111,13 +122,13 @@ public class PaymentService {
                     : "Thanh toán tiền mặt khi nhận hàng (COD)");
             order.setPaymentStatus(PaymentStatus.UNPAID);
         } else if (method == PaymentMethod.SIMULATED) {
-            boolean success = request.getSimulateSuccess() == null || request.getSimulateSuccess();
+            boolean success = request.isSuccessSimulation();
             if (success) {
                 payment.setStatus(PaymentStatus.PAID);
                 payment.setPaidAt(LocalDateTime.now());
                 payment.setTransactionNote(request.getTransactionNote() != null && !request.getTransactionNote().trim().isEmpty()
                         ? request.getTransactionNote().trim()
-                        : "Thanh toán trực tuyến mô phỏng thành công");
+                        : "Thanh toán trực tuyến mô phỏng thành công (PAID)");
                 order.setPaymentStatus(PaymentStatus.PAID);
                 if (order.getOrderStatus() == OrderStatus.PENDING) {
                     order.setOrderStatus(OrderStatus.CONFIRMED);
@@ -127,7 +138,7 @@ public class PaymentService {
                 payment.setPaidAt(null);
                 payment.setTransactionNote(request.getTransactionNote() != null && !request.getTransactionNote().trim().isEmpty()
                         ? request.getTransactionNote().trim()
-                        : "Thanh toán trực tuyến mô phỏng thất bại");
+                        : "Thanh toán trực tuyến mô phỏng thất bại (FAILED)");
                 order.setPaymentStatus(PaymentStatus.FAILED);
             }
         }

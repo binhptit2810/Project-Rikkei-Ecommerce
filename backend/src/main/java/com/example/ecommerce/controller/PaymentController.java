@@ -25,15 +25,23 @@ public class PaymentController {
 
     /**
      * Xử lý thanh toán đơn hàng (COD hoặc SIMULATED) và sinh/cập nhật mã giao dịch duy nhất PAY-.
+     * Hỗ trợ mô phỏng thanh toán thành công (PAID) hoặc thất bại (FAILED).
+     * POST /api/v1/payments/order/{orderId}
      * POST /api/v1/payments/{orderId}/pay
      */
-    @PostMapping("/{orderId}/pay")
+    @PostMapping({"/order/{orderId}", "/{orderId}/pay"})
     @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
     public ResponseEntity<ApiResponse<PaymentResponse>> processPayment(
             @PathVariable Long orderId,
-            @Valid @RequestBody ProcessPaymentRequest request,
+            @Valid @RequestBody(required = false) ProcessPaymentRequest request,
             @AuthenticationPrincipal UserDetails userDetails) {
         String email = userDetails != null ? userDetails.getUsername() : null;
+        if (request == null) {
+            request = ProcessPaymentRequest.builder()
+                    .paymentMethod(com.example.ecommerce.entity.PaymentMethod.SIMULATED)
+                    .simulateSuccess(true)
+                    .build();
+        }
         PaymentResponse response = paymentService.processPayment(orderId, request, email);
         return ResponseEntity.ok(ApiResponse.success("Xử lý thanh toán thành công", response));
     }

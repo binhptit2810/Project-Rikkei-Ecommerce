@@ -43,8 +43,14 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     long countByOrderStatus(OrderStatus orderStatus);
 
+    long countByPaymentStatus(com.example.ecommerce.entity.PaymentStatus paymentStatus);
+
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.orderStatus = :orderStatus")
     BigDecimal sumTotalAmountByOrderStatus(@Param("orderStatus") OrderStatus orderStatus);
+
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.paymentStatus = :paymentStatus AND o.orderStatus <> :cancelledStatus")
+    BigDecimal sumActualRevenue(@Param("paymentStatus") com.example.ecommerce.entity.PaymentStatus paymentStatus,
+                                @Param("cancelledStatus") OrderStatus cancelledStatus);
 
     @Query("SELECT o FROM Order o WHERE " +
             "(:status IS NULL OR o.orderStatus = :status) AND " +

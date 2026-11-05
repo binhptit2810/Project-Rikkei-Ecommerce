@@ -94,6 +94,61 @@ class PaymentControllerTest {
     }
 
     @Test
+    @DisplayName("POST /api/v1/payments/order/{orderId}: Mô phỏng thanh toán thành công (PAID) qua đường dẫn order/{id}")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void processPayment_ViaOrderEndpoint_Success() throws Exception {
+        ProcessPaymentRequest request = ProcessPaymentRequest.builder()
+                .paymentMethod(PaymentMethod.SIMULATED)
+                .simulateSuccess(true)
+                .build();
+
+        PaymentResponse response = PaymentResponse.builder()
+                .id(1L)
+                .transactionCode("PAY-20261105-SUCCESS01")
+                .orderId(15L)
+                .status(PaymentStatus.PAID)
+                .build();
+
+        when(paymentService.processPayment(eq(15L), any(ProcessPaymentRequest.class), eq("customer@example.com")))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/payments/order/15")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("PAID"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/payments/order/{orderId}: Mô phỏng thanh toán thất bại (FAILED)")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void processPayment_ViaOrderEndpoint_Failed() throws Exception {
+        ProcessPaymentRequest request = ProcessPaymentRequest.builder()
+                .paymentMethod(PaymentMethod.SIMULATED)
+                .simulateSuccess(false)
+                .transactionNote("Tài khoản thẻ không đủ số dư")
+                .build();
+
+        PaymentResponse response = PaymentResponse.builder()
+                .id(2L)
+                .transactionCode("PAY-20261105-FAILED01")
+                .orderId(16L)
+                .status(PaymentStatus.FAILED)
+                .build();
+
+        when(paymentService.processPayment(eq(16L), any(ProcessPaymentRequest.class), eq("customer@example.com")))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/payments/order/16")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.status").value("FAILED"));
+    }
+
+    @Test
     @DisplayName("POST /api/v1/payments/{orderId}/pay: Chưa đăng nhập trả 401 Unauthorized")
     void processPayment_Unauthorized_Returns401() throws Exception {
         ProcessPaymentRequest request = ProcessPaymentRequest.builder()
