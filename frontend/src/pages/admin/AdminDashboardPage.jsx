@@ -146,9 +146,10 @@ export const AdminDashboardPage = () => {
       desc: 'Xử lý trạng thái đơn hàng, kho bãi và giao hàng',
       sprint: 'Sprint 2',
       icon: ClipboardList,
-      badgeText: 'Theo kế hoạch',
-      badgeClass: 'bg-zinc-100 text-zinc-700 border-zinc-200',
-      isReady: false,
+      badgeText: 'Hoàn thành',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      link: '/admin/inventory',
+      isReady: true,
     },
     {
       name: 'Mã giảm giá & Cài đặt',

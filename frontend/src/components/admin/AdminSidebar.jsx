@@ -67,7 +67,7 @@ export const AdminSidebar = ({ onClose }) => {
           label: 'Quản lý tồn kho',
           path: '/admin/inventory',
           icon: Boxes,
-          isImplemented: false,
+          isImplemented: true,
         },
         {
           key: 'reviews',

@@ -4,7 +4,6 @@ import {
   X,
   AlertCircle,
   Eye,
-  Image as ImageIcon,
 } from 'lucide-react'
 import productService from '../../services/productService'
 import categoryService from '../../services/categoryService'
