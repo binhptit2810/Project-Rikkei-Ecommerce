@@ -19,23 +19,19 @@ import LoadingSpinner from '../../components/common/LoadingSpinner'
 import ProductCard from '../../components/common/ProductCard'
 import { useCartStore } from '../../store/useCartStore'
 
-// Skeleton card cho hiệu ứng tải sản phẩm
+// Skeleton card theo phong cách TechNova Electronics
 const ProductCardSkeleton = () => (
-  <div className="bg-white rounded-lg border border-zinc-200 shadow-sm overflow-hidden flex flex-col justify-between animate-pulse">
+  <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col justify-between animate-pulse">
     <div>
-      <div className="aspect-square w-full bg-zinc-100" />
-      <div className="p-4 space-y-2.5">
-        <div className="h-4 bg-zinc-200 rounded w-3/4" />
-        <div className="h-3 bg-zinc-100 rounded w-full" />
-        <div className="h-3 bg-zinc-100 rounded w-1/2" />
+      <div className="aspect-square w-full bg-slate-100" />
+      <div className="p-5 space-y-3">
+        <div className="h-3 bg-slate-200 rounded-full w-1/3" />
+        <div className="h-4 bg-slate-200 rounded-full w-4/5" />
+        <div className="h-3 bg-slate-100 rounded-full w-1/2" />
       </div>
     </div>
-    <div className="p-4 pt-3 border-t border-zinc-100 flex items-center justify-between gap-2 mt-auto">
-      <div className="space-y-1">
-        <div className="h-2.5 bg-zinc-100 rounded w-10" />
-        <div className="h-4 bg-zinc-200 rounded w-20" />
-      </div>
-      <div className="h-8 w-20 bg-zinc-200 rounded-md" />
+    <div className="p-5 pt-0">
+      <div className="h-10 bg-slate-100 rounded-full w-full" />
     </div>
   </div>
 )
@@ -235,24 +231,24 @@ export const ProductListPage = () => {
   const activeCategoryObj = categories.find((c) => c.id.toString() === selectedCategory)
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full relative">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-1 w-full relative">
       {/* Toast Notification */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full animate-in slide-in-from-bottom-2">
-          <div className="bg-white rounded-lg shadow-md border border-zinc-200 p-4 flex items-start gap-3">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-4 flex items-start gap-3">
             {toast.type === 'error' ? (
-              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
             ) : (
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
             )}
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-zinc-900 leading-snug">
+              <p className="text-xs font-semibold text-slate-900 leading-snug">
                 {toast.message}
               </p>
               {toast.type === 'success' && (
                 <Link
                   to="/cart"
-                  className="inline-flex items-center gap-1 text-xs font-medium text-zinc-950 underline underline-offset-4 hover:text-zinc-700 mt-1 transition-colors"
+                  className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 mt-1 transition-colors"
                 >
                   <span>Xem giỏ hàng</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -262,35 +258,35 @@ export const ProductListPage = () => {
             <button
               type="button"
               onClick={() => setToast(null)}
-              className="text-zinc-400 hover:text-zinc-700 p-1 rounded hover:bg-zinc-100 transition-colors cursor-pointer"
+              className="text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
               aria-label="Đóng thông báo"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
       )}
 
       {/* Page Header */}
-      <div className="mb-6">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 pb-6 border-b border-zinc-200">
+      <div className="mb-8">
+        <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-200/90">
           <div>
-            <div className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-zinc-500 mb-1">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 border border-orange-200/80 text-orange-600 text-xs font-bold uppercase tracking-wider mb-2">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>Cửa hàng trực tuyến</span>
+              <span>RIKKEI STORE</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-semibold text-zinc-950 tracking-tight">
-              {activeCategoryObj ? activeCategoryObj.name : 'Tất cả sản phẩm'}
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              {activeCategoryObj ? activeCategoryObj.name : 'Khám phá sản phẩm'}
             </h1>
-            <p className="text-zinc-500 text-sm mt-1">
+            <p className="text-slate-500 text-sm mt-1">
               {loading ? (
-                'Đang tìm kiếm...'
+                'Đang tìm kiếm sản phẩm...'
               ) : (
                 <span>
-                  Hiển thị <span className="font-medium text-zinc-900">{totalElements}</span> sản phẩm
+                  Hiển thị <span className="font-bold text-slate-900">{totalElements}</span> sản phẩm công nghệ chính hãng
                   {keyword && (
                     <span>
-                      {' '}cho từ khóa "<span className="text-zinc-900 font-medium">{keyword}</span>"
+                      {' '}cho từ khóa "<span className="text-blue-600 font-bold">{keyword}</span>"
                     </span>
                   )}
                 </span>
@@ -298,30 +294,31 @@ export const ProductListPage = () => {
             </p>
           </div>
 
-          {/* Search bar */}
+          {/* Search bar dạng viên thuốc TechNova */}
           <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 max-w-md w-full">
             <div className="relative flex-1">
-              <Search className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Tìm sản phẩm theo tên..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
-                className="flex h-9 w-full rounded-md border border-zinc-200 bg-white pl-9 pr-8 py-1 text-sm shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950"
+                className="flex h-11 w-full rounded-full border border-slate-200 bg-slate-50 hover:bg-white pl-4 pr-10 py-1 text-sm shadow-xs transition-colors placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20"
               />
-              {searchInput && (
+              {searchInput ? (
                 <button
                   type="button"
                   onClick={() => setSearchInput('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-700 cursor-pointer"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-4 h-4" />
                 </button>
+              ) : (
+                <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               )}
             </div>
             <button
               type="submit"
-              className="inline-flex items-center justify-center h-9 px-4 rounded-md bg-zinc-900 text-zinc-50 hover:bg-zinc-800 text-sm font-medium transition-colors shadow-sm cursor-pointer"
+              className="inline-flex items-center justify-center h-11 px-5 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold transition-all shadow-sm hover:shadow-md cursor-pointer shrink-0"
             >
               Tìm kiếm
             </button>
@@ -329,27 +326,27 @@ export const ProductListPage = () => {
         </div>
 
         {/* Filter & Sorting toolbar */}
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-          {/* Category Filter Pills */}
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none flex-1 min-w-0">
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
+          {/* Category Filter Pills (TechNova Style) */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none flex-1 min-w-0">
             <button
               onClick={() => handleCategorySelect('')}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+              className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                 selectedCategory === ''
-                  ? 'bg-zinc-900 text-zinc-50 shadow-sm'
-                  : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200/80 border border-zinc-200'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
             >
-              Tất cả danh mục
+              Tất cả
             </button>
             {categories.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => handleCategorySelect(cat.id.toString())}
-                className={`px-3 py-1.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
+                className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                   selectedCategory === cat.id.toString()
-                    ? 'bg-zinc-900 text-zinc-50 shadow-sm'
-                    : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200/80 border border-zinc-200'
+                    ? 'bg-blue-600 text-white shadow-sm'
+                    : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                 }`}
               >
                 {cat.name}
@@ -362,7 +359,7 @@ export const ProductListPage = () => {
             {(selectedCategory || keyword) && (
               <button
                 onClick={handleClearFilters}
-                className="inline-flex items-center gap-1 text-xs font-medium text-zinc-500 hover:text-zinc-900 px-2 py-1 rounded hover:bg-zinc-100 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900 px-3 py-1.5 rounded-full hover:bg-slate-100 transition-colors cursor-pointer border border-slate-200"
               >
                 <X className="w-3.5 h-3.5" />
                 <span>Xóa lọc</span>
@@ -370,7 +367,7 @@ export const ProductListPage = () => {
             )}
 
             <div className="flex items-center gap-2">
-              <ArrowUpDown className="w-3.5 h-3.5 text-zinc-400" />
+              <ArrowUpDown className="w-3.5 h-3.5 text-slate-400" />
               <select
                 value={
                   sortBy === 'price' && sortDir === 'asc'
@@ -382,7 +379,7 @@ export const ProductListPage = () => {
                     : 'created_desc'
                 }
                 onChange={handleSortChange}
-                className="h-8 text-xs font-medium border border-zinc-200 rounded-md px-2.5 bg-white text-zinc-800 shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 cursor-pointer"
+                className="h-9 text-xs font-bold border border-slate-200 rounded-full px-3.5 bg-white text-slate-800 shadow-xs focus:outline-none focus:border-blue-500 cursor-pointer"
               >
                 <option value="created_desc">Mới nhất</option>
                 <option value="price_asc">Giá: Thấp đến Cao</option>
@@ -397,9 +394,9 @@ export const ProductListPage = () => {
       {/* Product Content Area */}
       {loading ? (
         <div className="space-y-6">
-          <div className="flex items-center justify-center gap-2.5 py-4 text-xs font-medium text-zinc-600 bg-zinc-50 rounded-lg border border-zinc-200">
-            <LoadingSpinner size="sm" className="text-zinc-900" />
-            <span>Đang tải danh sách sản phẩm...</span>
+          <div className="flex items-center justify-center gap-2.5 py-4 text-xs font-medium text-slate-600 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
+            <LoadingSpinner size="sm" className="text-blue-600" />
+            <span>Đang tải danh sách sản phẩm Rikkei Store...</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {Array.from({ length: 8 }).map((_, idx) => (
@@ -408,22 +405,22 @@ export const ProductListPage = () => {
           </div>
         </div>
       ) : error ? (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-lg text-center text-sm my-8">
-          <p className="font-medium">{error}</p>
+        <div className="bg-red-50 border border-red-200 text-red-700 p-8 rounded-3xl text-center text-sm my-8">
+          <p className="font-bold">{error}</p>
           <button
             onClick={fetchProducts}
-            className="mt-3 px-3 py-1.5 bg-white border border-red-200 text-red-700 text-xs font-medium rounded-md hover:bg-red-50 transition-colors cursor-pointer"
+            className="mt-4 px-5 py-2.5 bg-white border border-red-200 text-red-700 text-xs font-bold rounded-full hover:bg-red-50 transition-colors cursor-pointer shadow-xs"
           >
             Thử tải lại
           </button>
         </div>
       ) : products.length === 0 ? (
-        <div className="text-center py-20 bg-white rounded-lg border border-dashed border-zinc-200 shadow-xs my-4">
-          <div className="w-12 h-12 rounded-lg bg-zinc-100 text-zinc-700 flex items-center justify-center mx-auto mb-3 border border-zinc-200">
-            <PackageOpen className="w-6 h-6" />
+        <div className="text-center py-24 bg-white rounded-3xl border border-dashed border-slate-200 shadow-xs my-4">
+          <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
+            <PackageOpen className="w-7 h-7" />
           </div>
-          <h3 className="text-base font-semibold text-zinc-900 mb-1">Không tìm thấy sản phẩm nào</h3>
-          <p className="text-zinc-500 text-xs max-w-md mx-auto mb-5">
+          <h3 className="text-lg font-extrabold text-slate-900 mb-1">Không tìm thấy sản phẩm nào</h3>
+          <p className="text-slate-500 text-xs max-w-md mx-auto mb-6">
             {keyword || selectedCategory
               ? 'Không có sản phẩm nào phù hợp với bộ lọc hiện tại. Thử thay đổi từ khóa tìm kiếm hoặc chọn danh mục khác.'
               : 'Hiện tại chưa có sản phẩm nào trong hệ thống.'}
@@ -431,7 +428,7 @@ export const ProductListPage = () => {
           <button
             type="button"
             onClick={handleClearFilters}
-            className="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-50 text-xs font-medium rounded-md shadow-sm transition-colors cursor-pointer inline-flex items-center gap-1.5"
+            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-full shadow-sm hover:shadow-md transition-all cursor-pointer inline-flex items-center gap-2"
           >
             <span>Xóa bộ lọc / Xem tất cả sản phẩm</span>
           </button>
@@ -451,27 +448,27 @@ export const ProductListPage = () => {
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="mt-12 flex items-center justify-center gap-1.5">
+            <div className="mt-14 flex items-center justify-center gap-2">
               <button
                 onClick={() => handlePageChange(page - 1)}
                 disabled={page === 0}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-zinc-200 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 disabled:pointer-events-none transition-colors bg-white shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-colors bg-white shadow-xs cursor-pointer"
               >
-                <ChevronLeft className="w-3.5 h-3.5" />
+                <ChevronLeft className="w-4 h-4" />
                 <span>Trước</span>
               </button>
 
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 {Array.from({ length: totalPages }, (_, idx) => {
                   const isCurrent = idx === page
                   return (
                     <button
                       key={idx}
                       onClick={() => handlePageChange(idx)}
-                      className={`w-8 h-8 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+                      className={`w-9 h-9 rounded-full text-xs font-bold transition-all cursor-pointer ${
                         isCurrent
-                          ? 'bg-zinc-900 text-zinc-50 shadow-sm border border-zinc-900'
-                          : 'text-zinc-700 bg-white hover:bg-zinc-100 border border-zinc-200'
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'text-slate-700 bg-white hover:bg-slate-100 border border-slate-200'
                       }`}
                     >
                       {idx + 1}
@@ -483,10 +480,10 @@ export const ProductListPage = () => {
               <button
                 onClick={() => handlePageChange(page + 1)}
                 disabled={page >= totalPages - 1}
-                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-md border border-zinc-200 text-xs font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-40 disabled:pointer-events-none transition-colors bg-white shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-colors bg-white shadow-xs cursor-pointer"
               >
                 <span>Sau</span>
-                <ChevronRight className="w-3.5 h-3.5" />
+                <ChevronRight className="w-4 h-4" />
               </button>
             </div>
           )}

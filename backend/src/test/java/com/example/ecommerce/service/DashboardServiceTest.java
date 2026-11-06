@@ -3,6 +3,7 @@ package com.example.ecommerce.service;
 import com.example.ecommerce.dto.response.DashboardStatsResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
 import com.example.ecommerce.entity.*;
+import com.example.ecommerce.repository.InventoryTransactionRepository;
 import com.example.ecommerce.repository.OrderRepository;
 import com.example.ecommerce.repository.ProductRepository;
 import com.example.ecommerce.repository.UserRepository;
@@ -23,11 +24,12 @@ import static org.mockito.Mockito.*;
 /**
  * Unit Test cho DashboardService.
  * Phụ trách: Đặng Thanh Bình (Thành viên 4 - DTB)
- * Phối hợp: Vũ Đức Huy Hoàng [VDHH]
+ * Phối hợp: Đỗ Hoàng Anh [DHA]
  *
  * Tiêu chí nghiệm thu (DoD):
- * - API Dashboard trả đủ chỉ số: tổng đơn hàng, doanh thu thực tế, đơn chờ duyệt.
- * - Truy vấn danh sách các sản phẩm có nguy cơ hết hàng (stock_quantity <= 5).
+ * - Dashboard số liệu chính xác 100%, phản ánh thực tế hoạt động kinh doanh.
+ * - Xác nhận thống kê doanh thu chỉ tính trên các đơn hàng đã thanh toán (PAID) hoặc hoàn thành (COMPLETED).
+ * - Đối soát các bản ghi nhật ký kho: ORDER_PLACED, ORDER_CANCELLED, MANUAL_IMPORT.
  */
 @ExtendWith(MockitoExtension.class)
 class DashboardServiceTest {
@@ -40,6 +42,9 @@ class DashboardServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private InventoryTransactionRepository inventoryTransactionRepository;
 
     @InjectMocks
     private DashboardService dashboardService;
@@ -74,11 +79,11 @@ class DashboardServiceTest {
     }
 
     @Test
-    @DisplayName("getDashboardStats: Trả về đầy đủ tổng đơn, doanh thu thực tế, đơn chờ duyệt và sản phẩm nguy cơ hết hàng")
+    @DisplayName("getDashboardStats: Trả về đầy đủ tổng đơn, doanh thu thực tế (PAID/COMPLETED), đối soát nhật ký kho và tồn kho thấp")
     void getDashboardStats_Success() {
-        // Mock dữ liệu đơn hàng
+        // Mock dữ liệu đơn hàng và doanh thu thực tế
         when(orderRepository.count()).thenReturn(25L);
-        when(orderRepository.sumActualRevenue(PaymentStatus.PAID, OrderStatus.CANCELLED))
+        when(orderRepository.sumActualRevenue(PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED))
                 .thenReturn(BigDecimal.valueOf(18500000));
         when(orderRepository.countByOrderStatus(OrderStatus.PENDING)).thenReturn(4L);
         when(orderRepository.countByOrderStatus(OrderStatus.CONFIRMED)).thenReturn(6L);
@@ -92,6 +97,11 @@ class DashboardServiceTest {
         when(productRepository.countByStockQuantityLessThanEqual(5)).thenReturn(2L);
         when(productRepository.findByStockQuantityLessThanEqualOrderByStockQuantityAsc(5))
                 .thenReturn(List.of(lowStock1, lowStock2));
+
+        // Mock đối soát nhật ký kho (ORDER_PLACED, ORDER_CANCELLED, MANUAL_IMPORT)
+        when(inventoryTransactionRepository.countByTransactionType(InventoryTransactionType.ORDER_PLACED)).thenReturn(15L);
+        when(inventoryTransactionRepository.countByTransactionType(InventoryTransactionType.ORDER_CANCELLED)).thenReturn(2L);
+        when(inventoryTransactionRepository.countByTransactionType(InventoryTransactionType.MANUAL_IMPORT)).thenReturn(5L);
 
         // Mock dữ liệu người dùng
         when(userRepository.count()).thenReturn(100L);
@@ -118,26 +128,35 @@ class DashboardServiceTest {
         assertThat(stats.getLowStockProducts().get(1).getId()).isEqualTo(102L);
         assertThat(stats.getLowStockProducts().get(1).getStockQuantity()).isEqualTo(5);
 
+        // Kiểm tra đối soát nhật ký kho
+        assertThat(stats.getOrderPlacedCount()).isEqualTo(15L);
+        assertThat(stats.getOrderCancelledCount()).isEqualTo(2L);
+        assertThat(stats.getManualImportCount()).isEqualTo(5L);
+
         // Kiểm tra người dùng
         assertThat(stats.getTotalUsers()).isEqualTo(100L);
         assertThat(stats.getTotalCustomers()).isEqualTo(95L);
 
         verify(orderRepository).count();
-        verify(orderRepository).sumActualRevenue(PaymentStatus.PAID, OrderStatus.CANCELLED);
+        verify(orderRepository).sumActualRevenue(PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
         verify(orderRepository).countByOrderStatus(OrderStatus.PENDING);
         verify(productRepository).findByStockQuantityLessThanEqualOrderByStockQuantityAsc(5);
+        verify(inventoryTransactionRepository).countByTransactionType(InventoryTransactionType.ORDER_PLACED);
+        verify(inventoryTransactionRepository).countByTransactionType(InventoryTransactionType.ORDER_CANCELLED);
+        verify(inventoryTransactionRepository).countByTransactionType(InventoryTransactionType.MANUAL_IMPORT);
     }
 
     @Test
     @DisplayName("getDashboardStats: Doanh thu null thì mặc định trả về BigDecimal.ZERO")
     void getDashboardStats_NullRevenue_DefaultsToZero() {
         when(orderRepository.count()).thenReturn(0L);
-        when(orderRepository.sumActualRevenue(PaymentStatus.PAID, OrderStatus.CANCELLED))
+        when(orderRepository.sumActualRevenue(PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED))
                 .thenReturn(null);
         when(productRepository.count()).thenReturn(0L);
         when(productRepository.countByStockQuantityLessThanEqual(5)).thenReturn(0L);
         when(productRepository.findByStockQuantityLessThanEqualOrderByStockQuantityAsc(5))
                 .thenReturn(List.of());
+        when(inventoryTransactionRepository.countByTransactionType(any())).thenReturn(0L);
         when(userRepository.count()).thenReturn(0L);
         when(userRepository.countByRole(Role.CUSTOMER)).thenReturn(0L);
 
@@ -162,4 +181,3 @@ class DashboardServiceTest {
         assertThat(result.get(1).getName()).isEqualTo("Quần Jean Slimfit");
     }
 }
-

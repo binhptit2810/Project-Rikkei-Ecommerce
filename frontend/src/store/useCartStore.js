@@ -19,12 +19,20 @@ export const useCartStore = create(
        * Thêm sản phẩm vào giỏ hàng (Chỉ cho phép khi người dùng đã đăng nhập)
        */
       addToCart: async (product, quantity = 1) => {
-        const isAuthenticated = useAuthStore.getState().isAuthenticated
+        const { isAuthenticated, user } = useAuthStore.getState()
         if (!isAuthenticated) {
           return {
             success: false,
             requireLogin: true,
             message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để thêm sản phẩm vào giỏ hàng.',
+          }
+        }
+
+        if (user?.role === 'ADMIN') {
+          return {
+            success: false,
+            isAdmin: true,
+            message: 'Tài khoản Quản trị viên (ADMIN) không được phép mua hàng.',
           }
         }
 
@@ -117,20 +125,20 @@ export const useCartStore = create(
       },
 
       /**
-       * Lấy tổng số lượng sản phẩm trong giỏ (Trả về 0 nếu chưa đăng nhập)
+       * Lấy tổng số lượng sản phẩm trong giỏ (Trả về 0 nếu chưa đăng nhập hoặc là Admin)
        */
       getTotalCount: () => {
-        const isAuthenticated = useAuthStore.getState().isAuthenticated
-        if (!isAuthenticated) return 0
+        const { isAuthenticated, user } = useAuthStore.getState()
+        if (!isAuthenticated || user?.role === 'ADMIN') return 0
         return get().items.reduce((total, item) => total + (item.quantity || 0), 0)
       },
 
       /**
-       * Tính tổng tiền giỏ hàng (VND) (Trả về 0 nếu chưa đăng nhập)
+       * Tính tổng tiền giỏ hàng (VND) (Trả về 0 nếu chưa đăng nhập hoặc là Admin)
        */
       getTotalPrice: () => {
-        const isAuthenticated = useAuthStore.getState().isAuthenticated
-        if (!isAuthenticated) return 0
+        const { isAuthenticated, user } = useAuthStore.getState()
+        if (!isAuthenticated || user?.role === 'ADMIN') return 0
         return get().items.reduce(
           (total, item) => total + (Number(item.price) || 0) * (item.quantity || 0),
           0

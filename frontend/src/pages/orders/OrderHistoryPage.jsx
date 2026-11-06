@@ -299,12 +299,12 @@ export const OrderHistoryPage = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Tìm theo mã đơn, người nhận, tên sản phẩm..."
-              className="w-full pl-10 pr-9 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-zinc-950/20 focus:border-zinc-900 text-xs text-slate-800 bg-white"
+              className="w-full pl-10 pr-9 py-2.5 rounded-full border border-slate-200 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 text-xs text-slate-800 bg-white shadow-xs"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -320,9 +320,9 @@ export const OrderHistoryPage = () => {
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-zinc-900 text-zinc-50 shadow-sm'
+                      ? 'bg-blue-600 text-white shadow-sm'
                       : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
                   }`}
                 >
@@ -388,7 +388,7 @@ export const OrderHistoryPage = () => {
             </div>
             <Link
               to="/products"
-              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 active:scale-95 transition-all shadow-2xs"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-95 transition-all shadow-md shadow-blue-500/20"
             >
               <span>Khám phá sản phẩm ngay</span>
               <ChevronRight className="w-4 h-4" />
@@ -548,7 +548,7 @@ export const OrderHistoryPage = () => {
                         <button
                           type="button"
                           onClick={() => navigate(`/orders/${order.id}`)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 transition-colors cursor-pointer shadow-2xs"
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors cursor-pointer shadow-xs"
                         >
                           <span>Xem chi tiết</span>
                           <ChevronRight className="w-3.5 h-3.5" />
@@ -589,9 +589,9 @@ export const OrderHistoryPage = () => {
                     type="button"
                     onClick={() => fetchOrders(i)}
                     disabled={loading}
-                    className={`w-8 h-8 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`w-8 h-8 rounded-full text-xs font-bold transition-all cursor-pointer ${
                       page === i
-                        ? 'bg-zinc-900 text-white shadow-2xs'
+                        ? 'bg-blue-600 text-white shadow-xs'
                         : 'text-slate-600 hover:bg-slate-100'
                     }`}
                   >

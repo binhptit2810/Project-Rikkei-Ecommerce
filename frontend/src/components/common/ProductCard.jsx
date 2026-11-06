@@ -1,17 +1,30 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ShoppingBag, ShoppingCart } from 'lucide-react'
+import { ShoppingBag, ShoppingCart, Star, Heart, Eye } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=80'
 
+// Màu nền tỏa tròn (Radial Glow) theo chuẩn TechNova Electronics
+const GLOW_CLASSES = [
+  'bg-gradient-to-br from-orange-50/80 via-white to-amber-50/30',
+  'bg-gradient-to-br from-blue-50/80 via-white to-indigo-50/30',
+  'bg-gradient-to-br from-emerald-50/80 via-white to-teal-50/30',
+  'bg-gradient-to-br from-purple-50/80 via-white to-pink-50/30'
+]
+
 /**
  * Component hiển thị thẻ sản phẩm (ProductCard)
- * Phong cách: shadcn/ui New York - Neutral/Zinc Palette
+ * Thiết kế chuẩn phong cách TechNova Electronics:
+ * - Khung thẻ bo góc 2xl viền mảnh tinh tế
+ * - Nền ảnh với hiệu ứng radial glow đa sắc
+ * - Badge "BEST SELLER" cam và discount xanh lá
+ * - Tên thương hiệu in hoa, đánh giá sao vàng
+ * - Nút "Thêm vào giỏ" viên thuốc màu xanh hoàng gia (Royal Blue)
  */
 export const ProductCard = ({ product, onAddToCart }) => {
   const [imgError, setImgError] = useState(false)
-  const { isAuthenticated } = useAuthStore()
+  const { isAuthenticated, user } = useAuthStore()
   const navigate = useNavigate()
 
   if (!product) return null
@@ -27,6 +40,13 @@ export const ProductCard = ({ product, onAddToCart }) => {
     style: 'currency',
     currency: 'VND',
   }).format(product.price || 0)
+
+  // Giá gốc tượng trưng để hiển thị mức giảm giá (15%) như thiết kế TechNova
+  const originalPrice = Math.round((product.price || 0) * 1.15)
+  const formattedOriginalPrice = new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+  }).format(originalPrice)
 
   // Xử lý sự kiện click Thêm vào giỏ hàng
   const handleAddToCartClick = (e) => {
@@ -44,6 +64,12 @@ export const ProductCard = ({ product, onAddToCart }) => {
       return
     }
 
+    // Chặn Quản trị viên mua hàng
+    if (user?.role === 'ADMIN') {
+      alert('Tài khoản Quản trị viên (ADMIN) không được phép mua hàng.')
+      return
+    }
+
     if (!isOutOfStock && onAddToCart) {
       onAddToCart(product)
     }
@@ -58,83 +84,137 @@ export const ProductCard = ({ product, onAddToCart }) => {
     }
   }
 
+  // Lựa chọn màu glow theo ID sản phẩm
+  const glowClass = GLOW_CLASSES[(Number(product.id) || 0) % GLOW_CLASSES.length]
+
   return (
-    <Link
-      to={`/products/${product.id}`}
-      className="group relative flex flex-col justify-between overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm transition-all hover:border-zinc-300 hover:shadow-md"
-    >
-      <div>
-        {/* Khung ảnh sản phẩm & các Badge */}
-        <div className="aspect-square w-full bg-zinc-50 relative overflow-hidden flex items-center justify-center border-b border-zinc-100">
+    <div className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white hover:border-slate-300 hover:shadow-xl transition-all duration-300 overflow-hidden">
+      <Link to={`/products/${product.id}`} className="block">
+        {/* Khung ảnh sản phẩm & các Badge TechNova */}
+        <div className={`aspect-square w-full relative overflow-hidden flex items-center justify-center p-6 ${glowClass}`}>
           {product.imageUrl ? (
             <img
               src={product.imageUrl}
               alt={product.name || 'Sản phẩm'}
               onError={handleImageError}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+              className="w-full h-full object-contain mix-blend-multiply transition-transform duration-300 group-hover:scale-108"
             />
           ) : (
-            <div className="flex flex-col items-center justify-center text-zinc-300 w-full h-full">
-              <ShoppingBag className="w-10 h-10 stroke-[1.25] text-zinc-300 mb-1" />
-              <span className="text-xs text-zinc-400 font-medium">Hình ảnh sản phẩm</span>
+            <div className="flex flex-col items-center justify-center text-slate-300 w-full h-full">
+              <ShoppingBag className="w-12 h-12 stroke-[1.25] text-slate-300 mb-2" />
+              <span className="text-xs text-slate-400 font-medium">Rikkei Store</span>
             </div>
           )}
 
-          {/* Badge tên danh mục */}
-          {product.categoryName && (
-            <span className="absolute top-2.5 left-2.5 bg-white/95 text-zinc-700 text-[11px] font-medium px-2 py-0.5 rounded-md backdrop-blur-xs border border-zinc-200 shadow-2xs">
-              {product.categoryName}
+          {/* Badge Trái: BEST SELLER hoặc HOT */}
+          <div className="absolute top-3 left-3 flex flex-col gap-1 z-10">
+            {product.stockQuantity > 5 ? (
+              <span className="bg-orange-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider shadow-xs">
+                BEST SELLER
+              </span>
+            ) : isOutOfStock ? (
+              <span className="bg-slate-900 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider shadow-xs">
+                HẾT HÀNG
+              </span>
+            ) : (
+              <span className="bg-amber-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider shadow-xs">
+                SẮP HẾT
+              </span>
+            )}
+          </div>
+
+          {/* Badge Phải: Giảm giá -15% */}
+          {!isOutOfStock && (
+            <span className="absolute top-3 right-3 bg-emerald-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow-xs z-10">
+              -15%
             </span>
           )}
 
-          {/* Badge trạng thái tồn kho */}
-          {isOutOfStock ? (
-            <span className="absolute top-2.5 right-2.5 bg-zinc-900 text-zinc-50 text-[10px] font-medium px-2 py-0.5 rounded-md uppercase tracking-wider">
-              Hết hàng
-            </span>
-          ) : (
-            <span className="absolute top-2.5 right-2.5 bg-zinc-100 text-zinc-700 text-[10px] font-medium px-2 py-0.5 rounded-md border border-zinc-200">
-              Còn {stockCount}
-            </span>
-          )}
+          {/* Hover Action Buttons (TechNova Image 5) */}
+          <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+              }}
+              className="w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-md flex items-center justify-center transition-transform hover:scale-110 cursor-pointer"
+              title="Yêu thích"
+            >
+              <Heart className="w-4 h-4 text-slate-600 hover:text-red-500" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                navigate(`/products/${product.id}`)
+              }}
+              className="w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-md flex items-center justify-center transition-transform hover:scale-110 cursor-pointer"
+              title="Xem chi tiết"
+            >
+              <Eye className="w-4 h-4 text-slate-600 hover:text-blue-600" />
+            </button>
+          </div>
         </div>
 
-        {/* Thông tin sản phẩm: Tên & Mô tả ngắn */}
-        <div className="p-4 space-y-1">
-          <h3 className="font-semibold text-zinc-900 text-sm group-hover:underline line-clamp-2 leading-snug">
+        {/* Thông tin sản phẩm */}
+        <div className="p-4 sm:p-5 space-y-1.5">
+          {/* Tên thương hiệu/danh mục in hoa */}
+          <p className="text-[11px] font-bold tracking-wider text-slate-400 uppercase truncate">
+            {product.categoryName || 'RIKKEI STORE GEAR'}
+          </p>
+
+          {/* Tên sản phẩm */}
+          <h3 className="font-bold text-slate-900 text-sm group-hover:text-blue-600 transition-colors line-clamp-1 leading-snug">
             {product.name}
           </h3>
-          <p className="text-zinc-500 text-xs line-clamp-2 leading-relaxed">
-            {product.description || 'Sản phẩm chính hãng với tiêu chuẩn chất lượng cao.'}
-          </p>
-        </div>
-      </div>
 
-      {/* Footer: Giá bán & Nút Thêm vào giỏ hàng */}
-      <div className="p-4 pt-3 border-t border-zinc-100 flex items-center justify-between gap-2 mt-auto">
-        <div className="min-w-0">
-          <span className="text-[10px] uppercase font-medium tracking-wider text-zinc-400 block">Giá bán</span>
-          <span className="text-base font-semibold text-zinc-950 tabular-nums truncate block">
-            {formattedPrice}
-          </span>
-        </div>
+          {/* Đánh giá sao TechNova (4.8 rating) */}
+          <div className="flex items-center gap-1.5 pt-0.5 text-xs">
+            <div className="flex text-amber-400">
+              {[...Array(5)].map((_, i) => (
+                <Star key={i} className="w-3.5 h-3.5 fill-current" />
+              ))}
+            </div>
+            <span className="text-slate-500 font-semibold text-[11px]">
+              4.8 <span className="text-slate-400 font-normal">({(product.id * 17) % 300 + 120})</span>
+            </span>
+          </div>
 
+          {/* Hàng giá tiền: Giá bán + Giá gốc gạch ngang + Tag giảm */}
+          <div className="pt-2 flex items-baseline gap-2 flex-wrap">
+            <span className="text-base font-extrabold text-slate-900">
+              {formattedPrice}
+            </span>
+            <span className="text-xs text-slate-400 line-through">
+              {formattedOriginalPrice}
+            </span>
+            <span className="text-[11px] font-bold text-emerald-600">
+              15% off
+            </span>
+          </div>
+        </div>
+      </Link>
+
+      {/* Nút Thêm vào giỏ hàng: Royal Blue Pill (TechNova Image 5) */}
+      <div className="p-4 pt-0 sm:p-5 sm:pt-0 mt-auto">
         <button
           type="button"
           onClick={handleAddToCartClick}
           disabled={isOutOfStock}
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors cursor-pointer ${
+          className={`w-full py-2.5 px-4 rounded-full text-xs font-semibold flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] cursor-pointer shadow-xs ${
             isOutOfStock
-              ? 'bg-zinc-100 text-zinc-400 cursor-not-allowed border border-zinc-200'
-              : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-50 shadow-sm active:scale-[0.98]'
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
+              : 'bg-blue-600 hover:bg-blue-700 hover:shadow-md text-white'
           }`}
           title={isOutOfStock ? 'Sản phẩm đã hết hàng' : 'Thêm vào giỏ hàng'}
         >
-          <ShoppingCart className="w-3.5 h-3.5" />
-          <span>{isOutOfStock ? 'Hết hàng' : 'Thêm giỏ'}</span>
+          <ShoppingCart className="w-4 h-4" />
+          <span>{isOutOfStock ? 'Tạm hết hàng' : 'Thêm vào giỏ'}</span>
         </button>
       </div>
-    </Link>
+    </div>
   )
 }
 

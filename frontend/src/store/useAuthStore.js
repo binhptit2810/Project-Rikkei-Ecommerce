@@ -67,10 +67,12 @@ export const useAuthStore = create((set, get) => ({
           await authService.logout()
         } catch (_) {}
 
-        // Nếu ở cổng CUSTOMER mà tài khoản là ADMIN: trả về thông báo chung, tự nhiên, tuyệt đối KHÔNG tiết lộ role
+        // Nếu ở cổng CUSTOMER mà tài khoản là ADMIN: từ chối và thông báo rõ ràng
         let errorMessage = 'Email hoặc mật khẩu không chính xác.'
         if (expectedRole === 'ADMIN') {
           errorMessage = 'Tài khoản không có quyền truy cập khu vực Quản trị.'
+        } else if (expectedRole === 'CUSTOMER' && user?.role === 'ADMIN') {
+          errorMessage = 'Tài khoản Quản trị viên (ADMIN) không được phép đăng nhập tại cổng Khách hàng. Vui lòng đăng nhập tại trang Quản trị (/admin/login).'
         }
 
         set({

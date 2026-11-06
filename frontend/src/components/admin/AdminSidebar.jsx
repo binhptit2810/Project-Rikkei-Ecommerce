@@ -11,7 +11,6 @@ import {
   Percent,
   Settings,
   X,
-  Store,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 
@@ -225,13 +224,6 @@ export const AdminSidebar = ({ onClose }) => {
               {user?.email || 'admin@ecommerce.com'}
             </div>
           </div>
-          <Link
-            to="/"
-            className="p-1.5 rounded-md text-zinc-400 hover:text-zinc-100 hover:bg-zinc-800 transition-colors cursor-pointer"
-            title="Về trang mua sắm"
-          >
-            <Store className="w-4 h-4" />
-          </Link>
         </div>
       </div>
     </aside>

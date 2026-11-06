@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { Link, useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import {
   Shield,
   Lock,
@@ -8,8 +8,6 @@ import {
   EyeOff,
   AlertCircle,
   ShieldAlert,
-  ArrowRight,
-  ArrowLeft,
   KeyRound,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
@@ -107,14 +105,6 @@ export const AdminLoginPage = () => {
             </span>
           </div>
         </div>
-
-        <Link
-          to="/"
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-zinc-400 hover:text-white bg-zinc-900 hover:bg-zinc-850 border border-zinc-800 px-3 py-1.5 rounded-md transition-colors"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Về cửa hàng</span>
-        </Link>
       </header>
 
       {/* Main Content Form */}
@@ -160,17 +150,6 @@ export const AdminLoginPage = () => {
                       <p className="text-red-300 leading-relaxed">
                         {typeof error === 'object' ? error.message : error}
                       </p>
-                      {isCustomerAttempt && (
-                        <div className="pt-2">
-                          <Link
-                            to="/login"
-                            className="inline-flex items-center gap-1 font-medium text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 px-2.5 py-1 rounded text-xs transition-colors"
-                          >
-                            <span>Sang cổng Khách hàng</span>
-                            <ArrowRight className="w-3 h-3" />
-                          </Link>
-                        </div>
-                      )}
                     </>
                   )}
                 </div>

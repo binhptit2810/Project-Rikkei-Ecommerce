@@ -203,7 +203,7 @@ export const ProfilePage = () => {
         <div className="md:col-span-4 space-y-6">
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-6 text-center">
             {/* Avatar */}
-            <div className="w-20 h-20 rounded-2xl bg-zinc-900 text-zinc-50 font-bold text-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-blue-700 via-indigo-600 to-blue-500 text-white font-extrabold text-2xl flex items-center justify-center mx-auto mb-4 shadow-md shadow-blue-500/20">
               {user?.fullName ? user.fullName.charAt(0).toUpperCase() : 'U'}
             </div>
 
@@ -254,9 +254,9 @@ export const ProfilePage = () => {
           <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs p-2 flex flex-col gap-1">
             <button
               onClick={() => setActiveTab('profile')}
-              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 cursor-pointer ${
+              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
                 activeTab === 'profile'
-                  ? 'bg-zinc-100 text-zinc-950 font-medium'
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -265,9 +265,9 @@ export const ProfilePage = () => {
             </button>
             <button
               onClick={() => setActiveTab('password')}
-              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-semibold transition-all flex items-center gap-2.5 cursor-pointer ${
+              className={`w-full text-left px-4 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer ${
                 activeTab === 'password'
-                  ? 'bg-zinc-100 text-zinc-950 font-medium'
+                  ? 'bg-blue-50 text-blue-700 border border-blue-200/60'
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
@@ -400,11 +400,11 @@ export const ProfilePage = () => {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="btn-primary text-xs flex items-center gap-2"
+                    className="px-6 py-2.5 rounded-full bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center gap-2 shadow-sm shadow-blue-500/20 cursor-pointer disabled:opacity-50"
                   >
                     {isLoading ? (
                       <>
-                        <LoadingSpinner size="sm" />
+                        <LoadingSpinner size="sm" className="text-white" />
                         <span>Đang lưu...</span>
                       </>
                     ) : (
@@ -558,7 +558,7 @@ export const ProfilePage = () => {
                   <button
                     type="submit"
                     disabled={isLoading}
-                    className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-6 rounded-xl shadow-2xs hover:shadow-xs active:scale-[0.99] transition-all text-xs flex items-center gap-2 cursor-pointer disabled:opacity-60"
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-6 rounded-full shadow-md shadow-blue-500/20 active:scale-[0.99] transition-all text-xs flex items-center gap-2 cursor-pointer disabled:opacity-60"
                   >
                     {isLoading ? (
                       <>

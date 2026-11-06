@@ -9,7 +9,7 @@ import Footer from './Footer'
  */
 export const CustomerLayout = () => {
   return (
-    <div className="min-h-screen bg-white text-zinc-950 flex flex-col justify-between antialiased selection:bg-zinc-900 selection:text-zinc-50">
+    <div className="min-h-screen bg-slate-50/60 text-slate-900 flex flex-col justify-between antialiased selection:bg-blue-600 selection:text-white font-sans">
       <Navbar />
       <main className="flex-1 flex flex-col">
         <Outlet />
