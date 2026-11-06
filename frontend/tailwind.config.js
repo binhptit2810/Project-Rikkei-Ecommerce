@@ -47,14 +47,43 @@ export default {
           DEFAULT: '#ffffff',
           foreground: '#09090b',
         },
+        technova: {
+          navy: {
+            950: '#070d1e',
+            900: '#0b1633',
+            850: '#0d1f4d',
+            800: '#11224d',
+          },
+          blue: {
+            50: '#eff6ff',
+            100: '#dbeafe',
+            200: '#bfdbfe',
+            500: '#3b82f6',
+            600: '#2563eb',
+            700: '#1d4ed8',
+          },
+          orange: {
+            50: '#fff7ed',
+            100: '#ffedd5',
+            500: '#f97316',
+            600: '#ea580c',
+            700: '#c2410c',
+          },
+          emerald: {
+            500: '#10b981',
+            600: '#059669',
+          },
+        },
       },
       borderRadius: {
         lg: '0.5rem',
         md: 'calc(0.5rem - 2px)',
         sm: 'calc(0.5rem - 4px)',
+        '2xl': '1rem',
+        '3xl': '1.5rem',
       },
       fontFamily: {
-        sans: ['"Geist Mono"', '"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+        sans: ['Inter', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
         mono: ['"Geist Mono"', '"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
       },
       boxShadow: {

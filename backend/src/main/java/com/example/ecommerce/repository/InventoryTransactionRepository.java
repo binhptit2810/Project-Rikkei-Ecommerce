@@ -25,6 +25,11 @@ public interface InventoryTransactionRepository extends JpaRepository<InventoryT
 
     Page<InventoryTransaction> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
+    long countByTransactionType(InventoryTransactionType transactionType);
+
+    @Query("SELECT COALESCE(SUM(it.changeQuantity), 0) FROM InventoryTransaction it WHERE it.product.id = :productId")
+    Integer sumChangeQuantityByProductId(@Param("productId") Long productId);
+
     @Query("SELECT it FROM InventoryTransaction it " +
            "LEFT JOIN FETCH it.product p " +
            "WHERE (:productId IS NULL OR p.id = :productId) " +

@@ -2,10 +2,12 @@ package com.example.ecommerce.service;
 
 import com.example.ecommerce.dto.response.DashboardStatsResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
+import com.example.ecommerce.entity.InventoryTransactionType;
 import com.example.ecommerce.entity.OrderStatus;
 import com.example.ecommerce.entity.PaymentStatus;
 import com.example.ecommerce.entity.Product;
 import com.example.ecommerce.entity.Role;
+import com.example.ecommerce.repository.InventoryTransactionRepository;
 import com.example.ecommerce.repository.OrderRepository;
 import com.example.ecommerce.repository.ProductRepository;
 import com.example.ecommerce.repository.UserRepository;
@@ -36,6 +38,7 @@ public class DashboardService {
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
+    private final InventoryTransactionRepository inventoryTransactionRepository;
 
     /**
      * Thu thập toàn bộ chỉ số thống kê tổng quan hệ thống cho Admin Dashboard.
@@ -51,9 +54,13 @@ public class DashboardService {
 
         log.info("Thu thập số liệu thống kê Admin Dashboard (ngưỡng tồn kho <= {})", threshold);
 
-        // 1. Thống kê đơn hàng & Doanh thu thực tế
+        // 1. Thống kê đơn hàng & Doanh thu thực tế (chỉ tính đơn PAID hoặc COMPLETED và không bị CANCELLED)
         long totalOrders = orderRepository.count();
-        BigDecimal actualRevenue = orderRepository.sumActualRevenue(PaymentStatus.PAID, OrderStatus.CANCELLED);
+        BigDecimal actualRevenue = orderRepository.sumActualRevenue(
+                PaymentStatus.PAID,
+                OrderStatus.COMPLETED,
+                OrderStatus.CANCELLED
+        );
         if (actualRevenue == null) {
             actualRevenue = BigDecimal.ZERO;
         }
@@ -73,7 +80,12 @@ public class DashboardService {
                 .map(ProductResponse::fromEntity)
                 .toList();
 
-        // 3. Thống kê người dùng
+        // 3. Đối soát các bản ghi nhật ký kho
+        long orderPlacedCount = inventoryTransactionRepository.countByTransactionType(InventoryTransactionType.ORDER_PLACED);
+        long orderCancelledCount = inventoryTransactionRepository.countByTransactionType(InventoryTransactionType.ORDER_CANCELLED);
+        long manualImportCount = inventoryTransactionRepository.countByTransactionType(InventoryTransactionType.MANUAL_IMPORT);
+
+        // 4. Thống kê người dùng
         long totalUsers = userRepository.count();
         long totalCustomers = userRepository.countByRole(Role.CUSTOMER);
 
@@ -90,6 +102,9 @@ public class DashboardService {
                 .totalProducts(totalProducts)
                 .lowStockCount(lowStockCount)
                 .lowStockProducts(lowStockProducts)
+                .orderPlacedCount(orderPlacedCount)
+                .orderCancelledCount(orderCancelledCount)
+                .manualImportCount(manualImportCount)
                 .totalUsers(totalUsers)
                 .totalCustomers(totalCustomers)
                 .build();

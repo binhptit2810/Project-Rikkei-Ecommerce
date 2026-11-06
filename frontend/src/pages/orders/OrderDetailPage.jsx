@@ -386,7 +386,7 @@ export const OrderDetailPage = () => {
                 <button
                   type="button"
                   onClick={() => setPaymentModalOpen(true)}
-                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 transition-colors shadow-2xs cursor-pointer"
+                  className="mt-3 inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 cursor-pointer"
                 >
                   <CreditCard className="w-3.5 h-3.5" />
                   <span>Thực hiện thanh toán mô phỏng ngay</span>
@@ -572,7 +572,7 @@ export const OrderDetailPage = () => {
                                 isCompleted
                                   ? 'bg-emerald-600 text-white shadow-2xs'
                                   : isCurrent
-                                  ? 'bg-zinc-900 text-zinc-50 ring-4 ring-zinc-200 shadow-xs'
+                                  ? 'bg-blue-600 text-white ring-4 ring-blue-100 shadow-md'
                                   : 'bg-slate-100 text-slate-400 border border-slate-200'
                               }`}
                             >
@@ -844,7 +844,7 @@ export const OrderDetailPage = () => {
                       type="button"
                       onClick={handleBuyAgain}
                       disabled={reordering}
-                      className="w-full py-3 px-4 rounded-xl text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs disabled:opacity-50"
+                      className="w-full py-3 px-5 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 active:scale-[0.99] transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md shadow-blue-500/20 disabled:opacity-50"
                     >
                       {reordering ? (
                         <>
@@ -864,7 +864,7 @@ export const OrderDetailPage = () => {
                       <button
                         type="button"
                         onClick={handleOpenCancelModal}
-                        className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-red-600 hover:bg-red-50 hover:border-red-300 border border-red-200 transition-all cursor-pointer flex items-center justify-center gap-2"
+                        className="w-full py-2.5 px-4 rounded-full text-xs font-bold text-red-600 hover:bg-red-50 hover:border-red-300 border border-red-200 transition-all cursor-pointer flex items-center justify-center gap-2"
                       >
                         <XCircle className="w-4 h-4 text-red-500" />
                         <span>Hủy đơn hàng</span>
@@ -874,7 +874,7 @@ export const OrderDetailPage = () => {
                     {/* Nút quay lại danh sách */}
                     <Link
                       to="/orders"
-                      className="w-full py-2.5 px-4 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors flex items-center justify-center gap-1.5"
+                      className="w-full py-2.5 px-4 rounded-full text-xs font-bold text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors flex items-center justify-center gap-1.5"
                     >
                       <ArrowLeft className="w-3.5 h-3.5" />
                       <span>Quay lại danh sách đơn hàng</span>

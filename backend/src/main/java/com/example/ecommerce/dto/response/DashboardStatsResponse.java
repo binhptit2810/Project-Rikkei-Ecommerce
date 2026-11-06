@@ -94,5 +94,20 @@ public class DashboardStatsResponse {
      * Tổng số khách hàng (Role = CUSTOMER).
      */
     private long totalCustomers;
+
+    /**
+     * Thống kê nhật ký kho: Số giao dịch trừ kho do đặt hàng (ORDER_PLACED).
+     */
+    private Long orderPlacedCount;
+
+    /**
+     * Thống kê nhật ký kho: Số giao dịch hoàn kho do hủy đơn (ORDER_CANCELLED).
+     */
+    private Long orderCancelledCount;
+
+    /**
+     * Thống kê nhật ký kho: Số giao dịch admin nhập kho thủ công (MANUAL_IMPORT).
+     */
+    private Long manualImportCount;
 }
 

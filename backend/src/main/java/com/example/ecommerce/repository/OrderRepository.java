@@ -48,9 +48,16 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.orderStatus = :orderStatus")
     BigDecimal sumTotalAmountByOrderStatus(@Param("orderStatus") OrderStatus orderStatus);
 
-    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.paymentStatus = :paymentStatus AND o.orderStatus <> :cancelledStatus")
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE " +
+           "(o.paymentStatus = :paymentStatus OR o.orderStatus = :completedStatus) " +
+           "AND o.orderStatus <> :cancelledStatus")
     BigDecimal sumActualRevenue(@Param("paymentStatus") com.example.ecommerce.entity.PaymentStatus paymentStatus,
+                                @Param("completedStatus") OrderStatus completedStatus,
                                 @Param("cancelledStatus") OrderStatus cancelledStatus);
+
+    default BigDecimal sumActualRevenue(com.example.ecommerce.entity.PaymentStatus paymentStatus, OrderStatus cancelledStatus) {
+        return sumActualRevenue(paymentStatus, OrderStatus.COMPLETED, cancelledStatus);
+    }
 
     @Query("SELECT o FROM Order o WHERE " +
             "(:status IS NULL OR o.orderStatus = :status) AND " +

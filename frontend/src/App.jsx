@@ -107,11 +107,11 @@ function App() {
             }
           />
 
-          {/* Protected Routes (yêu cầu đăng nhập) */}
+          {/* Protected Customer Routes (chỉ dành cho khách hàng đăng nhập, chặn hoàn toàn Admin) */}
           <Route
             path="/profile"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="CUSTOMER">
                 <ProfilePage />
               </ProtectedRoute>
             }
@@ -119,7 +119,7 @@ function App() {
           <Route
             path="/checkout"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="CUSTOMER">
                 <CheckoutPage />
               </ProtectedRoute>
             }
@@ -127,7 +127,7 @@ function App() {
           <Route
             path="/orders"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="CUSTOMER">
                 <OrderHistoryPage />
               </ProtectedRoute>
             }
@@ -135,7 +135,7 @@ function App() {
           <Route
             path="/orders/:id"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiredRole="CUSTOMER">
                 <OrderDetailPage />
               </ProtectedRoute>
             }

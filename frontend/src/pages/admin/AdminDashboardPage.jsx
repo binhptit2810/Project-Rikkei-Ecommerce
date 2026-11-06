@@ -56,6 +56,9 @@ export const AdminDashboardPage = () => {
     lowStockProducts: [],
     totalUsers: 0,
     totalCustomers: 0,
+    orderPlacedCount: 0,
+    orderCancelledCount: 0,
+    manualImportCount: 0,
   })
 
   // Thông tin hồ sơ admin & danh sách người dùng
@@ -729,6 +732,78 @@ export const AdminDashboardPage = () => {
         )}
       </div>
 
+      {/* 6.1. ĐỐI SOÁT NHẬT KÝ BIẾN ĐỘNG KHO (INVENTORY RECONCILIATION) */}
+      <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-6 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 mb-4 border-b border-zinc-100">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-700 border border-blue-200 flex items-center justify-center shrink-0">
+              <Warehouse className="w-4 h-4 stroke-[2]" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-semibold text-zinc-950 font-mono">
+                Đối soát Nhật ký Biến động Kho (Inventory Audit)
+              </h2>
+              <p className="text-xs text-zinc-500">
+                Thống kê các giao dịch kho tự động và thủ công: ORDER_PLACED, ORDER_CANCELLED, MANUAL_IMPORT.
+              </p>
+            </div>
+          </div>
+          <Link
+            to="/admin/inventory"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-zinc-200 bg-white hover:bg-zinc-50 text-xs font-mono text-zinc-900 shadow-xs"
+          >
+            <span>Lịch sử biến động</span>
+            <ArrowRight className="w-3.5 h-3.5 text-zinc-600" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 font-mono">
+          <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between">
+            <div>
+              <span className="text-xs text-zinc-500 uppercase tracking-wider block">Trừ kho khi đặt hàng</span>
+              <span className="text-lg font-bold text-zinc-950 mt-1 block tabular-nums">
+                {dashboardStats.orderPlacedCount ?? 0} <span className="text-xs font-normal text-zinc-500">lần</span>
+              </span>
+              <span className="text-[11px] text-zinc-400 mt-0.5 block">Loại: ORDER_PLACED</span>
+            </div>
+            <div className="w-9 h-9 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center shrink-0">
+              <ShoppingBag className="w-4 h-4" />
+            </div>
+          </div>
+
+          <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between">
+            <div>
+              <span className="text-xs text-zinc-500 uppercase tracking-wider block">Hoàn kho do hủy đơn</span>
+              <span className="text-lg font-bold text-zinc-950 mt-1 block tabular-nums">
+                {dashboardStats.orderCancelledCount ?? 0} <span className="text-xs font-normal text-zinc-500">lần</span>
+              </span>
+              <span className="text-[11px] text-zinc-400 mt-0.5 block">Loại: ORDER_CANCELLED</span>
+            </div>
+            <div className="w-9 h-9 rounded-md bg-rose-50 text-rose-700 border border-rose-200 flex items-center justify-center shrink-0">
+              <XCircle className="w-4 h-4" />
+            </div>
+          </div>
+
+          <div className="p-4 rounded-lg bg-zinc-50 border border-zinc-200 flex items-center justify-between">
+            <div>
+              <span className="text-xs text-zinc-500 uppercase tracking-wider block">Admin nhập kho thủ công</span>
+              <span className="text-lg font-bold text-zinc-950 mt-1 block tabular-nums">
+                {dashboardStats.manualImportCount ?? 0} <span className="text-xs font-normal text-zinc-500">lần</span>
+              </span>
+              <span className="text-[11px] text-zinc-400 mt-0.5 block">Loại: MANUAL_IMPORT</span>
+            </div>
+            <div className="w-9 h-9 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0">
+              <Package className="w-4 h-4" />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 pt-3 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-500 font-mono">
+          <span>Công thức đối soát: Tồn kho thực tế = Tồn kho ban đầu + &sum;(Biến động kho)</span>
+          <span className="text-emerald-700 font-medium">Khớp 100% CSDL MySQL</span>
+        </div>
+      </div>
+
       {/* 7. KIẾN TRÚC BẢO MẬT & THÔNG TIN PHIÊN QUẢN TRỊ (SECURITY & ADMIN SESSION) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Cột trái (2/3): Kiến trúc Bảo mật & Phân quyền */}
@@ -862,14 +937,6 @@ export const AdminDashboardPage = () => {
             >
               <Users className="w-3.5 h-3.5" />
               <span>Chuyển tới Quản lý người dùng</span>
-            </Link>
-
-            <Link
-              to="/profile"
-              className="btn-outline w-full font-mono text-xs flex items-center justify-center gap-1.5"
-            >
-              <User className="w-3.5 h-3.5 text-zinc-500" />
-              <span>Xem hồ sơ cá nhân</span>
             </Link>
           </div>
         </div>

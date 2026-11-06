@@ -58,7 +58,7 @@ CREATE TABLE `inventory_transactions` (
   `product_id` bigint NOT NULL,
   `change_quantity` int NOT NULL,
   `stock_after` int NOT NULL,
-  `transaction_type` enum('INITIAL_STOCK','MANUAL_ADJUST','ORDER_CANCELLED','ORDER_PLACED') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `transaction_type` enum('INITIAL_STOCK','MANUAL_ADJUST','ORDER_CANCELLED','ORDER_PLACED','MANUAL_IMPORT','MANUAL_EXPORT') COLLATE utf8mb4_unicode_ci NOT NULL,
   `order_id` bigint DEFAULT NULL,
   `note` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,

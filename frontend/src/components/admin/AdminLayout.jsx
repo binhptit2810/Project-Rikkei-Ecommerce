@@ -11,7 +11,7 @@ export const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
-    <div className="min-h-screen bg-zinc-50/50 text-zinc-950 antialiased flex flex-col">
+    <div className="min-h-screen bg-zinc-50/50 text-zinc-950 antialiased flex flex-col font-mono">
       {/* 1. Sidebar Desktop (Cố định bên trái) */}
       <div className="hidden lg:block fixed inset-y-0 left-0 z-30 w-64">
         <AdminSidebar />

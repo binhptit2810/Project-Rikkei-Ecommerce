@@ -9,6 +9,7 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
+  Zap,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -122,26 +123,30 @@ export const RegisterPage = () => {
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center px-4 py-12 bg-zinc-50/50">
+    <div className="flex-1 flex items-center justify-center px-4 py-16 bg-slate-50/60">
       <div className="w-full max-w-lg">
         {/* Card */}
-        <div className="bg-white rounded-lg border border-zinc-200 shadow-sm p-6 sm:p-8 space-y-6">
+        <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xl p-8 sm:p-10 space-y-6">
+          
           {/* Header */}
-          <div className="space-y-1.5 text-center">
-            <h1 className="text-2xl font-semibold tracking-tight text-zinc-950">
-              Đăng ký tài khoản
+          <div className="space-y-2 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-blue-700 via-indigo-600 to-blue-500 text-white flex items-center justify-center mx-auto shadow-md shadow-blue-500/25">
+              <Zap className="w-6 h-6 fill-current text-white" />
+            </div>
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 pt-1">
+              Đăng ký tài khoản mới
             </h1>
-            <p className="text-sm text-zinc-500">
-              Tạo tài khoản để trải nghiệm mua sắm và theo dõi đơn hàng
+            <p className="text-xs text-slate-500">
+              Gia nhập hệ sinh thái Rikkei Store để nhận ưu đãi thành viên và bảo hành 2 năm
             </p>
           </div>
 
           {/* Backend Error Banner */}
           {error && (
-            <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2.5">
+            <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2.5 shadow-xs">
               <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
               <div>
-                <span className="font-semibold block mb-0.5">Đăng ký thất bại:</span>
+                <span className="font-bold block mb-0.5">Đăng ký thất bại:</span>
                 <span>{error}</span>
               </div>
             </div>
@@ -151,11 +156,11 @@ export const RegisterPage = () => {
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {/* Full Name */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-zinc-900 block">
+              <label className="text-xs font-bold text-slate-800 block">
                 Họ và tên
               </label>
               <div className="relative">
-                <User className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <User className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
                   name="fullName"
@@ -163,15 +168,15 @@ export const RegisterPage = () => {
                   onChange={handleChange}
                   placeholder="Nguyễn Văn A"
                   autoComplete="name"
-                  className={`flex h-9 w-full rounded-md border bg-white pl-9 pr-3 py-1 text-sm shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 ${
+                  className={`flex h-11 w-full rounded-xl border bg-slate-50 pl-10 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 ${
                     formErrors.fullName
-                      ? 'border-red-500 focus-visible:ring-red-500'
-                      : 'border-zinc-200'
+                      ? 'border-red-500 focus:ring-red-500/20'
+                      : 'border-slate-200'
                   }`}
                 />
               </div>
               {formErrors.fullName && (
-                <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                <p className="text-xs text-red-600 font-semibold flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5" />
                   <span>{formErrors.fullName}</span>
                 </p>
@@ -180,11 +185,11 @@ export const RegisterPage = () => {
 
             {/* Email */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-zinc-900 block">
-                Email
+              <label className="text-xs font-bold text-slate-800 block">
+                Email đăng nhập
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="email"
                   name="email"
@@ -192,15 +197,15 @@ export const RegisterPage = () => {
                   onChange={handleChange}
                   placeholder="name@example.com"
                   autoComplete="email"
-                  className={`flex h-9 w-full rounded-md border bg-white pl-9 pr-3 py-1 text-sm shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 ${
+                  className={`flex h-11 w-full rounded-xl border bg-slate-50 pl-10 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 ${
                     formErrors.email
-                      ? 'border-red-500 focus-visible:ring-red-500'
-                      : 'border-zinc-200'
+                      ? 'border-red-500 focus:ring-red-500/20'
+                      : 'border-slate-200'
                   }`}
                 />
               </div>
               {formErrors.email && (
-                <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                <p className="text-xs text-red-600 font-semibold flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5" />
                   <span>{formErrors.email}</span>
                 </p>
@@ -211,11 +216,11 @@ export const RegisterPage = () => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {/* Password */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-zinc-900 block">
+                <label className="text-xs font-bold text-slate-800 block">
                   Mật khẩu
                 </label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type={showPassword ? 'text' : 'password'}
                     name="password"
@@ -223,22 +228,22 @@ export const RegisterPage = () => {
                     onChange={handleChange}
                     placeholder="Tối thiểu 6 ký tự"
                     autoComplete="new-password"
-                    className={`flex h-9 w-full rounded-md border bg-white pl-9 pr-10 py-1 text-sm shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 ${
+                    className={`flex h-11 w-full rounded-xl border bg-slate-50 pl-10 pr-10 py-1 text-sm shadow-xs transition-colors placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 ${
                       formErrors.password
-                        ? 'border-red-500 focus-visible:ring-red-500'
-                        : 'border-zinc-200'
+                        ? 'border-red-500 focus:ring-red-500/20'
+                        : 'border-slate-200'
                     }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
                 {formErrors.password && (
-                  <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                  <p className="text-xs text-red-600 font-semibold flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5" />
                     <span>{formErrors.password}</span>
                   </p>
@@ -247,11 +252,11 @@ export const RegisterPage = () => {
 
               {/* Confirm Password */}
               <div className="space-y-1.5">
-                <label className="text-sm font-medium text-zinc-900 block">
+                <label className="text-xs font-bold text-slate-800 block">
                   Xác nhận lại
                 </label>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type={showConfirmPassword ? 'text' : 'password'}
                     name="confirmPassword"
@@ -259,22 +264,22 @@ export const RegisterPage = () => {
                     onChange={handleChange}
                     placeholder="Nhập lại mật khẩu"
                     autoComplete="new-password"
-                    className={`flex h-9 w-full rounded-md border bg-white pl-9 pr-10 py-1 text-sm shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 ${
+                    className={`flex h-11 w-full rounded-xl border bg-slate-50 pl-10 pr-10 py-1 text-sm shadow-xs transition-colors placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 ${
                       formErrors.confirmPassword
-                        ? 'border-red-500 focus-visible:ring-red-500'
-                        : 'border-zinc-200'
+                        ? 'border-red-500 focus:ring-red-500/20'
+                        : 'border-slate-200'
                     }`}
                   />
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-zinc-400 hover:text-zinc-600 cursor-pointer"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 cursor-pointer"
                   >
                     {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
                 {formErrors.confirmPassword && (
-                  <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                  <p className="text-xs text-red-600 font-semibold flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5" />
                     <span>{formErrors.confirmPassword}</span>
                   </p>
@@ -284,11 +289,11 @@ export const RegisterPage = () => {
 
             {/* Phone */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-zinc-900 block">
+              <label className="text-xs font-bold text-slate-800 block">
                 Số điện thoại
               </label>
               <div className="relative">
-                <Phone className="w-4 h-4 text-zinc-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
                   type="tel"
                   name="phone"
@@ -296,15 +301,15 @@ export const RegisterPage = () => {
                   onChange={handleChange}
                   placeholder="0912345678"
                   autoComplete="tel"
-                  className={`flex h-9 w-full rounded-md border bg-white pl-9 pr-3 py-1 text-sm shadow-sm transition-colors placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 ${
+                  className={`flex h-11 w-full rounded-xl border bg-slate-50 pl-10 pr-3 py-1 text-sm shadow-xs transition-colors placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 ${
                     formErrors.phone
-                      ? 'border-red-500 focus-visible:ring-red-500'
-                      : 'border-zinc-200'
+                      ? 'border-red-500 focus:ring-red-500/20'
+                      : 'border-slate-200'
                   }`}
                 />
               </div>
               {formErrors.phone && (
-                <p className="text-xs text-red-600 font-medium flex items-center gap-1">
+                <p className="text-xs text-red-600 font-semibold flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5" />
                   <span>{formErrors.phone}</span>
                 </p>
@@ -313,31 +318,31 @@ export const RegisterPage = () => {
 
             {/* Address (Optional) */}
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-zinc-900 block">
-                Địa chỉ giao hàng <span className="text-zinc-400 font-normal">(tùy chọn)</span>
+              <label className="text-xs font-bold text-slate-800 block">
+                Địa chỉ giao hàng <span className="text-slate-400 font-normal">(tùy chọn)</span>
               </label>
               <div className="relative">
-                <MapPin className="w-4 h-4 text-zinc-400 absolute left-3 top-2.5" />
+                <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <textarea
                   name="address"
                   rows="2"
                   value={formData.address}
                   onChange={handleChange}
                   placeholder="Số nhà, đường, phường/xã, quận/huyện..."
-                  className="flex min-h-[60px] w-full rounded-md border border-zinc-200 bg-white pl-9 pr-3 py-2 text-sm shadow-sm placeholder:text-zinc-400 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-zinc-950 resize-none transition-colors"
+                  className="flex min-h-[60px] w-full rounded-xl border border-slate-200 bg-slate-50 pl-10 pr-3 py-2 text-sm shadow-xs placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 resize-none transition-colors"
                 />
               </div>
             </div>
 
-            {/* Submit Button */}
+            {/* Submit Button: Royal Blue Pill */}
             <button
               type="submit"
               disabled={isLoading}
-              className="inline-flex items-center justify-center gap-2 h-9 w-full rounded-md bg-zinc-900 text-zinc-50 hover:bg-zinc-800 text-sm font-medium transition-colors shadow-sm cursor-pointer disabled:opacity-50 disabled:pointer-events-none mt-2"
+              className="inline-flex items-center justify-center gap-2 h-11 w-full rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold shadow-md shadow-blue-500/20 transition-all hover:scale-[1.01] active:scale-[0.98] cursor-pointer disabled:opacity-50 disabled:pointer-events-none mt-2"
             >
               {isLoading ? (
                 <>
-                  <LoadingSpinner size="sm" />
+                  <LoadingSpinner size="sm" className="text-white" />
                   <span>Đang xử lý đăng ký...</span>
                 </>
               ) : (
@@ -347,11 +352,11 @@ export const RegisterPage = () => {
           </form>
 
           {/* Footer Link to Login */}
-          <div className="pt-2 text-center text-sm text-zinc-500">
+          <div className="pt-2 text-center text-xs text-slate-500">
             Đã có tài khoản?{' '}
             <Link
               to="/login"
-              className="font-medium text-zinc-950 underline underline-offset-4 hover:text-zinc-800 transition-colors"
+              className="font-bold text-blue-600 hover:text-blue-700 underline underline-offset-4 transition-colors"
             >
               Đăng nhập tại đây
             </Link>
