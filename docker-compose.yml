@@ -71,7 +71,7 @@ services:
     container_name: ecommerce-backend
     restart: unless-stopped
     environment:
-      SPRING_PROFILES_ACTIVE: docker
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ecommerce_db}?useSSL=false&serverTimezone=Asia/Ho_Chi_Minh&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8
       SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-ecommerce_user}
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-password}
@@ -81,11 +81,14 @@ services:
       REDIS_PORT: 6379
       UPLOAD_DIR: /app/uploads
       TZ: Asia/Ho_Chi_Minh
-      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
-      MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_USERNAME: ${MAIL_USERNAME:-}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
-      MAIL_FROM: ${MAIL_FROM:-no-reply@rikkeiecommerce.com}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      MAIL_HOST: ${MAIL_HOST:-smtp.resend.com}
+      MAIL_PORT: ${MAIL_PORT:-465}
+      MAIL_USERNAME: ${MAIL_USERNAME:-resend}
+      MAIL_PASSWORD: ${RESEND_API_KEY:-${MAIL_PASSWORD:-}}
+      MAIL_FROM: ${MAIL_FROM:-noreply@mail.rikkei-shop.me}
+      MAIL_SMTP_SSL_ENABLE: ${MAIL_SMTP_SSL_ENABLE:-true}
+      MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-false}
       OTP_HMAC_SECRET: ${OTP_HMAC_SECRET:-}
     volumes:
       - ./uploads:/app/uploads
