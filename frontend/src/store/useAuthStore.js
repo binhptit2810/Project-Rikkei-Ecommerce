@@ -202,10 +202,19 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
-   * Đăng xuất tài khoản: gọi API thu hồi phiên Redis và xóa cookie trên client.
+   * Xóa sạch trạng thái xác thực và dọn dẹp storage (localStorage, sessionStorage).
+   * Được gọi khi hết hạn token, lỗi 401 không thể refresh hoặc khi người dùng đăng xuất.
    */
-  logout: async () => {
+  clearAuth: () => {
     setInMemoryToken(null)
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.clear()
+        sessionStorage.clear()
+      } catch (e) {
+        // Bỏ qua nếu môi trường chặn truy cập storage
+      }
+    }
     set({
       user: null,
       accessToken: null,
@@ -214,6 +223,13 @@ export const useAuthStore = create((set, get) => ({
       lockReason: null,
       isLoading: false,
     })
+  },
+
+  /**
+   * Đăng xuất tài khoản: gọi API thu hồi phiên Redis và xóa cookie trên client.
+   */
+  logout: async () => {
+    get().clearAuth()
 
     try {
       await authService.logout()
@@ -228,12 +244,14 @@ export const useAuthStore = create((set, get) => ({
 // Lắng nghe sự kiện token hết hạn từ apiClient interceptor
 if (typeof window !== 'undefined') {
   window.addEventListener('auth:expired', () => {
-    setInMemoryToken(null)
-    useAuthStore.setState({
-      user: null,
-      accessToken: null,
-      isAuthenticated: false,
-    })
+    useAuthStore.getState().clearAuth()
+    // Tự động chuyển hướng về /login nếu không ở trang đăng nhập
+    if (
+      window.location.pathname !== '/login' &&
+      window.location.pathname !== '/admin/login'
+    ) {
+      window.location.href = '/login'
+    }
   })
 
   // Lắng nghe sự kiện refresh thành công từ single-flight queue
