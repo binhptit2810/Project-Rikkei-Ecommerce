@@ -188,9 +188,17 @@ export const LoginPage = () => {
 
             {/* Password Field */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-800 block">
-                Mật khẩu
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800 block">
+                  Mật khẩu
+                </label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 underline underline-offset-2 transition-colors"
+                >
+                  Quên mật khẩu?
+                </Link>
+              </div>
               <div className="relative">
                 <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input

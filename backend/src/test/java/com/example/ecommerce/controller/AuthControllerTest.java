@@ -1,7 +1,9 @@
 package com.example.ecommerce.controller;
 
+import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
+import com.example.ecommerce.dto.request.ResetPasswordRequest;
 import com.example.ecommerce.dto.response.AuthResponse;
 import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.entity.Role;
@@ -275,5 +277,120 @@ class AuthControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.message").value("Email hoặc mật khẩu không đúng"));
+    }
+
+    // =========================================================================
+    // Forgot Password & Reset Password Controller Tests (TSK-D10-CCT)
+    // =========================================================================
+
+    @Test
+    @DisplayName("TSK-D10: POST /api/v1/auth/forgot-password thành công trả 200 OK")
+    void forgotPassword_ValidEmail_Returns200() throws Exception {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("valid@example.com");
+
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message", containsString("Nếu email tồn tại trong hệ thống")));
+    }
+
+    @Test
+    @DisplayName("TSK-D10: POST /api/v1/auth/forgot-password email sai định dạng trả 400 BAD REQUEST")
+    void forgotPassword_InvalidEmail_Returns400() throws Exception {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("invalid-email-format");
+
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.email").value("Email không đúng định dạng"));
+    }
+
+    @Test
+    @DisplayName("TSK-D10: POST /api/v1/auth/forgot-password email để trống trả 400 BAD REQUEST")
+    void forgotPassword_BlankEmail_Returns400() throws Exception {
+        ForgotPasswordRequest request = new ForgotPasswordRequest("   ");
+
+        mockMvc.perform(post("/api/v1/auth/forgot-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.email", containsString("Email không được để trống")));
+    }
+
+    @Test
+    @DisplayName("TSK-D10: POST /api/v1/auth/reset-password dữ liệu hợp lệ trả 200 OK")
+    void resetPassword_ValidRequest_Returns200() throws Exception {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "valid@example.com",
+                "123456",
+                "NewPassword123@",
+                "NewPassword123@"
+        );
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message", containsString("Đặt lại mật khẩu thành công")));
+    }
+
+    @Test
+    @DisplayName("TSK-D10: POST /api/v1/auth/reset-password OTP không đúng 6 số trả 400 BAD REQUEST")
+    void resetPassword_InvalidOtpFormat_Returns400() throws Exception {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "valid@example.com",
+                "12345", // chỉ có 5 số
+                "NewPassword123@",
+                "NewPassword123@"
+        );
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.otp").value("Mã OTP phải gồm đúng 6 chữ số"));
+    }
+
+    @Test
+    @DisplayName("TSK-D10: POST /api/v1/auth/reset-password mật khẩu mới ngắn hơn 6 ký tự trả 400 BAD REQUEST")
+    void resetPassword_ShortPassword_Returns400() throws Exception {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "valid@example.com",
+                "123456",
+                "12345", // < 6 ký tự
+                "12345"
+        );
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.newPassword").value("Mật khẩu mới phải từ 6 đến 100 ký tự"));
+    }
+
+    @Test
+    @DisplayName("TSK-D10: POST /api/v1/auth/reset-password xác nhận mật khẩu để trống trả 400 BAD REQUEST")
+    void resetPassword_BlankConfirmPassword_Returns400() throws Exception {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "valid@example.com",
+                "123456",
+                "NewPassword123@",
+                "   "
+        );
+
+        mockMvc.perform(post("/api/v1/auth/reset-password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.confirmPassword").value("Xác nhận mật khẩu mới không được để trống"));
     }
 }

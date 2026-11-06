@@ -1,7 +1,9 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
+import com.example.ecommerce.dto.request.ResetPasswordRequest;
 import com.example.ecommerce.dto.response.AuthResponse;
 import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
@@ -17,6 +19,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
@@ -24,8 +29,12 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -59,6 +68,15 @@ class AuthServiceTest {
     @Mock
     private RefreshTokenService refreshTokenService;
 
+    @Mock
+    private StringRedisTemplate redisTemplate;
+
+    @Mock
+    private EmailService emailService;
+
+    @Mock
+    private ValueOperations<String, String> valueOperations;
+
     @InjectMocks
     private AuthService authService;
 
@@ -68,6 +86,11 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
+        ReflectionTestUtils.setField(authService, "otpHmacSecret", "test-otp-hmac-secret-key-at-least-32-chars");
+        ReflectionTestUtils.setField(authService, "otpExpirationSeconds", 300L);
+        ReflectionTestUtils.setField(authService, "otpRateLimitSeconds", 60L);
+        ReflectionTestUtils.setField(authService, "otpMaxAttempts", 5);
+
         registerRequest = new RegisterRequest();
         registerRequest.setEmail("testuser@example.com");
         registerRequest.setPassword("Password123@");
@@ -564,6 +587,327 @@ class AuthServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getAccessToken()).isEqualTo("mock.admin.jwt.token");
         assertThat(response.getUser().getRole()).isEqualTo(Role.ADMIN);
+    }
+
+    // =========================================================================
+    // Forgot Password & Reset Password Tests (TSK-D10-CCT)
+    // =========================================================================
+
+    @Test
+    @DisplayName("TSK-D10: forgotPassword thành công khi email tồn tại, active=true, ngoài 60s rate limit")
+    void forgotPassword_Success() {
+        when(redisTemplate.hasKey("auth:otp_ratelimit:testuser@example.com")).thenReturn(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        ForgotPasswordRequest request = new ForgotPasswordRequest("testuser@example.com");
+        authService.forgotPassword(request);
+
+        // Xác minh lưu OTP vào Redis với TTL 300s
+        verify(valueOperations).set(eq("auth:otp:testuser@example.com"), anyString(), eq(300L), eq(TimeUnit.SECONDS));
+        // Xác minh lưu rate limit với TTL 60s
+        verify(valueOperations).set(eq("auth:otp_ratelimit:testuser@example.com"), eq("1"), eq(60L), eq(TimeUnit.SECONDS));
+        // Xác minh xóa attempts cũ
+        verify(redisTemplate).delete("auth:otp_attempts:testuser@example.com");
+        // Xác minh gọi EmailService gửi OTP 6 số
+        ArgumentCaptor<String> otpCaptor = ArgumentCaptor.forClass(String.class);
+        verify(emailService).sendOtpEmail(eq("testuser@example.com"), otpCaptor.capture());
+        assertThat(otpCaptor.getValue()).matches("^\\d{6}$");
+    }
+
+    @Test
+    @DisplayName("TSK-D10: forgotPassword chống dò tìm tài khoản (User Enumeration) khi email không tồn tại")
+    void forgotPassword_EmailNotExists_ReturnsSuccessWithoutSendingEmail() {
+        when(redisTemplate.hasKey("auth:otp_ratelimit:notfound@example.com")).thenReturn(false);
+        when(userRepository.findByEmail("notfound@example.com")).thenReturn(Optional.empty());
+
+        ForgotPasswordRequest request = new ForgotPasswordRequest("notfound@example.com");
+        authService.forgotPassword(request);
+
+        // Không sinh OTP, không lưu Redis, không gửi email
+        verifyNoInteractions(emailService);
+        verify(redisTemplate, never()).opsForValue();
+    }
+
+    @Test
+    @DisplayName("TSK-D10: forgotPassword không gửi email OTP khi tài khoản bị khóa (active = false)")
+    void forgotPassword_AccountLocked_ReturnsSuccessWithoutSendingEmail() {
+        mockUser.setActive(false);
+        when(redisTemplate.hasKey("auth:otp_ratelimit:testuser@example.com")).thenReturn(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+
+        ForgotPasswordRequest request = new ForgotPasswordRequest("testuser@example.com");
+        authService.forgotPassword(request);
+
+        verifyNoInteractions(emailService);
+        verify(redisTemplate, never()).opsForValue();
+    }
+
+    @Test
+    @DisplayName("TSK-D10: forgotPassword bị từ chối khi trong khoảng thời gian Rate Limit 60 giây")
+    void forgotPassword_WithinRateLimit60s_ThrowsBusinessException() {
+        when(redisTemplate.hasKey("auth:otp_ratelimit:testuser@example.com")).thenReturn(true);
+
+        ForgotPasswordRequest request = new ForgotPasswordRequest("testuser@example.com");
+
+        assertThatThrownBy(() -> authService.forgotPassword(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Vui lòng đợi 60 giây trước khi yêu cầu mã OTP mới");
+
+        verify(userRepository, never()).findByEmail(anyString());
+        verifyNoInteractions(emailService);
+    }
+
+    @Test
+    @DisplayName("TSK-D10: forgotPassword lỗi gửi email -> xóa OTP khỏi Redis và ném BusinessException, giữ rate limit")
+    void forgotPassword_SendMailFailed_RollbacksRedisAndThrowsException() {
+        when(redisTemplate.hasKey("auth:otp_ratelimit:testuser@example.com")).thenReturn(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        doThrow(new RuntimeException("SMTP connection refused"))
+                .when(emailService).sendOtpEmail(anyString(), anyString());
+
+        ForgotPasswordRequest request = new ForgotPasswordRequest("testuser@example.com");
+
+        assertThatThrownBy(() -> authService.forgotPassword(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Không thể gửi email xác thực lúc này");
+
+        // Đảm bảo OTP đã được dọn khỏi Redis để tránh tồn tại mã không gửi được
+        verify(redisTemplate).delete("auth:otp:testuser@example.com");
+        // Đảm bảo không xóa rate limit key để ngăn spam
+        verify(redisTemplate, never()).delete("auth:otp_ratelimit:testuser@example.com");
+    }
+
+    @Test
+    @DisplayName("TSK-D10: forgotPassword chuẩn hóa email (lowercase + trim)")
+    void forgotPassword_EmailNormalized_LowerCaseAndTrim() {
+        when(redisTemplate.hasKey("auth:otp_ratelimit:testuser@example.com")).thenReturn(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        ForgotPasswordRequest request = new ForgotPasswordRequest("   TestUser@EXAMPLE.com   ");
+        authService.forgotPassword(request);
+
+        verify(redisTemplate).hasKey("auth:otp_ratelimit:testuser@example.com");
+        verify(userRepository).findByEmail("testuser@example.com");
+        verify(emailService).sendOtpEmail(eq("testuser@example.com"), anyString());
+    }
+
+    @Test
+    @DisplayName("TSK-D10: forgotPassword với email rỗng ném BusinessException")
+    void forgotPassword_NullOrBlankEmail_ThrowsBusinessException() {
+        assertThatThrownBy(() -> authService.forgotPassword(new ForgotPasswordRequest("   ")))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Email không được để trống");
+    }
+
+    @Test
+    @DisplayName("TSK-D10: resetPassword thành công - Băm BCrypt mật khẩu mới, thu hồi phiên và xóa OTP")
+    void resetPassword_Success() {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "testuser@example.com",
+                "123456",
+                "NewSecurePassword123@",
+                "NewSecurePassword123@"
+        );
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(passwordEncoder.matches("NewSecurePassword123@", mockUser.getPassword())).thenReturn(false);
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString()))
+                .thenReturn("SUCCESS:280");
+        when(passwordEncoder.encode("NewSecurePassword123@")).thenReturn("$2a$12$newBcryptHashedPassword");
+
+        authService.resetPassword(request);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        assertThat(userCaptor.getValue().getPassword()).isEqualTo("$2a$12$newBcryptHashedPassword");
+
+        // Thu hồi toàn bộ Refresh Token của user trong Redis
+        verify(refreshTokenService).revokeAllUserSessions(mockUser.getId());
+        // Xóa hoàn toàn OTP và Attempts key khỏi Redis sau khi DB thành công
+        verify(redisTemplate).delete(Arrays.asList("auth:otp:testuser@example.com", "auth:otp_attempts:testuser@example.com"));
+    }
+
+    @Test
+    @DisplayName("TSK-D10: resetPassword thất bại khi xác nhận mật khẩu không khớp")
+    void resetPassword_ConfirmPasswordMismatch_ThrowsBusinessException() {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "testuser@example.com",
+                "123456",
+                "NewSecurePassword123@",
+                "DifferentPassword123@"
+        );
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Mật khẩu mới và xác nhận mật khẩu không khớp");
+
+        verifyNoInteractions(redisTemplate);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("TSK-D10: resetPassword thất bại khi mật khẩu mới trùng với mật khẩu cũ")
+    void resetPassword_NewPasswordSameAsOld_ThrowsBusinessException() {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "testuser@example.com",
+                "123456",
+                "OldPassword123@",
+                "OldPassword123@"
+        );
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(passwordEncoder.matches("OldPassword123@", mockUser.getPassword())).thenReturn(true);
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Mật khẩu mới không được trùng với mật khẩu hiện tại");
+
+        verify(redisTemplate, never()).execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString());
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("TSK-D10: resetPassword thất bại khi tài khoản bị khóa")
+    void resetPassword_AccountLocked_ThrowsLockedAccountException() {
+        mockUser.setActive(false);
+        mockUser.setLockReason("Tài khoản bị tạm khóa do vi phạm");
+
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "testuser@example.com",
+                "123456",
+                "NewPassword123@",
+                "NewPassword123@"
+        );
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(LockedAccountException.class)
+                .satisfies(ex -> {
+                    LockedAccountException lockedEx = (LockedAccountException) ex;
+                    assertThat(lockedEx.getMessage()).isEqualTo("Tài khoản của bạn đã bị khóa.");
+                    assertThat(lockedEx.getReason()).isEqualTo("Tài khoản bị tạm khóa do vi phạm");
+                });
+
+        verifyNoInteractions(redisTemplate);
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("TSK-D10: resetPassword thất bại khi mã OTP không tồn tại hoặc đã hết hạn")
+    void resetPassword_OtpExpiredOrNotFound_ThrowsBusinessException() {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "testuser@example.com",
+                "123456",
+                "NewPassword123@",
+                "NewPassword123@"
+        );
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(passwordEncoder.matches("NewPassword123@", mockUser.getPassword())).thenReturn(false);
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString()))
+                .thenReturn("NOT_FOUND");
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Mã OTP không hợp lệ hoặc đã hết hạn");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("TSK-D10: resetPassword thất bại khi mã OTP sai (hiển thị số lần thử còn lại)")
+    void resetPassword_OtpMismatch_ThrowsBusinessException() {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "testuser@example.com",
+                "123456",
+                "NewPassword123@",
+                "NewPassword123@"
+        );
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(passwordEncoder.matches("NewPassword123@", mockUser.getPassword())).thenReturn(false);
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString()))
+                .thenReturn("MISMATCH:1");
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Mã OTP không chính xác. Bạn còn 4 lần thử.");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("TSK-D10: resetPassword thất bại khi nhập sai OTP quá 5 lần (OTP bị hủy)")
+    void resetPassword_OtpMaxAttemptsExceeded_ThrowsBusinessException() {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "testuser@example.com",
+                "123456",
+                "NewPassword123@",
+                "NewPassword123@"
+        );
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(passwordEncoder.matches("NewPassword123@", mockUser.getPassword())).thenReturn(false);
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString()))
+                .thenReturn("MAX_ATTEMPTS_EXCEEDED");
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Bạn đã nhập sai mã OTP quá 5 lần. Mã OTP đã bị hủy, vui lòng yêu cầu mã mới.");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("TSK-D10: resetPassword thất bại khi mã OTP đã được sử dụng")
+    void resetPassword_OtpAlreadyUsed_ThrowsBusinessException() {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "testuser@example.com",
+                "123456",
+                "NewPassword123@",
+                "NewPassword123@"
+        );
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(passwordEncoder.matches("NewPassword123@", mockUser.getPassword())).thenReturn(false);
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString()))
+                .thenReturn("ALREADY_USED");
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessage("Mã OTP đã được sử dụng");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("TSK-D10: resetPassword lỗi CSDL -> phục hồi lại OTP trên Redis và ném ngoại lệ")
+    void resetPassword_DatabaseError_RestoresOtpInRedisAndThrowsException() {
+        ResetPasswordRequest request = new ResetPasswordRequest(
+                "testuser@example.com",
+                "123456",
+                "NewPassword123@",
+                "NewPassword123@"
+        );
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(passwordEncoder.matches("NewPassword123@", mockUser.getPassword())).thenReturn(false);
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString()))
+                .thenReturn("SUCCESS:200");
+        when(passwordEncoder.encode("NewPassword123@")).thenReturn("$2a$12$newBcryptHashedPassword");
+        when(userRepository.save(any(User.class))).thenThrow(new RuntimeException("Database connection dead"));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        assertThatThrownBy(() -> authService.resetPassword(request))
+                .isInstanceOf(RuntimeException.class)
+                .hasMessage("Database connection dead");
+
+        // Xác minh cơ chế rollback phục hồi lại mã OTP trên Redis
+        verify(valueOperations).set(eq("auth:otp:testuser@example.com"), anyString(), eq(200L), eq(TimeUnit.SECONDS));
     }
 }
 

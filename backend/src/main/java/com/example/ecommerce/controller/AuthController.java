@@ -1,7 +1,9 @@
 package com.example.ecommerce.controller;
 
+import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
+import com.example.ecommerce.dto.request.ResetPasswordRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.AuthResponse;
 import com.example.ecommerce.service.AuthService;
@@ -118,6 +120,32 @@ public class AuthController {
         return ResponseEntity.ok()
                 .headers(headers)
                 .body(ApiResponse.success("Đăng xuất thành công", null));
+    }
+
+    /**
+     * Yêu cầu đặt lại mật khẩu và gửi OTP qua Email (TSK-D10-CCT).
+     * POST /api/v1/auth/forgot-password
+     */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ApiResponse<Void>> forgotPassword(
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        authService.forgotPassword(request);
+        return ResponseEntity.ok(
+                ApiResponse.success("Nếu email tồn tại trong hệ thống và hợp lệ, bạn sẽ nhận được mã OTP qua email.", null)
+        );
+    }
+
+    /**
+     * Xác thực OTP và đặt lại mật khẩu mới (TSK-D10-CCT).
+     * POST /api/v1/auth/reset-password
+     */
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(
+            @Valid @RequestBody ResetPasswordRequest request) {
+        authService.resetPassword(request);
+        return ResponseEntity.ok(
+                ApiResponse.success("Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại với mật khẩu mới.", null)
+        );
     }
 
     // ---------- Helper methods ----------
