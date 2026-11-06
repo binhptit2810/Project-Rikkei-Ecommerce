@@ -106,10 +106,14 @@ export const useCartStore = create(
       },
 
       /**
-       * Xóa sạch giỏ hàng
+       * Xóa sạch giỏ hàng (trong state, localStorage và gọi backend)
        */
       clearCart: () => {
         set({ items: [] })
+        try {
+          localStorage.removeItem('shopping_cart_storage')
+        } catch (_) {}
+        cartService.clearCart()
       },
 
       /**

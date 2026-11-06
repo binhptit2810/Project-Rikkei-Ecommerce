@@ -15,6 +15,7 @@ import {
 import { useCartStore } from '../../store/useCartStore'
 import { useAuthStore } from '../../store/useAuthStore'
 import orderService from '../../services/orderService'
+import paymentService from '../../services/paymentService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 
 export const CheckoutPage = () => {
@@ -30,6 +31,7 @@ export const CheckoutPage = () => {
     note: '',
   })
 
+  const [simulateSuccessOption, setSimulateSuccessOption] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
 
@@ -159,19 +161,77 @@ export const CheckoutPage = () => {
         throw new Error('Dữ liệu đơn hàng phản hồi từ máy chủ không hợp lệ.')
       }
 
-      // Xóa sạch giỏ hàng trong Zustand store & đồng bộ localStorage
-      clearCart()
+      // Xử lý theo phương thức thanh toán
+      if (formData.paymentMethod === 'SIMULATED') {
+        try {
+          const payRes = await paymentService.simulatePayment(
+            createdOrder.id,
+            simulateSuccessOption,
+            simulateSuccessOption
+              ? 'Thanh toán trực tuyến mô phỏng thành công (PAID)'
+              : 'Thanh toán trực tuyến mô phỏng thất bại (FAILED)'
+          )
+          const paymentData = payRes?.data || payRes
 
-      // Chuyển hướng sang trang chi tiết đơn hàng kèm state chúc mừng và mã đơn ORD-...
-      navigate(`/orders/${createdOrder.id}`, {
-        state: {
-          orderSuccess: true,
-          justCreated: true,
-          orderCode: createdOrder.orderCode,
-          totalAmount: createdOrder.totalAmount,
-        },
-        replace: true,
-      })
+          if (paymentData?.status === 'PAID') {
+            // Thanh toán mô phỏng thành công -> Xóa sạch giỏ hàng
+            clearCart()
+            navigate(`/orders/${createdOrder.id}`, {
+              state: {
+                orderSuccess: true,
+                paymentSuccess: true,
+                justCreated: true,
+                orderCode: createdOrder.orderCode,
+                totalAmount: createdOrder.totalAmount,
+              },
+              replace: true,
+            })
+            return
+          } else {
+            // Thanh toán mô phỏng thất bại -> KHÔNG XÓA GIỎ HÀNG (DoD requirement)
+            navigate(`/orders/${createdOrder.id}`, {
+              state: {
+                orderSuccess: true,
+                paymentFailed: true,
+                justCreated: true,
+                orderCode: createdOrder.orderCode,
+                totalAmount: createdOrder.totalAmount,
+                paymentErrorMsg: 'Thanh toán mô phỏng thất bại (FAILED). Giỏ hàng của bạn đã được giữ nguyên và bạn có thể thử lại thanh toán bất kỳ lúc nào.',
+              },
+              replace: true,
+            })
+            return
+          }
+        } catch (payErr) {
+          // Lỗi gọi API thanh toán -> KHÔNG XÓA GIỎ HÀNG
+          navigate(`/orders/${createdOrder.id}`, {
+            state: {
+              orderSuccess: true,
+              paymentFailed: true,
+              justCreated: true,
+              orderCode: createdOrder.orderCode,
+              totalAmount: createdOrder.totalAmount,
+              paymentErrorMsg: payErr?.response?.data?.message || 'Có lỗi khi xử lý thanh toán mô phỏng.',
+            },
+            replace: true,
+          })
+          return
+        }
+      } else {
+        // Luồng COD: Đặt hàng thành công -> Xóa sạch giỏ hàng
+        clearCart()
+
+        // Chuyển hướng sang trang chi tiết đơn hàng kèm state chúc mừng và mã đơn ORD-...
+        navigate(`/orders/${createdOrder.id}`, {
+          state: {
+            orderSuccess: true,
+            justCreated: true,
+            orderCode: createdOrder.orderCode,
+            totalAmount: createdOrder.totalAmount,
+          },
+          replace: true,
+        })
+      }
     } catch (err) {
       // Giữ nguyên giỏ hàng khi thất bại, phân tích chi tiết mã lỗi từ Backend
       let message = 'Không thể tạo đơn hàng. Vui lòng thử lại.'
@@ -393,32 +453,70 @@ export const CheckoutPage = () => {
                     </div>
                   </label>
 
-                  <label
-                    className={`flex items-start gap-3 p-3.5 rounded-md border transition-colors cursor-pointer ${
+                  <div
+                    className={`rounded-md border transition-colors ${
                       formData.paymentMethod === 'SIMULATED'
                         ? 'border-zinc-900 bg-zinc-50 shadow-xs'
                         : 'border-zinc-200 hover:border-zinc-300'
-                    } ${isSubmitting ? 'pointer-events-none opacity-70' : ''}`}
+                    }`}
                   >
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="SIMULATED"
-                      checked={formData.paymentMethod === 'SIMULATED'}
-                      onChange={handleChange}
-                      disabled={isSubmitting}
-                      className="mt-0.5 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
-                    />
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <CreditCard className="w-4 h-4 text-zinc-800" />
-                        <span className="font-medium text-sm text-zinc-900">Thanh toán trực tuyến mô phỏng</span>
+                    <label
+                      className={`flex items-start gap-3 p-3.5 cursor-pointer ${
+                        isSubmitting ? 'pointer-events-none opacity-70' : ''
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value="SIMULATED"
+                        checked={formData.paymentMethod === 'SIMULATED'}
+                        onChange={handleChange}
+                        disabled={isSubmitting}
+                        className="mt-0.5 text-zinc-900 focus:ring-zinc-900 cursor-pointer"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-zinc-800" />
+                          <span className="font-medium text-sm text-zinc-900">Thanh toán trực tuyến mô phỏng</span>
+                        </div>
+                        <p className="text-xs text-zinc-500 mt-0.5">
+                          Cổng thanh toán giả lập (sinh mã định danh PAY- tự động).
+                        </p>
                       </div>
-                      <p className="text-xs text-zinc-500 mt-0.5">
-                        Cổng thanh toán giả lập (sinh mã định danh PAY- tự động).
-                      </p>
-                    </div>
-                  </label>
+                    </label>
+
+                    {formData.paymentMethod === 'SIMULATED' && (
+                      <div className="px-3.5 pb-3.5 pt-1 border-t border-zinc-200/80 pl-10 space-y-2">
+                        <span className="text-[11px] font-semibold text-zinc-700 block uppercase tracking-wider">
+                          Kịch bản mô phỏng kiểm thử:
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <label className="flex items-center gap-2 text-xs text-zinc-800 cursor-pointer p-2 rounded-md border border-zinc-200 bg-white hover:bg-zinc-100 transition-colors">
+                            <input
+                              type="radio"
+                              name="simulateSuccessOption"
+                              checked={simulateSuccessOption === true}
+                              onChange={() => setSimulateSuccessOption(true)}
+                              disabled={isSubmitting}
+                              className="text-zinc-900"
+                            />
+                            <span className="font-semibold text-emerald-700">✓ Thành công (PAID)</span>
+                          </label>
+                          <label className="flex items-center gap-2 text-xs text-zinc-800 cursor-pointer p-2 rounded-md border border-zinc-200 bg-white hover:bg-zinc-100 transition-colors">
+                            <input
+                              type="radio"
+                              name="simulateSuccessOption"
+                              checked={simulateSuccessOption === false}
+                              onChange={() => setSimulateSuccessOption(false)}
+                              disabled={isSubmitting}
+                              className="text-zinc-900"
+                            />
+                            <span className="font-semibold text-red-600">✗ Thất bại (FAILED)</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

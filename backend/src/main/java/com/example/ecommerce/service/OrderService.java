@@ -25,6 +25,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -110,7 +111,7 @@ public class OrderService {
                 .note(request.getNote() != null ? request.getNote().trim() : null)
                 .build();
 
-        BigDecimal totalAmount = BigDecimal.ZERO;
+        BigDecimal totalAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
         // 3. Duyệt từng sản phẩm: lấy thông tin từ DB, tính giá, lưu snapshot
         for (Map.Entry<Long, Integer> entry : consolidatedItems.entrySet()) {
@@ -138,18 +139,19 @@ public class OrderService {
                 log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}", userId, reason);
                 throw new BusinessException(reason);
             }
+            unitPrice = unitPrice.setScale(2, RoundingMode.HALF_UP);
 
-            BigDecimal subtotal = unitPrice.multiply(BigDecimal.valueOf(quantity));
-            totalAmount = totalAmount.add(subtotal);
+            BigDecimal subtotal = unitPrice.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+            totalAmount = totalAmount.add(subtotal).setScale(2, RoundingMode.HALF_UP);
 
             // Lưu snapshot dữ liệu sản phẩm tại thời điểm mua hàng
             OrderItem orderItem = OrderItem.builder()
                     .order(order)
                     .product(product)
                     .productName(product.getName())   // Snapshot tên sản phẩm
-                    .unitPrice(unitPrice)             // Snapshot đơn giá từ DB
+                    .unitPrice(unitPrice)             // Snapshot đơn giá từ DB (chuẩn hóa scale = 2)
                     .quantity(quantity)               // Số lượng mua
-                    .subtotal(subtotal)               // Snapshot thành tiền
+                    .subtotal(subtotal)               // Snapshot thành tiền (chuẩn hóa scale = 2)
                     .build();
 
             order.addItem(orderItem);
