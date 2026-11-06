@@ -178,6 +178,130 @@ Spring Boot Actuator health endpoint.
 
 ---
 
+### `POST /api/v1/auth/forgot-password`
+Yêu cầu mã OTP đặt lại mật khẩu qua email. **Không cần xác thực.**
+(Task: **TSK-D10-CCT** - Quên mật khẩu & Xác thực OTP qua Redis/Email)
+
+**Nguyên tắc bảo mật:**
+- Mã OTP gồm 6 chữ số ngẫu nhiên an toàn, có hiệu lực trong **300 giây (5 phút)**.
+- Không lưu OTP dạng plaintext trong Redis mà được bảo vệ bằng mã băm **HMAC-SHA256**.
+- **Rate Limit:** Giới hạn tối thiểu **60 giây** giữa hai lần yêu cầu gửi OTP.
+- **User Enumeration Protection:** Phản hồi thông báo chung đồng nhất cho cả trường hợp email không tồn tại hoặc tài khoản bị khóa để chống lộ danh sách tài khoản.
+
+**Request:**
+```json
+{
+  "email": "customer@gmail.com"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Nếu email tồn tại trong hệ thống và hợp lệ, bạn sẽ nhận được mã OTP qua email.",
+  "data": null,
+  "timestamp": "2026-11-06T20:00:00"
+}
+```
+
+**Lỗi 400 — Validation hoặc Rate Limit:**
+```json
+{
+  "success": false,
+  "message": "Vui lòng đợi 60 giây trước khi yêu cầu mã OTP mới",
+  "data": null,
+  "timestamp": "2026-11-06T20:00:00"
+}
+```
+
+---
+
+### `POST /api/v1/auth/reset-password`
+Xác thực OTP và đặt lại mật khẩu mới. **Không cần xác thực.**
+(Task: **TSK-D10-CCT** - Quên mật khẩu & Xác thực OTP qua Redis/Email)
+
+**Nguyên tắc bảo mật:**
+- Thao tác xác thực OTP nguyên tử (Atomic Verify & Claim) qua Redis Lua Script: Chống race condition khi có nhiều request đồng thời và đảm bảo OTP **chỉ sử dụng được 1 lần**.
+- **Giới hạn số lần thử (Anti-Brute Force):** Tối đa **5 lần nhập sai**. Quá 5 lần, mã OTP sẽ bị hủy tự động trên Redis.
+- Mật khẩu mới được băm bằng `BCryptPasswordEncoder(12)`.
+- Không cho phép đặt mật khẩu mới trùng mật khẩu hiện tại.
+- Sau khi đặt lại mật khẩu thành công, toàn bộ phiên Refresh Token của tài khoản bị thu hồi ngay lập tức (`RefreshTokenService.revokeAllUserSessions`).
+
+**Request:**
+```json
+{
+  "email": "customer@gmail.com",
+  "otp": "012345",
+  "newPassword": "NewPassword@123",
+  "confirmPassword": "NewPassword@123"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại với mật khẩu mới.",
+  "data": null,
+  "timestamp": "2026-11-06T20:00:00"
+}
+```
+
+**Lỗi 400 — OTP không hợp lệ, hết hạn, hoặc đã sử dụng:**
+```json
+{
+  "success": false,
+  "message": "Mã OTP không hợp lệ hoặc đã hết hạn",
+  "data": null,
+  "timestamp": "2026-11-06T20:00:00"
+}
+```
+
+**Lỗi 400 — Sai OTP (kèm số lần thử còn lại):**
+```json
+{
+  "success": false,
+  "message": "Mã OTP không chính xác. Bạn còn 4 lần thử.",
+  "data": null,
+  "timestamp": "2026-11-06T20:00:00"
+}
+```
+
+**Lỗi 400 — Vượt quá 5 lần nhập sai:**
+```json
+{
+  "success": false,
+  "message": "Bạn đã nhập sai mã OTP quá 5 lần. Mã OTP đã bị hủy, vui lòng yêu cầu mã mới.",
+  "data": null,
+  "timestamp": "2026-11-06T20:00:00"
+}
+```
+
+**Lỗi 400 — Mật khẩu xác nhận không khớp:**
+```json
+{
+  "success": false,
+  "message": "Mật khẩu mới và xác nhận mật khẩu không khớp",
+  "data": null,
+  "timestamp": "2026-11-06T20:00:00"
+}
+```
+
+**Lỗi 403 — Tài khoản bị khóa:**
+```json
+{
+  "success": false,
+  "message": "Tài khoản của bạn đã bị khóa.",
+  "data": {
+    "reason": "Lý do khóa tài khoản"
+  },
+  "timestamp": "2026-11-06T20:00:00"
+}
+```
+
+---
+
 ## 📦 Products
 
 ### `GET /api/v1/products`

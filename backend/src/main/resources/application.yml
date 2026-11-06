@@ -46,6 +46,23 @@ spring:
       # Khi cần xác thực, Spring Boot tự động map biến môi trường SPRING_DATA_REDIS_PASSWORD hoặc khai báo spring.data.redis.password.
       timeout: 2000ms
 
+  # Cấu hình gửi Mail qua SMTP (Gmail / Mailtrap)
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
 # =============================================================================
 # CORS Configuration
 # =============================================================================
@@ -71,10 +88,17 @@ jwt:
     secure: ${JWT_COOKIE_SECURE:false}
     same-site: ${JWT_COOKIE_SAME_SITE:Lax}
 
-# Cấu hình thư mục tải lên ảnh
+# Cấu hình ứng dụng
 app:
   upload:
     dir: ${UPLOAD_DIR:uploads}
+  mail:
+    from: ${MAIL_FROM:no-reply@rikkeiecommerce.com}
+  otp:
+    hmac-secret: ${OTP_HMAC_SECRET:ecommerce-default-otp-hmac-secret-change-in-production-2024}
+    expiration-seconds: 300
+    rate-limit-seconds: 60
+    max-attempts: 5
 
 # Actuator (health check)
 management:

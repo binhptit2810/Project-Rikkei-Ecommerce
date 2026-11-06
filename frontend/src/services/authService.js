@@ -67,6 +67,24 @@ export const authService = {
     const response = await apiClient.post('/auth/logout')
     return response.data // ApiResponse<Void>
   },
+
+  /**
+   * Yêu cầu mã OTP đặt lại mật khẩu qua email (TSK-D10-CCT).
+   * POST /api/v1/auth/forgot-password
+   */
+  async forgotPassword(data) {
+    const response = await apiClient.post('/auth/forgot-password', data)
+    return response.data // ApiResponse<Void>
+  },
+
+  /**
+   * Xác thực OTP và đặt lại mật khẩu mới (TSK-D10-CCT).
+   * POST /api/v1/auth/reset-password
+   */
+  async resetPassword(data) {
+    const response = await apiClient.post('/auth/reset-password', data)
+    return response.data // ApiResponse<Void>
+  },
 }
 
 export default authService

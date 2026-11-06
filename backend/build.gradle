@@ -35,6 +35,9 @@ dependencies {
     // Spring Data Redis (tương thích Spring Boot 3.3.5 / Java 21)
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+    // Spring Boot Starter Mail (cho gửi email OTP qua SMTP)
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+
     // Bean Validation
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 

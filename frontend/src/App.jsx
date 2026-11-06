@@ -10,6 +10,8 @@ import RoleRoute from './components/auth/RoleRoute'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
+import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import AdminLoginPage from './pages/admin/AdminLoginPage'
 import AdminDashboardPage from './pages/admin/AdminDashboardPage'
 import ProfilePage from './pages/user/ProfilePage'
@@ -103,6 +105,22 @@ function App() {
             element={
               <GuestRoute>
                 <RegisterPage />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path="/forgot-password"
+            element={
+              <GuestRoute>
+                <ForgotPasswordPage />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              <GuestRoute>
+                <ResetPasswordPage />
               </GuestRoute>
             }
           />

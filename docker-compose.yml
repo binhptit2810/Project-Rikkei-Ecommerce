@@ -81,6 +81,12 @@ services:
       REDIS_PORT: 6379
       UPLOAD_DIR: /app/uploads
       TZ: Asia/Ho_Chi_Minh
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@rikkeiecommerce.com}
+      OTP_HMAC_SECRET: ${OTP_HMAC_SECRET:-}
     volumes:
       - ./uploads:/app/uploads
     ports:

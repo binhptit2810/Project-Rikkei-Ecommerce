@@ -1,7 +1,9 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
+import com.example.ecommerce.dto.request.ResetPasswordRequest;
 import com.example.ecommerce.dto.response.AuthResponse;
 import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.entity.Role;
@@ -13,6 +15,9 @@ import com.example.ecommerce.security.CustomUserDetails;
 import com.example.ecommerce.security.JwtUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
@@ -23,6 +28,15 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Nghiệp vụ xác thực người dùng: đăng ký và đăng nhập.
@@ -49,6 +63,70 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final JwtUtils jwtUtils;
     private final RefreshTokenService refreshTokenService;
+    private final StringRedisTemplate redisTemplate;
+    private final EmailService emailService;
+
+    @Value("${app.otp.hmac-secret:ecommerce-default-otp-hmac-secret-change-in-production-2024}")
+    private String otpHmacSecret;
+
+    @Value("${app.otp.expiration-seconds:300}")
+    private long otpExpirationSeconds;
+
+    @Value("${app.otp.rate-limit-seconds:60}")
+    private long otpRateLimitSeconds;
+
+    @Value("${app.otp.max-attempts:5}")
+    private int otpMaxAttempts;
+
+    private static final String OTP_KEY_PREFIX = "auth:otp:";
+    private static final String OTP_RATELIMIT_PREFIX = "auth:otp_ratelimit:";
+    private static final String OTP_ATTEMPTS_PREFIX = "auth:otp_attempts:";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
+
+    /**
+     * Lua script xác thực và tiêu thụ OTP nguyên tử (TSK-D10-CCT).
+     * Chống race condition đa luồng/đa node, kiểm soát brute-force 5 lần thử,
+     * và khóa trạng thái CLAIMED trước khi thực thi cập nhật DB.
+     *
+     * KEYS[1]: auth:otp:<email>
+     * KEYS[2]: auth:otp_attempts:<email>
+     * ARGV[1]: expectedOtpHmac
+     * ARGV[2]: maxAttempts (5)
+     * ARGV[3]: claimTtlSeconds (60)
+     */
+    private static final String VERIFY_AND_CLAIM_LUA_SCRIPT =
+            "local otp = redis.call('GET', KEYS[1])\n" +
+            "if not otp then\n" +
+            "    return 'NOT_FOUND'\n" +
+            "end\n" +
+            "if otp == 'CLAIMED' then\n" +
+            "    return 'ALREADY_USED'\n" +
+            "end\n" +
+            "local attempts = tonumber(redis.call('GET', KEYS[2]) or '0')\n" +
+            "if attempts >= tonumber(ARGV[2]) then\n" +
+            "    redis.call('DEL', KEYS[1])\n" +
+            "    return 'MAX_ATTEMPTS_EXCEEDED'\n" +
+            "end\n" +
+            "if otp ~= ARGV[1] then\n" +
+            "    local newAttempts = redis.call('INCR', KEYS[2])\n" +
+            "    local otpTtl = redis.call('TTL', KEYS[1])\n" +
+            "    if otpTtl > 0 then\n" +
+            "        redis.call('EXPIRE', KEYS[2], otpTtl)\n" +
+            "    end\n" +
+            "    if newAttempts >= tonumber(ARGV[2]) then\n" +
+            "        redis.call('DEL', KEYS[1])\n" +
+            "        return 'MAX_ATTEMPTS_EXCEEDED'\n" +
+            "    else\n" +
+            "        return 'MISMATCH:' .. tostring(newAttempts)\n" +
+            "    end\n" +
+            "end\n" +
+            "local otpTtl = redis.call('TTL', KEYS[1])\n" +
+            "local claimTtl = math.max(tonumber(ARGV[3]), 30)\n" +
+            "if otpTtl > 0 then\n" +
+            "    claimTtl = math.min(otpTtl, claimTtl)\n" +
+            "end\n" +
+            "redis.call('SET', KEYS[1], 'CLAIMED', 'EX', claimTtl)\n" +
+            "return 'SUCCESS:' .. tostring(otpTtl)";
 
     /**
      * Đăng ký tài khoản mới.
@@ -245,6 +323,221 @@ public class AuthService {
      */
     public void logout(String rawRefreshToken) {
         refreshTokenService.revokeToken(rawRefreshToken);
+    }
+
+    /**
+     * Yêu cầu đặt lại mật khẩu và gửi OTP qua Email (TSK-D10-CCT).
+     *
+     * Nguyên tắc an ninh:
+     *   - Email được chuẩn hóa lowercase và trim.
+     *   - Áp dụng Rate Limit tối thiểu 60 giây giữa các lần yêu cầu gửi OTP.
+     *   - User Enumeration Protection: Phản hồi giống nhau bất kể tài khoản có tồn tại, bị khóa hay không.
+     *   - OTP gồm 6 chữ số ngẫu nhiên an toàn (giữ số 0 đầu) và được băm HMAC-SHA256 trước khi lưu Redis.
+     *   - TTL OTP trong Redis là 300 giây (5 phút).
+     *   - Khi gửi email thất bại, hủy OTP trong Redis nhưng giữ rate-limit để chống spam SMTP.
+     *
+     * @param request thông tin yêu cầu chứa email
+     */
+    public void forgotPassword(ForgotPasswordRequest request) {
+        if (request == null || !StringUtils.hasText(request.getEmail())) {
+            throw new BusinessException("Email không được để trống");
+        }
+
+        String normalizedEmail = request.getEmail().toLowerCase().trim();
+
+        // 1. Kiểm tra Rate Limit (tối thiểu 60 giây giữa các lần yêu cầu)
+        String rateLimitKey = OTP_RATELIMIT_PREFIX + normalizedEmail;
+        Boolean isRateLimited = redisTemplate.hasKey(rateLimitKey);
+        if (Boolean.TRUE.equals(isRateLimited)) {
+            log.warn("Yêu cầu gửi OTP quá nhanh bị từ chối do Rate Limit (60s): email={}", normalizedEmail);
+            throw new BusinessException("Vui lòng đợi 60 giây trước khi yêu cầu mã OTP mới");
+        }
+
+        // 2. Kiểm tra điều kiện tài khoản trong CSDL
+        User user = userRepository.findByEmail(normalizedEmail).orElse(null);
+        boolean isEligibleUser = user != null && Boolean.TRUE.equals(user.getActive());
+
+        if (!isEligibleUser) {
+            // User Enumeration Protection:
+            // Không gửi OTP, không tiết lộ tài khoản không tồn tại hoặc bị khóa
+            log.info("Yêu cầu quên mật khẩu cho tài khoản không tồn tại hoặc không đủ điều kiện (bị khóa/inactive): {}", normalizedEmail);
+            return;
+        }
+
+        // 3. Sinh OTP 6 chữ số an toàn và băm HMAC-SHA256
+        String otp = generateOtp();
+        String otpHmac = calculateHmac(otp, otpHmacSecret);
+
+        String otpKey = OTP_KEY_PREFIX + normalizedEmail;
+        String attemptsKey = OTP_ATTEMPTS_PREFIX + normalizedEmail;
+
+        // 4. Lưu OTP vào Redis với TTL 300s (5 phút) và rate-limit key 60s
+        redisTemplate.opsForValue().set(otpKey, otpHmac, otpExpirationSeconds, TimeUnit.SECONDS);
+        redisTemplate.opsForValue().set(rateLimitKey, "1", otpRateLimitSeconds, TimeUnit.SECONDS);
+        redisTemplate.delete(attemptsKey);
+
+        // 5. Gửi email OTP
+        try {
+            emailService.sendOtpEmail(normalizedEmail, otp);
+            log.info("Đã gửi email chứa mã OTP đặt lại mật khẩu thành công tới: {}", normalizedEmail);
+        } catch (Exception ex) {
+            log.error("Gửi email OTP thất bại cho email {}: {}", normalizedEmail, ex.getMessage());
+            // Xóa OTP khỏi Redis vì người dùng không nhận được mã
+            redisTemplate.delete(otpKey);
+            // KHÔNG xóa rateLimitKey để chống spam liên tục khi SMTP server gặp sự cố
+            throw new BusinessException("Không thể gửi email xác thực lúc này, vui lòng thử lại sau ít phút");
+        }
+    }
+
+    /**
+     * Xác thực mã OTP và đặt lại mật khẩu mới (TSK-D10-CCT).
+     *
+     * Nguyên tắc an ninh:
+     *   - Xác thực OTP nguyên tử (Atomic Verify & Claim) qua Redis Lua Script:
+     *     + Chống race condition khi có nhiều request đồng thời dùng chung 1 OTP.
+     *     + Giới hạn tối đa 5 lần nhập sai, tự động hủy OTP khi vượt quá.
+     *     + Đánh dấu trạng thái CLAIMED trước khi thực thi cập nhật CSDL.
+     *   - Kiểm tra xác nhận mật khẩu và không cho phép đặt lại trùng mật khẩu hiện tại.
+     *   - Từ chối nếu tài khoản bị khóa trong CSDL.
+     *   - Mã hóa mật khẩu mới bằng BCrypt strength 12.
+     *   - Thu hồi toàn bộ Refresh Token của user thông qua RefreshTokenService.revokeAllUserSessions.
+     *   - Xóa hoàn toàn OTP và Attempts key khỏi Redis sau khi hoàn tất.
+     *   - Cơ chế phục hồi: Phục hồi lại OTP nếu transaction CSDL gặp sự cố.
+     *
+     * @param request thông tin đặt lại mật khẩu
+     */
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        if (request == null) {
+            throw new BusinessException("Dữ liệu yêu cầu không được để trống");
+        }
+
+        String normalizedEmail = request.getEmail() != null ? request.getEmail().toLowerCase().trim() : "";
+        String otp = request.getOtp() != null ? request.getOtp().trim() : "";
+        String newPassword = request.getNewPassword();
+        String confirmPassword = request.getConfirmPassword();
+
+        // 1. Kiểm tra xác nhận mật khẩu khớp
+        if (newPassword == null || !newPassword.equals(confirmPassword)) {
+            throw new BusinessException("Mật khẩu mới và xác nhận mật khẩu không khớp");
+        }
+
+        // 2. Kiểm tra tài khoản trong CSDL trước khi tiêu thụ OTP
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new BusinessException("Tài khoản không tồn tại"));
+
+        if (Boolean.FALSE.equals(user.getActive())) {
+            String lockReason = StringUtils.hasText(user.getLockReason()) ? user.getLockReason().trim() : null;
+            log.warn("Đặt lại mật khẩu thất bại do tài khoản bị khóa: email={}, lý do={}", normalizedEmail, lockReason);
+            throw new LockedAccountException("Tài khoản của bạn đã bị khóa.", lockReason);
+        }
+
+        // 3. Kiểm tra mật khẩu mới không trùng mật khẩu hiện tại
+        if (passwordEncoder.matches(newPassword, user.getPassword())) {
+            throw new BusinessException("Mật khẩu mới không được trùng với mật khẩu hiện tại");
+        }
+
+        // 4. Xác thực OTP nguyên tử qua Redis Lua script (Chống race condition và brute-force)
+        String otpKey = OTP_KEY_PREFIX + normalizedEmail;
+        String attemptsKey = OTP_ATTEMPTS_PREFIX + normalizedEmail;
+        String expectedOtpHmac = calculateHmac(otp, otpHmacSecret);
+
+        DefaultRedisScript<String> script = new DefaultRedisScript<>(VERIFY_AND_CLAIM_LUA_SCRIPT, String.class);
+        List<String> keys = Arrays.asList(otpKey, attemptsKey);
+
+        String result;
+        try {
+            result = redisTemplate.execute(
+                    script,
+                    keys,
+                    expectedOtpHmac,
+                    String.valueOf(otpMaxAttempts),
+                    "60" // 60 giây claim window
+            );
+        } catch (Exception e) {
+            log.error("Lỗi khi thực thi script xác thực OTP trên Redis: {}", e.getMessage());
+            throw e;
+        }
+
+        if ("NOT_FOUND".equals(result)) {
+            throw new BusinessException("Mã OTP không hợp lệ hoặc đã hết hạn");
+        }
+        if ("ALREADY_USED".equals(result)) {
+            throw new BusinessException("Mã OTP đã được sử dụng");
+        }
+        if ("MAX_ATTEMPTS_EXCEEDED".equals(result)) {
+            throw new BusinessException("Bạn đã nhập sai mã OTP quá 5 lần. Mã OTP đã bị hủy, vui lòng yêu cầu mã mới.");
+        }
+        if (result != null && result.startsWith("MISMATCH:")) {
+            int attemptCount = Integer.parseInt(result.substring("MISMATCH:".length()));
+            int remainingAttempts = Math.max(0, otpMaxAttempts - attemptCount);
+            throw new BusinessException("Mã OTP không chính xác. Bạn còn " + remainingAttempts + " lần thử.");
+        }
+
+        if (result == null || !result.startsWith("SUCCESS")) {
+            throw new BusinessException("Xác thực mã OTP thất bại, vui lòng thử lại");
+        }
+
+        // 5. Cập nhật mật khẩu mới vào Database và thu hồi các phiên đăng nhập
+        try {
+            user.setPassword(passwordEncoder.encode(newPassword));
+            userRepository.save(user);
+            log.info("Đặt lại mật khẩu thành công trong CSDL cho tài khoản: {}", normalizedEmail);
+
+            // Thu hồi toàn bộ Refresh Token của user trong Redis
+            refreshTokenService.revokeAllUserSessions(user.getId());
+            log.info("Đã thu hồi tất cả phiên đăng nhập Redis cho user ID={}", user.getId());
+
+            // Xóa hoàn toàn OTP và Attempts key khỏi Redis sau khi DB thành công
+            redisTemplate.delete(Arrays.asList(otpKey, attemptsKey));
+        } catch (Exception ex) {
+            log.error("Lỗi khi cập nhật mật khẩu mới vào DB: {}", ex.getMessage());
+            // Cơ chế phục hồi: khôi phục OTP trên Redis nếu DB thất bại
+            try {
+                long remainingTtl = 60;
+                if (result.contains(":")) {
+                    long parsedTtl = Long.parseLong(result.split(":")[1]);
+                    if (parsedTtl > 0) {
+                        remainingTtl = parsedTtl;
+                    }
+                }
+                redisTemplate.opsForValue().set(otpKey, expectedOtpHmac, remainingTtl, TimeUnit.SECONDS);
+            } catch (Exception redisRollbackEx) {
+                log.warn("Không thể khôi phục lại OTP trong Redis sau lỗi DB: {}", redisRollbackEx.getMessage());
+            }
+            throw ex;
+        }
+    }
+
+    /**
+     * Sinh mã OTP 6 chữ số ngẫu nhiên an toàn (000000 - 999999), bảo tồn số 0 ở đầu.
+     */
+    private String generateOtp() {
+        int number = SECURE_RANDOM.nextInt(1_000_000);
+        return String.format("%06d", number);
+    }
+
+    /**
+     * Tính toán mã băm HMAC-SHA256 cho chuỗi dữ liệu.
+     */
+    public static String calculateHmac(String data, String secret) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec secretKeySpec = new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(secretKeySpec);
+            byte[] hash = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) {
+                    hexString.append('0');
+                }
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException("Lỗi khi tính toán HMAC-SHA256", e);
+        }
     }
 
     // ---------- Private helpers ----------
