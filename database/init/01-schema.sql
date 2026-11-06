@@ -69,7 +69,10 @@ CREATE TABLE IF NOT EXISTS products (
         REFERENCES categories(id) ON DELETE SET NULL,
     INDEX idx_products_category (category_id),
     INDEX idx_products_name (name),
-    INDEX idx_products_active (active)
+    INDEX idx_products_active (active),
+    INDEX idx_products_price (price),
+    INDEX idx_products_created (created_at),
+    INDEX idx_products_active_filter (active, category_id, price)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================

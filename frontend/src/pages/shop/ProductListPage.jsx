@@ -6,8 +6,6 @@ import {
   ArrowUpDown,
   PackageOpen,
   X,
-  ChevronLeft,
-  ChevronRight,
   Sparkles,
   CheckCircle2,
   AlertCircle,
@@ -17,9 +15,12 @@ import productService from '../../services/productService'
 import categoryService from '../../services/categoryService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import ProductCard from '../../components/common/ProductCard'
+import Pagination from '../../components/common/Pagination'
 import { useCartStore } from '../../store/useCartStore'
 
-// Skeleton card theo phong cách TechNova Electronics
+/**
+ * Skeleton card hiển thị trạng thái đang tải (Loading State).
+ */
 const ProductCardSkeleton = () => (
   <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden flex flex-col justify-between animate-pulse">
     <div>
@@ -36,12 +37,19 @@ const ProductCardSkeleton = () => (
   </div>
 )
 
+/**
+ * Trang Danh sách Sản phẩm (Shop / ProductListPage).
+ * Phụ trách: Đỗ Đức Mạnh (DDM)
+ * Phối hợp: Đỗ Hoàng Anh (DHA)
+ * Task ID: [TSK-D10-DDM] Loại bỏ Mock Data Module Sản phẩm & Kiểm thử Phân trang Dữ liệu lớn
+ */
 export const ProductListPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const addToCart = useCartStore((state) => state.addToCart)
   const { isAuthenticated } = useAuthStore()
   const navigate = useNavigate()
 
+  // Dữ liệu sản phẩm & danh mục 100% từ API thật
   const [products, setProducts] = useState([])
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(true)
@@ -51,9 +59,9 @@ export const ProductListPage = () => {
   const [toast, setToast] = useState(null)
   const toastTimeoutRef = useRef(null)
 
-  // Pagination state
+  // Pagination state (đồng bộ với URL searchParams)
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '0', 10))
-  const [pageSize] = useState(12)
+  const [pageSize, setPageSize] = useState(parseInt(searchParams.get('size') || '12', 10))
   const [totalPages, setTotalPages] = useState(0)
   const [totalElements, setTotalElements] = useState(0)
 
@@ -118,22 +126,27 @@ export const ProductListPage = () => {
     }
   }
 
-  // Load active categories for filter
+  // Tải danh mục thực tế từ backend
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const res = await categoryService.getCategories()
-        if (res.success && res.data) {
+        if (res && res.success && res.data) {
           setCategories(res.data)
+        } else if (Array.isArray(res)) {
+          setCategories(res)
+        } else {
+          setCategories([])
         }
       } catch (err) {
         console.error('Không thể tải danh mục:', err)
+        setCategories([])
       }
     }
     fetchCategories()
   }, [])
 
-  // Load products based on filter, keyword, page, sort
+  // Tải danh sách sản phẩm từ backend API (100% dữ liệu thực, không fallback mock data)
   const fetchProducts = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -148,14 +161,29 @@ export const ProductListPage = () => {
       if (selectedCategory) params.categoryId = selectedCategory
 
       const res = await productService.getProducts(params)
-      if (res.success && res.data) {
+      if (res && res.success && res.data) {
         setProducts(res.data.content || [])
         setTotalPages(res.data.totalPages || 0)
         setTotalElements(res.data.totalElements || 0)
+      } else if (res && res.content) {
+        setProducts(res.content || [])
+        setTotalPages(res.totalPages || 0)
+        setTotalElements(res.totalElements || 0)
+      } else {
+        setProducts([])
+        setTotalPages(0)
+        setTotalElements(0)
       }
     } catch (err) {
       console.error('Lỗi khi tải sản phẩm:', err)
-      setError(err.response?.data?.message || 'Không thể tải danh sách sản phẩm')
+      setError(
+        err.response?.data?.message ||
+        err.message ||
+        'Không thể tải danh sách sản phẩm từ máy chủ. Vui lòng thử lại.'
+      )
+      setProducts([])
+      setTotalPages(0)
+      setTotalElements(0)
     } finally {
       setLoading(false)
     }
@@ -165,12 +193,13 @@ export const ProductListPage = () => {
     fetchProducts()
   }, [fetchProducts])
 
-  // Sync state to URL
-  const updateUrl = (newKeyword, newCatId, newPage, newSortBy, newSortDir) => {
+  // Đồng bộ trạng thái bộ lọc & phân trang vào URL search params
+  const updateUrl = (newKeyword, newCatId, newPage, newSize, newSortBy, newSortDir) => {
     const p = {}
     if (newKeyword) p.keyword = newKeyword
     if (newCatId) p.categoryId = newCatId
     if (newPage > 0) p.page = newPage.toString()
+    if (newSize !== 12) p.size = newSize.toString()
     if (newSortBy !== 'createdAt') p.sortBy = newSortBy
     if (newSortDir !== 'desc') p.sortDir = newSortDir
     setSearchParams(p)
@@ -180,14 +209,14 @@ export const ProductListPage = () => {
     e.preventDefault()
     setKeyword(searchInput)
     setPage(0)
-    updateUrl(searchInput, selectedCategory, 0, sortBy, sortDir)
+    updateUrl(searchInput, selectedCategory, 0, pageSize, sortBy, sortDir)
   }
 
   const handleCategorySelect = (catId) => {
     const updated = catId === selectedCategory ? '' : catId
     setSelectedCategory(updated)
     setPage(0)
-    updateUrl(keyword, updated, 0, sortBy, sortDir)
+    updateUrl(keyword, updated, 0, pageSize, sortBy, sortDir)
   }
 
   const handleSortChange = (e) => {
@@ -209,20 +238,29 @@ export const ProductListPage = () => {
     setSortBy(newSortBy)
     setSortDir(newSortDir)
     setPage(0)
-    updateUrl(keyword, selectedCategory, 0, newSortBy, newSortDir)
+    updateUrl(keyword, selectedCategory, 0, pageSize, newSortBy, newSortDir)
   }
 
+  // Đổi trang
   const handlePageChange = (newPage) => {
     setPage(newPage)
-    updateUrl(keyword, selectedCategory, newPage, sortBy, sortDir)
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    updateUrl(keyword, selectedCategory, newPage, pageSize, sortBy, sortDir)
   }
 
+  // Đổi kích thước trang (Page Size)
+  const handlePageSizeChange = (newSize) => {
+    setPageSize(newSize)
+    setPage(0)
+    updateUrl(keyword, selectedCategory, 0, newSize, sortBy, sortDir)
+  }
+
+  // Xóa toàn bộ bộ lọc
   const handleClearFilters = () => {
     setKeyword('')
     setSearchInput('')
     setSelectedCategory('')
     setPage(0)
+    setPageSize(12)
     setSortBy('createdAt')
     setSortDir('desc')
     setSearchParams({})
@@ -231,7 +269,7 @@ export const ProductListPage = () => {
   const activeCategoryObj = categories.find((c) => c.id.toString() === selectedCategory)
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-1 w-full relative">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-1 w-full relative animate-in fade-in duration-200">
       {/* Toast Notification */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full animate-in slide-in-from-bottom-2">
@@ -280,7 +318,7 @@ export const ProductListPage = () => {
             </h1>
             <p className="text-slate-500 text-sm mt-1">
               {loading ? (
-                'Đang tìm kiếm sản phẩm...'
+                'Đang tìm kiếm sản phẩm từ hệ thống...'
               ) : (
                 <span>
                   Hiển thị <span className="font-bold text-slate-900">{totalElements}</span> sản phẩm công nghệ chính hãng
@@ -294,7 +332,7 @@ export const ProductListPage = () => {
             </p>
           </div>
 
-          {/* Search bar dạng viên thuốc TechNova */}
+          {/* Search bar */}
           <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 max-w-md w-full">
             <div className="relative flex-1">
               <input
@@ -309,6 +347,7 @@ export const ProductListPage = () => {
                   type="button"
                   onClick={() => setSearchInput('')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                  title="Xóa từ khóa"
                 >
                   <X className="w-4 h-4" />
                 </button>
@@ -327,7 +366,7 @@ export const ProductListPage = () => {
 
         {/* Filter & Sorting toolbar */}
         <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
-          {/* Category Filter Pills (TechNova Style) */}
+          {/* Category Filter Pills */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none flex-1 min-w-0">
             <button
               onClick={() => handleCategorySelect('')}
@@ -393,37 +432,45 @@ export const ProductListPage = () => {
 
       {/* Product Content Area */}
       {loading ? (
+        /* Loading State: Skeleton Cards */
         <div className="space-y-6">
           <div className="flex items-center justify-center gap-2.5 py-4 text-xs font-medium text-slate-600 bg-white rounded-2xl border border-slate-200/80 shadow-xs">
             <LoadingSpinner size="sm" className="text-blue-600" />
-            <span>Đang tải danh sách sản phẩm Rikkei Store...</span>
+            <span>Đang tải danh sách sản phẩm từ hệ thống...</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {Array.from({ length: 8 }).map((_, idx) => (
+            {Array.from({ length: pageSize > 12 ? 12 : pageSize }).map((_, idx) => (
               <ProductCardSkeleton key={idx} />
             ))}
           </div>
         </div>
       ) : error ? (
+        /* Error State */
         <div className="bg-red-50 border border-red-200 text-red-700 p-8 rounded-3xl text-center text-sm my-8">
+          <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto mb-3">
+            <AlertCircle className="w-6 h-6" />
+          </div>
           <p className="font-bold">{error}</p>
           <button
             onClick={fetchProducts}
-            className="mt-4 px-5 py-2.5 bg-white border border-red-200 text-red-700 text-xs font-bold rounded-full hover:bg-red-50 transition-colors cursor-pointer shadow-xs"
+            className="mt-4 px-5 py-2.5 bg-white border border-red-200 text-red-700 text-xs font-bold rounded-full hover:bg-red-50 transition-colors cursor-pointer shadow-xs inline-flex items-center gap-1.5"
           >
-            Thử tải lại
+            <span>Thử tải lại</span>
           </button>
         </div>
       ) : products.length === 0 ? (
+        /* Empty State */
         <div className="text-center py-24 bg-white rounded-3xl border border-dashed border-slate-200 shadow-xs my-4">
           <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3">
             <PackageOpen className="w-7 h-7" />
           </div>
-          <h3 className="text-lg font-extrabold text-slate-900 mb-1">Không tìm thấy sản phẩm nào</h3>
+          <h3 className="text-lg font-extrabold text-slate-900 mb-1">
+            Không tìm thấy sản phẩm nào phù hợp
+          </h3>
           <p className="text-slate-500 text-xs max-w-md mx-auto mb-6">
             {keyword || selectedCategory
               ? 'Không có sản phẩm nào phù hợp với bộ lọc hiện tại. Thử thay đổi từ khóa tìm kiếm hoặc chọn danh mục khác.'
-              : 'Hiện tại chưa có sản phẩm nào trong hệ thống.'}
+              : 'Hiện tại chưa có sản phẩm nào trong hệ thống gian hàng.'}
           </p>
           <button
             type="button"
@@ -434,8 +481,8 @@ export const ProductListPage = () => {
           </button>
         </div>
       ) : (
+        /* Data Grid & Pagination */
         <>
-          {/* Products Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {products.map((item) => (
               <ProductCard
@@ -446,47 +493,20 @@ export const ProductListPage = () => {
             ))}
           </div>
 
-          {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="mt-14 flex items-center justify-center gap-2">
-              <button
-                onClick={() => handlePageChange(page - 1)}
-                disabled={page === 0}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-colors bg-white shadow-xs cursor-pointer"
-              >
-                <ChevronLeft className="w-4 h-4" />
-                <span>Trước</span>
-              </button>
-
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: totalPages }, (_, idx) => {
-                  const isCurrent = idx === page
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => handlePageChange(idx)}
-                      className={`w-9 h-9 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                        isCurrent
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'text-slate-700 bg-white hover:bg-slate-100 border border-slate-200'
-                      }`}
-                    >
-                      {idx + 1}
-                    </button>
-                  )
-                })}
-              </div>
-
-              <button
-                onClick={() => handlePageChange(page + 1)}
-                disabled={page >= totalPages - 1}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none transition-colors bg-white shadow-xs cursor-pointer"
-              >
-                <span>Sau</span>
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
+          {/* Phân trang chuẩn với component Pagination */}
+          <div className="mt-10 pt-6 border-t border-slate-200">
+            <Pagination
+              currentPage={page}
+              totalPages={totalPages}
+              totalElements={totalElements}
+              pageSize={pageSize}
+              onPageChange={handlePageChange}
+              onPageSizeChange={handlePageSizeChange}
+              pageSizeOptions={[12, 24, 48]}
+              theme="blue"
+              scrollToTop={true}
+            />
+          </div>
         </>
       )}
     </div>

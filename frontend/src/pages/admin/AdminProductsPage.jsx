@@ -11,8 +11,6 @@ import {
   CheckCircle2,
   X,
   Image as ImageIcon,
-  ChevronLeft,
-  ChevronRight,
   ArrowUpDown,
   AlertTriangle,
 } from 'lucide-react'
@@ -20,20 +18,21 @@ import productService from '../../services/productService'
 import categoryService from '../../services/categoryService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import ProductModal from '../../components/admin/ProductModal'
+import Pagination from '../../components/common/Pagination'
 
 /**
  * Trang Quản lý Sản phẩm dành cho Admin (AdminProductsPage).
  * Tuyến đường (Route): /admin/products
  * Phụ trách: Đỗ Đức Mạnh (DDM)
  * Phối hợp: Đỗ Hoàng Anh (DHA)
- * Task ID: [TSK-D07-DDM] Xây dựng Modal Form Thêm/Sửa Sản phẩm trên Giao diện Admin
+ * Task ID: [TSK-D10-DDM] Loại bỏ Mock Data Module Sản phẩm & Kiểm thử Phân trang Dữ liệu lớn
  *
  * Tính năng chính:
- * 1. Hiển thị danh sách sản phẩm với phân trang, tìm kiếm từ khóa, lọc danh mục, sắp xếp.
- * 2. Tự động chuyển đổi dự phòng (Fallback) từ /api/v1/admin/products sang /api/v1/products nếu endpoint admin chưa sẵn sàng.
+ * 1. Hiển thị danh sách sản phẩm với phân trang dữ liệu lớn, tìm kiếm từ khóa, lọc danh mục, sắp xếp.
+ * 2. 100% dữ liệu thực từ REST API Admin (GET /api/v1/admin/products), không mock data hay fallback data.
  * 3. Thêm mới và Chỉnh sửa thông tin sản phẩm thông qua ProductModal chuẩn mực.
  * 4. Ẩn / Xóa mềm sản phẩm với hộp thoại xác nhận an toàn.
- * 5. Giao diện chuẩn phong cách Tailwind CSS của Rikkei E-commerce (shadcn/ui New York zinc monochrome, tabular-nums).
+ * 5. Tích hợp Pagination component hỗ trợ đổi kích thước trang (10, 20, 50).
  */
 export const AdminProductsPage = () => {
   // --- Dữ liệu sản phẩm & danh mục ---
@@ -44,7 +43,7 @@ export const AdminProductsPage = () => {
 
   // --- Trạng thái phân trang & bộ lọc ---
   const [page, setPage] = useState(0)
-  const [pageSize] = useState(10)
+  const [pageSize, setPageSize] = useState(10)
   const [keyword, setKeyword] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('')
   const [sortBy, setSortBy] = useState('createdAt')
@@ -73,16 +72,9 @@ export const AdminProductsPage = () => {
   }
 
   // Tải danh mục phục vụ bộ lọc và form
-  const fetchCategories = useCallback(async () => {
+  const fetchCategories = async () => {
     try {
-      let res
-      try {
-        res = await categoryService.getAdminCategories()
-      } catch (adminErr) {
-        // Fallback sang endpoint public nếu admin endpoint chưa hỗ trợ
-        res = await categoryService.getCategories()
-      }
-
+      const res = await categoryService.getAdminCategories()
       if (res?.data) {
         if (Array.isArray(res.data)) {
           setCategories(res.data)
@@ -91,11 +83,19 @@ export const AdminProductsPage = () => {
         }
       }
     } catch (err) {
-      console.warn('Không thể tải danh sách danh mục:', err)
+      console.warn('Không thể tải danh sách danh mục qua admin endpoint, thử public endpoint:', err)
+      try {
+        const publicRes = await categoryService.getCategories()
+        if (publicRes?.data && Array.isArray(publicRes.data)) {
+          setCategories(publicRes.data)
+        }
+      } catch (pubErr) {
+        console.error('Không thể tải danh mục:', pubErr)
+      }
     }
-  }, [])
+  }
 
-  // Tải danh sách sản phẩm với fallback an toàn
+  // Tải danh sách sản phẩm từ backend API thực tế
   const fetchProducts = useCallback(async () => {
     setIsLoading(true)
     setError(null)
@@ -110,22 +110,7 @@ export const AdminProductsPage = () => {
     }
 
     try {
-      let res
-      let isFallback = false
-
-      try {
-        // 1. Thử gọi API quản trị dành cho Admin
-        res = await productService.getAdminProducts(params)
-      } catch (adminErr) {
-        const status = adminErr.response?.status
-        if (status === 404 || status === 403 || !adminErr.response) {
-          // 2. Tự động fallback sang API public để luôn có dữ liệu sản phẩm thật
-          isFallback = true
-          res = await productService.getProducts(params)
-        } else {
-          throw adminErr
-        }
-      }
+      const res = await productService.getAdminProducts(params)
 
       if (res?.data) {
         if (Array.isArray(res.data)) {
@@ -139,25 +124,22 @@ export const AdminProductsPage = () => {
         } else {
           setProducts([])
           setTotalElements(0)
-          setTotalPages(1)
+          setTotalPages(0)
         }
       } else {
         setProducts([])
         setTotalElements(0)
-        setTotalPages(1)
-      }
-
-      if (isFallback) {
-        console.info('AdminProductsPage: Đang kết nối fallback qua GET /api/v1/products')
+        setTotalPages(0)
       }
     } catch (err) {
       const msg =
         err.response?.data?.message ||
         err.message ||
-        'Không thể tải danh sách sản phẩm từ hệ thống.'
+        'Không thể tải danh sách sản phẩm từ máy chủ hệ thống.'
       setError(msg)
       setProducts([])
       setTotalElements(0)
+      setTotalPages(0)
     } finally {
       setIsLoading(false)
     }
@@ -166,7 +148,7 @@ export const AdminProductsPage = () => {
   // Khởi tạo dữ liệu
   useEffect(() => {
     fetchCategories()
-  }, [fetchCategories])
+  }, [])
 
   useEffect(() => {
     fetchProducts()
@@ -590,50 +572,23 @@ export const AdminProductsPage = () => {
           </div>
         )}
 
-        {/* Phân trang (Pagination) */}
-        {totalPages > 1 && (
-          <div className="p-4 bg-slate-50/60 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-            <div>
-              Hiển thị{' '}
-              <span className="font-semibold text-slate-800">
-                {page * pageSize + 1}
-              </span>{' '}
-              -{' '}
-              <span className="font-semibold text-slate-800">
-                {Math.min((page + 1) * pageSize, totalElements)}
-              </span>{' '}
-              trong tổng số{' '}
-              <span className="font-semibold text-slate-800">{totalElements}</span>{' '}
-              sản phẩm
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                title="Trang trước"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              <span className="font-semibold text-slate-700 px-2 tabular-nums">
-                Trang {page + 1} / {totalPages}
-              </span>
-
-              <button
-                type="button"
-                onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="p-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                title="Trang sau"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Phân trang dữ liệu lớn chuẩn hóa với component Pagination */}
+        <div className="p-4 bg-slate-50/60 border-t border-slate-200">
+          <Pagination
+            currentPage={page}
+            totalPages={totalPages}
+            totalElements={totalElements}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(newSize) => {
+              setPageSize(newSize)
+              setPage(0)
+            }}
+            pageSizeOptions={[10, 20, 50]}
+            theme="zinc"
+            scrollToTop={false}
+          />
+        </div>
       </div>
 
       {/* ==================================================================== */}

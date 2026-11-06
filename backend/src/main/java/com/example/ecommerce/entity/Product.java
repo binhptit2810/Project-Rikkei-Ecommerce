@@ -13,12 +13,22 @@ import java.time.LocalDateTime;
  *   id, name, description, price (DECIMAL 15,2), image_url, category_id,
  *   stock_quantity (INT >= 0), active, created_at, updated_at
  *
- * Ghi chú phối hợp nhóm:
- *   - Trường stockQuantity được thống nhất với Đặng Thanh Bình (Inventory & Payment).
- *   - Không tự ý tạo module kho riêng biệt, chỉ lưu trữ số lượng tồn kho của sản phẩm tại đây.
+ * Tối ưu hóa hiệu năng truy vấn phân trang & tìm kiếm đa tiêu chí (< 200ms):
+ *   - Đánh Index trên: category_id, name, active, price, created_at
+ *   - Composite index: (active, category_id, price)
  */
 @Entity
-@Table(name = "products")
+@Table(
+    name = "products",
+    indexes = {
+        @Index(name = "idx_products_category", columnList = "category_id"),
+        @Index(name = "idx_products_name", columnList = "name"),
+        @Index(name = "idx_products_active", columnList = "active"),
+        @Index(name = "idx_products_price", columnList = "price"),
+        @Index(name = "idx_products_created_at", columnList = "created_at"),
+        @Index(name = "idx_products_active_category_price", columnList = "active, category_id, price")
+    }
+)
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
