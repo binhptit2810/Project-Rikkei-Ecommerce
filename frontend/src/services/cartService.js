@@ -61,6 +61,19 @@ export const cartService = {
       return null
     }
   },
+
+  /**
+   * Làm sạch toàn bộ giỏ hàng trên server (sau khi thanh toán / đặt hàng thành công)
+   */
+  clearCart: async () => {
+    try {
+      const response = await apiClient.delete('/cart')
+      return response.data
+    } catch (error) {
+      // Backend có thể chưa cài đặt endpoint /cart, không làm ảnh hưởng luồng client
+      return null
+    }
+  },
 }
 
 export default cartService

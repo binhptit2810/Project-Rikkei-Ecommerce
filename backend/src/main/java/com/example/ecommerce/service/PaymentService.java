@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 
 /**
@@ -40,13 +41,18 @@ public class PaymentService {
     public Payment createInitialPayment(Order order, PaymentMethod paymentMethod) {
         log.info("Khởi tạo bản ghi thanh toán cho đơn hàng {}", order.getOrderCode());
 
+        PaymentMethod method = paymentMethod != null ? paymentMethod : PaymentMethod.COD;
+        String initialNote = (method == PaymentMethod.SIMULATED)
+                ? "Chờ thanh toán qua cổng mô phỏng (SIMULATED)"
+                : "Thanh toán tiền mặt khi nhận hàng (COD)";
+
         Payment payment = Payment.builder()
                 .order(order)
                 .transactionCode(Payment.generateTransactionCode())
-                .amount(order.getTotalAmount())
+                .amount(order.getTotalAmount() != null ? order.getTotalAmount().setScale(2, RoundingMode.HALF_UP) : null)
                 .status(PaymentStatus.UNPAID)
-                .paymentMethod(paymentMethod != null ? paymentMethod : PaymentMethod.COD)
-                .transactionNote("Thanh toán tiền mặt khi nhận hàng (COD)")
+                .paymentMethod(method)
+                .transactionNote(initialNote)
                 .build();
 
         return paymentRepository.save(payment);
@@ -112,7 +118,7 @@ public class PaymentService {
             method = PaymentMethod.SIMULATED;
         }
         payment.setPaymentMethod(method);
-        payment.setAmount(order.getTotalAmount());
+        payment.setAmount(order.getTotalAmount() != null ? order.getTotalAmount().setScale(2, RoundingMode.HALF_UP) : null);
 
         if (method == PaymentMethod.COD) {
             payment.setStatus(PaymentStatus.UNPAID);

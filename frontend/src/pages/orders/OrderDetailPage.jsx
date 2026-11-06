@@ -25,6 +25,7 @@ import paymentService from '../../services/paymentService'
 import { useCartStore } from '../../store/useCartStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import CancelOrderModal from './CancelOrderModal'
+import SimulatePaymentModal from './SimulatePaymentModal'
 import {
   OrderStatusBadge,
   PaymentStatusBadge,
@@ -80,6 +81,7 @@ export const OrderDetailPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const addToCart = useCartStore((state) => state.addToCart)
+  const clearCart = useCartStore((state) => state.clearCart)
 
   const [order, setOrder] = useState(null)
   const [paymentInfo, setPaymentInfo] = useState(null)
@@ -91,11 +93,19 @@ export const OrderDetailPage = () => {
     Boolean(location.state?.orderSuccess || location.state?.justCreated)
   )
 
+  // Thông báo lỗi thanh toán mô phỏng nếu chuyển từ checkout
+  const [paymentFailedNotice, setPaymentFailedNotice] = useState(
+    Boolean(location.state?.paymentFailed)
+  )
+
   // Copy mã đơn
   const [copiedCode, setCopiedCode] = useState(false)
 
   // Cancel order modal
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
+
+  // Simulate payment modal
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false)
 
   // Reorder loading
   const [reordering, setReordering] = useState(false)
@@ -114,10 +124,17 @@ export const OrderDetailPage = () => {
   useEffect(() => {
     if (location.state?.orderSuccess || location.state?.justCreated) {
       setJustCreated(true)
-      showToast(
-        `🎉 Đặt hàng thành công! Mã đơn: #${location.state.orderCode || ''}`,
-        'success'
-      )
+      if (location.state?.paymentFailed) {
+        showToast(
+          `⚠️ Đơn hàng #${location.state.orderCode || ''} đã được tạo nhưng thanh toán thất bại. Giỏ hàng đã được giữ nguyên.`,
+          'error'
+        )
+      } else {
+        showToast(
+          `🎉 Đặt hàng thành công! Mã đơn: #${location.state.orderCode || ''}`,
+          'success'
+        )
+      }
     }
   }, [location.state])
 
@@ -219,6 +236,32 @@ export const OrderDetailPage = () => {
     }
   }
 
+  // Xử lý khi thanh toán mô phỏng thành công
+  const handlePaymentSuccess = (paymentData) => {
+    setOrder((prev) => ({
+      ...prev,
+      paymentStatus: 'PAID',
+      paymentStatusDescription: 'Đã thanh toán',
+      orderStatus: prev?.orderStatus === 'PENDING' ? 'CONFIRMED' : prev?.orderStatus,
+      orderStatusDescription: prev?.orderStatus === 'PENDING' ? 'Đã xác nhận' : prev?.orderStatusDescription,
+      transactionCode: paymentData?.transactionCode || prev?.transactionCode,
+    }))
+    setPaymentInfo(paymentData)
+    clearCart()
+    setPaymentFailedNotice(false)
+    showToast(
+      `🎉 Thanh toán thành công cho đơn #${order?.orderCode || order?.id}! Mã giao dịch: ${paymentData?.transactionCode || ''}`,
+      'success'
+    )
+    fetchOrderDetail()
+  }
+
+  // Xử lý khi thanh toán mô phỏng thất bại
+  const handlePaymentError = (errorMsg) => {
+    showToast(errorMsg || 'Thanh toán mô phỏng thất bại.', 'error')
+    fetchOrderDetail()
+  }
+
   // Xử lý mua lại (thêm toàn bộ sản phẩm trong đơn vào giỏ hàng rồi chuyển sang /cart)
   const handleBuyAgain = async () => {
     if (!order?.items || order.items.length === 0) return
@@ -289,9 +332,18 @@ export const OrderDetailPage = () => {
         onError={handleCancelError}
       />
 
+      {/* Modal Mô phỏng thanh toán trực tuyến */}
+      <SimulatePaymentModal
+        isOpen={paymentModalOpen}
+        order={order}
+        onClose={() => setPaymentModalOpen(false)}
+        onSuccess={handlePaymentSuccess}
+        onError={handlePaymentError}
+      />
+
       <div className="max-w-7xl mx-auto">
         {/* Thông báo chúc mừng khi vừa đặt hàng thành công */}
-        {justCreated && (
+        {justCreated && !paymentFailedNotice && (
           <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 shadow-sm flex items-start justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-200">
@@ -310,6 +362,40 @@ export const OrderDetailPage = () => {
             <button
               onClick={() => setJustCreated(false)}
               className="text-emerald-700 hover:text-emerald-950 p-1.5 rounded-lg hover:bg-emerald-100 transition-colors cursor-pointer shrink-0"
+              title="Đóng thông báo"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Banner thông báo khi thanh toán mô phỏng thất bại */}
+        {paymentFailedNotice && (
+          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 shadow-sm flex items-start justify-between gap-4 animate-in fade-in duration-300">
+            <div className="flex items-start gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-sm sm:text-base font-bold text-amber-950">
+                  ⚠️ Đơn hàng #{order?.orderCode || location.state?.orderCode || id} chưa hoàn tất thanh toán
+                </h3>
+                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                  Giao dịch thanh toán mô phỏng chưa thành công. Giỏ hàng của bạn đã được giữ nguyên và đơn hàng vẫn đang ở trạng thái Chờ xác nhận. Bạn có thể nhấn nút bên dưới để thanh toán lại.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setPaymentModalOpen(true)}
+                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 transition-colors shadow-2xs cursor-pointer"
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span>Thực hiện thanh toán mô phỏng ngay</span>
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setPaymentFailedNotice(false)}
+              className="text-amber-700 hover:text-amber-950 p-1.5 rounded-lg hover:bg-amber-100 transition-colors cursor-pointer shrink-0"
               title="Đóng thông báo"
             >
               <X className="w-4 h-4" />
@@ -697,6 +783,24 @@ export const OrderDetailPage = () => {
                         <span className="font-semibold text-slate-700">
                           {formatDateTime(paymentInfo.paidAt)}
                         </span>
+                      </div>
+                    )}
+
+                    {/* Nút hành động thanh toán mô phỏng khi chưa hoàn tất */}
+                    {order.paymentStatus !== 'PAID' && order.orderStatus !== 'CANCELLED' && (
+                      <div className="pt-3 border-t border-slate-100">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentModalOpen(true)}
+                          className="w-full py-2.5 px-3 rounded-xl text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                        >
+                          <CreditCard className="w-3.5 h-3.5" />
+                          <span>
+                            {order.paymentStatus === 'FAILED'
+                              ? 'Thử lại thanh toán mô phỏng'
+                              : 'Thực hiện thanh toán mô phỏng'}
+                          </span>
+                        </button>
                       </div>
                     )}
                   </div>
