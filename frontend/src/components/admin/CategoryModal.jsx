@@ -4,7 +4,6 @@ import {
   X,
   AlertCircle,
   Eye,
-  Image as ImageIcon,
 } from 'lucide-react'
 import categoryService from '../../services/categoryService'
 import LoadingSpinner from '../common/LoadingSpinner'

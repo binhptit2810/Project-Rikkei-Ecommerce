@@ -13,7 +13,6 @@ import {
   Phone,
   MapPin,
   RefreshCw,
-  AlertTriangle,
   CheckCircle2,
 } from 'lucide-react'
 import orderService from '../../services/orderService'
