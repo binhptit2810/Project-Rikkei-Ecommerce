@@ -58,6 +58,16 @@ export const adminUserService = {
     const response = await apiClient.patch(`/admin/users/${id}/unlock`)
     return response.data
   },
+
+  /**
+   * Xóa tài khoản người dùng khỏi hệ thống (yêu cầu quyền ADMIN).
+   * @param {number|string} id - ID người dùng
+   * @returns {Promise<Object>} ApiResponse<Void>
+   */
+  async deleteUser(id) {
+    const response = await apiClient.delete(`/admin/users/${id}`)
+    return response.data
+  },
 }
 
 export default adminUserService

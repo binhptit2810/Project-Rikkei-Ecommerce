@@ -48,6 +48,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final RefreshTokenService refreshTokenService;
+    private final EmailService emailService;
 
     /**
      * Lấy thông tin hồ sơ người dùng đang đăng nhập.
@@ -180,6 +181,19 @@ public class UserService {
             // AuthService.refreshToken luôn kiểm tra user.getActive() từ MySQL trước khi cấp token mới.
         }
 
+        // Gửi email thông báo tài khoản bị khóa
+        try {
+            emailService.sendAccountStatusEmail(
+                    targetUser.getEmail(),
+                    targetUser.getFullName(),
+                    "Tài khoản của bạn đã bị khóa",
+                    "Tài khoản Rikkei Store của bạn đã bị tạm thời khóa bởi Quản trị viên.",
+                    cleanReason
+            );
+        } catch (Exception mailEx) {
+            log.warn("Không thể gửi email thông báo khóa tài khoản cho {}: {}", targetUser.getEmail(), mailEx.getMessage());
+        }
+
         return UserResponse.fromEntity(targetUser);
     }
 
@@ -227,6 +241,19 @@ public class UserService {
                     actorUserId, targetId)
         );
 
+        // Gửi email thông báo mở khóa tài khoản
+        try {
+            emailService.sendAccountStatusEmail(
+                    targetUser.getEmail(),
+                    targetUser.getFullName(),
+                    "Tài khoản của bạn đã được mở khóa",
+                    "Tài khoản Rikkei Store của bạn đã được mở khóa và có thể đăng nhập, sử dụng bình thường.",
+                    null
+            );
+        } catch (Exception mailEx) {
+            log.warn("Không thể gửi email thông báo mở khóa tài khoản cho {}: {}", targetUser.getEmail(), mailEx.getMessage());
+        }
+
         return UserResponse.fromEntity(targetUser);
     }
 
@@ -245,13 +272,24 @@ public class UserService {
     @Transactional
     public UserResponse updateProfile(UserDetails userDetails, UpdateProfileRequest request) {
         User user = findUserByDetails(userDetails);
+        final Long currentUserId = user.getId();
 
         // Partial update: chỉ cập nhật trường không null
         if (StringUtils.hasText(request.getFullName())) {
             user.setFullName(request.getFullName().trim());
         }
         if (request.getPhone() != null) {
-            user.setPhone(request.getPhone());
+            String newPhone = request.getPhone().trim();
+            if (StringUtils.hasText(newPhone)) {
+                userRepository.findByPhone(newPhone).ifPresent(otherUser -> {
+                    if (!otherUser.getId().equals(currentUserId)) {
+                        throw new BusinessException("Số điện thoại này đã được sử dụng bởi một tài khoản khác: " + newPhone);
+                    }
+                });
+                user.setPhone(newPhone);
+            } else {
+                user.setPhone(null);
+            }
         }
         if (request.getAddress() != null) {
             user.setAddress(request.getAddress());
@@ -259,6 +297,19 @@ public class UserService {
 
         user = userRepository.save(user);
         log.info("Cập nhật hồ sơ người dùng: {}", user.getEmail());
+
+        // Gửi email cảnh báo bảo mật cập nhật thông tin hồ sơ
+        try {
+            emailService.sendSecurityAlertEmail(
+                    user.getEmail(),
+                    user.getFullName(),
+                    "Cập nhật thông tin hồ sơ",
+                    "Thông tin tài khoản cá nhân của bạn tại Rikkei Store vừa được cập nhật thành công."
+            );
+        } catch (Exception mailEx) {
+            log.warn("Không thể gửi email thông báo cập nhật hồ sơ cho {}: {}", user.getEmail(), mailEx.getMessage());
+        }
+
         return UserResponse.fromEntity(user);
     }
 
@@ -306,6 +357,71 @@ public class UserService {
             // Lưu ý: Không che giấu lỗi, nhưng đảm bảo tính nhất quán qua cơ chế hòa giải trạng thái
             // (AuthService.refreshToken sẽ tự động từ chối mọi token cũ dựa trên hash mật khẩu đã thay đổi).
         }
+
+        // Gửi email cảnh báo bảo mật đổi mật khẩu
+        try {
+            emailService.sendSecurityAlertEmail(
+                    user.getEmail(),
+                    user.getFullName(),
+                    "Đổi mật khẩu tài khoản thành công",
+                    "Mật khẩu tài khoản Rikkei Store của bạn vừa được thay đổi thành công vào lúc "
+                            + LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy"))
+                            + ". Nếu bạn không thực hiện thay đổi này, vui lòng liên hệ ngay với CSKH Rikkei Store (1900 6868) để khóa tài khoản khẩn cấp."
+            );
+        } catch (Exception mailEx) {
+            log.warn("Không thể gửi email thông báo đổi mật khẩu cho {}: {}", user.getEmail(), mailEx.getMessage());
+        }
+    }
+
+    /**
+     * Xóa tài khoản người dùng khỏi hệ thống (dành cho Admin).
+     *
+     * @param id               ID người dùng cần xóa
+     * @param adminUserDetails thông tin Admin đang thực hiện (từ SecurityContext)
+     */
+    @Transactional
+    public void deleteUser(Long id, UserDetails adminUserDetails) {
+        Long actorUserId = resolveActorUserId(adminUserDetails);
+
+        User targetUser = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với ID: " + id));
+
+        if (adminUserDetails != null) {
+            boolean isSelf = false;
+            if (adminUserDetails instanceof CustomUserDetails customUserDetails && customUserDetails.getUserId() != null) {
+                isSelf = targetUser.getId().equals(customUserDetails.getUserId());
+            }
+            if (!isSelf && StringUtils.hasText(adminUserDetails.getUsername())) {
+                isSelf = targetUser.getEmail().equalsIgnoreCase(adminUserDetails.getUsername().trim());
+            }
+            if (isSelf) {
+                throw new BusinessException("Bạn không thể tự xóa tài khoản của chính mình");
+            }
+        }
+
+        String targetEmail = targetUser.getEmail();
+        String targetFullName = targetUser.getFullName();
+
+        try {
+            refreshTokenService.revokeAllUserSessions(targetUser.getId());
+        } catch (Exception ex) {
+            log.warn("Lỗi thu hồi phiên đăng nhập khi xóa user ID={}: {}", targetUser.getId(), ex.getMessage());
+        }
+
+        try {
+            emailService.sendAccountStatusEmail(
+                    targetEmail,
+                    targetFullName,
+                    "Tài khoản đã bị xóa khỏi hệ thống",
+                    "Tài khoản của bạn tại hệ thống Rikkei Store đã bị xóa bởi Quản trị viên.",
+                    null
+            );
+        } catch (Exception mailEx) {
+            log.warn("Không thể gửi email thông báo xóa tài khoản cho {}: {}", targetEmail, mailEx.getMessage());
+        }
+
+        userRepository.delete(targetUser);
+        log.info("userId={} | action=DELETE_USER | result=SUCCESS | targetUserId={}", actorUserId, id);
     }
 
     // ---------- Private helpers ----------

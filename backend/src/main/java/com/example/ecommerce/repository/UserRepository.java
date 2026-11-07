@@ -34,6 +34,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** Kiểm tra email đã được sử dụng để đăng ký tài khoản chưa. */
     boolean existsByEmail(String email);
 
+    /** Kiểm tra số điện thoại đã được đăng ký bởi tài khoản nào chưa. */
+    boolean existsByPhone(String phone);
+
+    /** Tìm user theo số điện thoại. */
+    Optional<User> findByPhone(String phone);
+
     /** Đếm tổng số người dùng theo Role. */
     long countByRole(Role role);
 
