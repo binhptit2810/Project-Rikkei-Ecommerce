@@ -59,6 +59,65 @@ public class EmailServiceImpl implements EmailService {
         }
     }
 
+    @Override
+    public void sendVerificationOtpEmail(String toEmail, String otp, String fullName) {
+        log.info("Bắt đầu chuẩn bị gửi email OTP xác thực tài khoản tới: {}", toEmail);
+
+        try {
+            MimeMessage mimeMessage = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(
+                    mimeMessage,
+                    MimeMessageHelper.MULTIPART_MODE_MIXED_RELATED,
+                    StandardCharsets.UTF_8.name()
+            );
+
+            helper.setFrom(fromEmail);
+            helper.setTo(toEmail);
+            helper.setSubject("Xác thực địa chỉ email - Rikkei Store");
+
+            String htmlContent = buildVerificationEmailTemplate(otp, fullName);
+            helper.setText(htmlContent, true);
+
+            mailSender.send(mimeMessage);
+            log.info("Gửi email OTP xác thực tài khoản thành công tới: {}", toEmail);
+        } catch (MessagingException | org.springframework.mail.MailException e) {
+            log.error("Lỗi khi gửi email xác thực tới {}: {}", toEmail, e.getMessage());
+            throw new BusinessException("Không thể gửi email xác thực lúc này, vui lòng thử lại sau ít phút");
+        } catch (Exception e) {
+            log.error("Lỗi không xác định khi gửi email xác thực tới {}: {}", toEmail, e.getMessage());
+            throw new BusinessException("Lỗi hệ thống khi gửi email xác thực, vui lòng thử lại sau");
+        }
+    }
+
+    /**
+     * Tạo nội dung HTML email xác thực tài khoản mới chuẩn responsive.
+     */
+    private String buildVerificationEmailTemplate(String otp, String fullName) {
+        String greetingName = (fullName != null && !fullName.trim().isEmpty()) ? fullName.trim() : "bạn";
+        return "<!DOCTYPE html>" +
+                "<html lang=\"vi\">" +
+                "<head><meta charset=\"UTF-8\"><title>Xác thực địa chỉ email</title></head>" +
+                "<body style=\"font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 20px; background-color: #f7f9fa;\">" +
+                "  <div style=\"max-width: 550px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);\">" +
+                "    <h2 style=\"color: #1e88e5; text-align: center; margin-top: 0;\">Rikkei Store</h2>" +
+                "    <hr style=\"border: none; border-top: 1px solid #e0e0e0; margin: 20px 0;\">" +
+                "    <p>Xin chào <strong>" + greetingName + "</strong>,</p>" +
+                "    <p>Cảm ơn bạn đã đăng ký tài khoản tại Rikkei Store. Để kích hoạt tài khoản và bảo vệ quyền riêng tư, vui lòng nhập mã xác thực OTP sau đây:</p>" +
+                "    <div style=\"text-align: center; margin: 30px 0;\">" +
+                "      <span style=\"display: inline-block; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1e88e5; background: #e3f2fd; padding: 12px 24px; border-radius: 6px; border: 1px dashed #90caf9;\">" +
+                otp +
+                "      </span>" +
+                "    </div>" +
+                "    <p style=\"margin-bottom: 10px;\">⏱️ <strong>Thời hạn hiệu lực:</strong> Mã xác thực có hiệu lực trong vòng <strong>5 phút</strong>.</p>" +
+                "    <p style=\"color: #d32f2f; font-weight: bold;\">⚠️ Lưu ý bảo mật: Tuyệt đối không chia sẻ mã này cho bất kỳ ai, bao gồm cả nhân viên hỗ trợ.</p>" +
+                "    <p>Nếu bạn không thực hiện đăng ký tài khoản này, vui lòng bỏ qua thư này.</p>" +
+                "    <hr style=\"border: none; border-top: 1px solid #e0e0e0; margin: 25px 0 15px;\">" +
+                "    <p style=\"font-size: 12px; color: #888; text-align: center; margin: 0;\">Email tự động từ hệ thống Rikkei Store. Vui lòng không trả lời thư này.</p>" +
+                "  </div>" +
+                "</body>" +
+                "</html>";
+    }
+
     /**
      * Tạo nội dung HTML rõ ràng, hiện đại và chuẩn responsive cho email OTP.
      */

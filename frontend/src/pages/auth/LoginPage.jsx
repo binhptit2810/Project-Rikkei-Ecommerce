@@ -17,7 +17,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner'
 export const LoginPage = () => {
   const navigate = useNavigate()
   const location = useLocation()
-  const { login, isLoading, error, lockReason, clearError } = useAuthStore()
+  const { login, isLoading, error, lockReason, isUnverified, unverifiedEmail, clearError } = useAuthStore()
 
   const [formData, setFormData] = useState({
     email: '',
@@ -33,7 +33,7 @@ export const LoginPage = () => {
     if (formErrors[name]) {
       setFormErrors((prev) => ({ ...prev, [name]: '' }))
     }
-    if (error || lockReason) {
+    if (error || lockReason || isUnverified) {
       clearError()
     }
   }
@@ -124,8 +124,40 @@ export const LoginPage = () => {
             </div>
           )}
 
+          {/* Unverified Account Warning Banner */}
+          {isUnverified && (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs shadow-xs space-y-3">
+              <div className="flex items-start gap-2.5">
+                <Mail className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="flex-1 space-y-1">
+                  <div className="font-bold text-amber-950">
+                    Tài khoản chưa kích hoạt
+                  </div>
+                  <p className="text-amber-800 leading-relaxed font-medium">
+                    {error || 'Địa chỉ email này chưa được xác thực. Vui lòng nhập mã OTP để kích hoạt tài khoản của bạn.'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() =>
+                  navigate('/verify-email', {
+                    state: {
+                      email: unverifiedEmail || formData.email.trim(),
+                      autoResend: true,
+                    },
+                  })
+                }
+                className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition-colors shadow-xs cursor-pointer"
+              >
+                <span>Xác thực email ngay</span>
+                <span aria-hidden="true">&rarr;</span>
+              </button>
+            </div>
+          )}
+
           {/* Backend Error Banner */}
-          {error && (
+          {error && !isUnverified && (
             <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2.5 shadow-xs">
               <div className="shrink-0 mt-0.5">
                 {lockReason ? <ShieldAlert className="w-4 h-4 text-red-600" /> : <AlertCircle className="w-4 h-4 text-red-600" />}

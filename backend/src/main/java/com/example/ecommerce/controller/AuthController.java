@@ -4,8 +4,11 @@ import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
 import com.example.ecommerce.dto.request.ResetPasswordRequest;
+import com.example.ecommerce.dto.request.ResendVerificationRequest;
+import com.example.ecommerce.dto.request.VerifyEmailRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.AuthResponse;
+import com.example.ecommerce.dto.response.RegisterResponse;
 import com.example.ecommerce.service.AuthService;
 import com.example.ecommerce.util.CookieUtils;
 import jakarta.validation.Valid;
@@ -52,19 +55,49 @@ public class AuthController {
     private String cookieSameSite;
 
     /**
-     * Đăng ký tài khoản mới.
+     * Đăng ký tài khoản mới (CUSTOMER).
+     * Yêu cầu xác thực OTP qua email, không cấp token khi đăng ký.
      * POST /api/v1/auth/register
      */
     @PostMapping("/register")
-    public ResponseEntity<ApiResponse<AuthResponse>> register(
+    public ResponseEntity<ApiResponse<RegisterResponse>> register(
             @Valid @RequestBody RegisterRequest request) {
 
-        AuthResponse response = authService.register(request);
-        HttpHeaders headers = buildCookieHeaders(response.getRefreshToken());
+        RegisterResponse response = authService.register(request);
 
         return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Đăng ký tài khoản thành công. Vui lòng kiểm tra email để nhận mã xác thực OTP.", response));
+    }
+
+    /**
+     * Xác thực email bằng mã OTP 6 chữ số và tự động đăng nhập.
+     * POST /api/v1/auth/verify-email
+     */
+    @PostMapping("/verify-email")
+    public ResponseEntity<ApiResponse<AuthResponse>> verifyEmail(
+            @Valid @RequestBody VerifyEmailRequest request) {
+
+        AuthResponse response = authService.verifyEmail(request);
+        HttpHeaders headers = buildCookieHeaders(response.getRefreshToken());
+
+        return ResponseEntity.ok()
                 .headers(headers)
-                .body(ApiResponse.success("Đăng ký tài khoản thành công", response));
+                .body(ApiResponse.success("Xác thực email thành công", response));
+    }
+
+    /**
+     * Gửi lại mã OTP xác thực email (Rate limit 60 giây).
+     * POST /api/v1/auth/resend-verification
+     */
+    @PostMapping("/resend-verification")
+    public ResponseEntity<ApiResponse<Void>> resendVerification(
+            @Valid @RequestBody ResendVerificationRequest request) {
+
+        authService.resendVerification(request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Nếu email tồn tại trong hệ thống và chưa xác thực, bạn sẽ nhận được mã OTP mới qua email.", null)
+        );
     }
 
     /**

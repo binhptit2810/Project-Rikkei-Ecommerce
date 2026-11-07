@@ -66,7 +66,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     UserDetails userDetails = userDetailsService.loadUserByUsername(email);
 
                     boolean notExpired = claims.getExpiration() != null && claims.getExpiration().after(new Date());
-                    if (userDetails.isEnabled() && email.equals(userDetails.getUsername()) && notExpired) {
+                    boolean isVerified = true;
+                    if (userDetails instanceof CustomUserDetails customUserDetails) {
+                        isVerified = customUserDetails.isEmailVerified();
+                    }
+
+                    if (userDetails.isEnabled() && isVerified && email.equals(userDetails.getUsername()) && notExpired) {
                         UsernamePasswordAuthenticationToken authentication =
                                 new UsernamePasswordAuthenticationToken(
                                         userDetails,

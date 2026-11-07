@@ -46,19 +46,21 @@ spring:
       # Khi cần xác thực, Spring Boot tự động map biến môi trường SPRING_DATA_REDIS_PASSWORD hoặc khai báo spring.data.redis.password.
       timeout: 2000ms
 
-  # Cấu hình gửi Mail qua SMTP (Gmail / Mailtrap)
+  # Cấu hình gửi Mail qua Resend SMTP (hỗ trợ Port 465 SSL và Port 587 STARTTLS)
   mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
+    host: ${MAIL_HOST:smtp.resend.com}
+    port: ${MAIL_PORT:465}
+    username: ${MAIL_USERNAME:resend}
+    password: ${RESEND_API_KEY:${MAIL_PASSWORD:}}
     properties:
       mail:
         smtp:
           auth: true
+          ssl:
+            enable: ${MAIL_SMTP_SSL_ENABLE:true}
           starttls:
-            enable: true
-            required: true
+            enable: ${MAIL_SMTP_STARTTLS_ENABLE:false}
+            required: ${MAIL_SMTP_STARTTLS_REQUIRED:false}
           connectiontimeout: 5000
           timeout: 5000
           writetimeout: 5000
@@ -93,7 +95,7 @@ app:
   upload:
     dir: ${UPLOAD_DIR:uploads}
   mail:
-    from: ${MAIL_FROM:no-reply@rikkeiecommerce.com}
+    from: ${MAIL_FROM:noreply@mail.rikkei-shop.me}
   otp:
     hmac-secret: ${OTP_HMAC_SECRET:ecommerce-default-otp-hmac-secret-change-in-production-2024}
     expiration-seconds: 300

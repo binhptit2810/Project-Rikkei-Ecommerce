@@ -15,7 +15,7 @@ SET CHARACTER SET utf8mb4;
 --
 -- QUAN TRỌNG: Đổi mật khẩu ngay khi deploy lên môi trường thực
 -- =============================================================================
-INSERT INTO users (email, password, full_name, phone, address, role, active) VALUES
+INSERT INTO users (email, password, full_name, phone, address, role, active, email_verified, email_verified_at) VALUES
 (
     'admin@eshop.com',
     '$2a$12$DeJXKsMNyJICotlNotxyRu/9P8LFnQlt5E96Z6V2Vx.eNtRMjdfUC',
@@ -24,7 +24,9 @@ INSERT INTO users (email, password, full_name, phone, address, role, active) VAL
     '0900000001',
     'Hà Nội, Việt Nam',
     'ADMIN',
-    TRUE
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP
 ),
 (
     'customer1@example.com',
@@ -34,7 +36,9 @@ INSERT INTO users (email, password, full_name, phone, address, role, active) VAL
     '0912345678',
     '123 Đường Lê Lợi, Quận 1, TP.HCM',
     'CUSTOMER',
-    TRUE
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP
 ),
 (
     'customer2@example.com',
@@ -44,7 +48,9 @@ INSERT INTO users (email, password, full_name, phone, address, role, active) VAL
     '0987654321',
     '456 Đường Nguyễn Huệ, Quận 3, TP.HCM',
     'CUSTOMER',
-    TRUE
+    TRUE,
+    TRUE,
+    CURRENT_TIMESTAMP
 );
 
 -- =============================================================================

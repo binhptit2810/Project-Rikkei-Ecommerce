@@ -4,15 +4,20 @@ import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
 import com.example.ecommerce.dto.request.ResetPasswordRequest;
+import com.example.ecommerce.dto.request.ResendVerificationRequest;
+import com.example.ecommerce.dto.request.VerifyEmailRequest;
 import com.example.ecommerce.dto.response.AuthResponse;
+import com.example.ecommerce.dto.response.RegisterResponse;
 import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.LockedAccountException;
+import com.example.ecommerce.exception.UnverifiedAccountException;
 import com.example.ecommerce.repository.UserRepository;
 import com.example.ecommerce.security.CustomUserDetails;
 import com.example.ecommerce.security.JwtUtils;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,9 +38,11 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -69,6 +76,33 @@ public class AuthService {
     @Value("${app.otp.hmac-secret:ecommerce-default-otp-hmac-secret-change-in-production-2024}")
     private String otpHmacSecret;
 
+    @Value("${spring.profiles.active:default}")
+    private String activeProfile;
+
+    private static final String DEFAULT_DEV_HMAC_SECRET = "ecommerce-default-otp-hmac-secret-change-in-production-2024";
+
+    /**
+     * Xác thực an toàn khóa bí mật HMAC khi khởi động ứng dụng.
+     * Trên môi trường Production (docker, prod, production), bắt buộc phải cấu hình
+     * biến môi trường OTP_HMAC_SECRET riêng biệt, tối thiểu 32 ký tự và không dùng secret mặc định.
+     */
+    @PostConstruct
+    public void validateOtpHmacSecret() {
+        boolean isProduction = "docker".equalsIgnoreCase(activeProfile)
+                || "prod".equalsIgnoreCase(activeProfile)
+                || "production".equalsIgnoreCase(activeProfile);
+
+        if (!StringUtils.hasText(otpHmacSecret) || otpHmacSecret.trim().length() < 32) {
+            if (isProduction) {
+                throw new IllegalStateException("CRITICAL SECURITY ERROR: Biến môi trường OTP_HMAC_SECRET bắt buộc phải được cấu hình và có độ dài tối thiểu 32 ký tự trên môi trường Production.");
+            } else {
+                log.warn("CẢNH BÁO BẢO MẬT: OTP_HMAC_SECRET chưa được cấu hình hoặc ngắn hơn 32 ký tự. Đang sử dụng fallback tạm thời cho môi trường dev/test.");
+            }
+        } else if (isProduction && DEFAULT_DEV_HMAC_SECRET.equals(otpHmacSecret.trim())) {
+            throw new IllegalStateException("CRITICAL SECURITY ERROR: Không được phép sử dụng secret mặc định cho OTP_HMAC_SECRET trên môi trường Production. Vui lòng thiết lập biến môi trường OTP_HMAC_SECRET an toàn.");
+        }
+    }
+
     @Value("${app.otp.expiration-seconds:300}")
     private long otpExpirationSeconds;
 
@@ -81,6 +115,11 @@ public class AuthService {
     private static final String OTP_KEY_PREFIX = "auth:otp:";
     private static final String OTP_RATELIMIT_PREFIX = "auth:otp_ratelimit:";
     private static final String OTP_ATTEMPTS_PREFIX = "auth:otp_attempts:";
+
+    private static final String VERIFY_OTP_KEY_PREFIX = "auth:verify_otp:";
+    private static final String VERIFY_RATELIMIT_PREFIX = "auth:verify_ratelimit:";
+    private static final String VERIFY_ATTEMPTS_PREFIX = "auth:verify_attempts:";
+
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     /**
@@ -129,24 +168,72 @@ public class AuthService {
             "return 'SUCCESS:' .. tostring(otpTtl)";
 
     /**
-     * Đăng ký tài khoản mới.
+     * Lua script giải phóng khóa rate limit nguyên tử (Compare-and-Delete).
+     * Chỉ giải phóng khi khóa KEYS[1] có giá trị đúng bằng ARGV[1] (owner lockValue).
+     * Tránh tuyệt đối race condition xóa nhầm khóa của request khác khi khóa cũ hết hạn.
+     *
+     * KEYS[1]: rateLimitKey
+     * ARGV[1]: expectedLockValue
+     * Trả về: 1 nếu xóa thành công, 0 nếu không khớp owner hoặc key không tồn tại.
+     */
+    private static final String RELEASE_RATE_LIMIT_LOCK_LUA_SCRIPT =
+            "if redis.call('GET', KEYS[1]) == ARGV[1] then\n" +
+            "    return redis.call('DEL', KEYS[1])\n" +
+            "else\n" +
+            "    return 0\n" +
+            "end";
+
+    /**
+     * Giải phóng khóa rate limit nguyên tử bằng Lua script (Compare-and-Delete).
+     *
+     * @param rateLimitKey Redis key của khóa rate limit
+     * @param lockValue UUID đại diện cho request sở hữu khóa
+     * @return true nếu giải phóng thành công (owner khớp), false nếu owner không khớp hoặc key không tồn tại
+     */
+    public boolean releaseRateLimitLock(String rateLimitKey, String lockValue) {
+        if (!StringUtils.hasText(rateLimitKey) || !StringUtils.hasText(lockValue)) {
+            return false;
+        }
+        try {
+            Long result = redisTemplate.execute(
+                    new DefaultRedisScript<>(RELEASE_RATE_LIMIT_LOCK_LUA_SCRIPT, Long.class),
+                    List.of(rateLimitKey),
+                    lockValue
+            );
+            return result != null && result == 1L;
+        } catch (Exception ex) {
+            log.error("Lỗi khi thực thi Lua script giải phóng rate limit lock cho key {}: {}", rateLimitKey, ex.getMessage());
+            return false;
+        }
+    }
+
+    /**
+     * Đăng ký tài khoản mới (CUSTOMER).
      *
      * Luồng:
-     *   1. Kiểm tra email chưa tồn tại
-     *   2. Hash password bằng BCrypt
-     *   3. Lưu User với role=CUSTOMER, active=true
-     *   4. Tạo JWT và trả AuthResponse
+     *   1. Kiểm tra email chưa tồn tại (hoặc từ chối nếu đã tồn tại).
+     *   2. Hash password bằng BCrypt (cost 12).
+     *   3. Lưu User với role=CUSTOMER, active=true, emailVerified=false (commit ngay vào DB).
+     *   4. Tách biệt transaction DB và gọi SMTP: không giữ kết nối MySQL trong khi chờ gửi email.
+     *   5. Sinh OTP 6 chữ số an toàn và băm HMAC-SHA256 lưu Redis.
+     *   6. Gửi email xác thực OTP qua Resend SMTP (EmailService).
+     *   7. Trả RegisterResponse yêu cầu xác thực email (KHÔNG cấp JWT / Refresh Token).
      *
      * @param request thông tin đăng ký đã được validate
-     * @return AuthResponse chứa token và thông tin user
-     * @throws BusinessException nếu email đã tồn tại
+     * @return RegisterResponse chứa thông tin tài khoản và cờ emailVerified=false
+     * @throws BusinessException nếu email đã tồn tại hoặc đã đăng ký chờ xác thực
      */
-    @Transactional
-    public AuthResponse register(RegisterRequest request) {
+    public RegisterResponse register(RegisterRequest request) {
         String normalizedEmail = request.getEmail().toLowerCase().trim();
 
-        if (userRepository.existsByEmail(normalizedEmail)) {
-            throw new BusinessException("Email đã được sử dụng: " + normalizedEmail);
+        User existingUser = userRepository.findByEmail(normalizedEmail).orElse(null);
+        if (existingUser != null) {
+            if (Boolean.TRUE.equals(existingUser.getEmailVerified())) {
+                throw new BusinessException("Email đã được sử dụng: " + normalizedEmail);
+            } else {
+                // Bảo mật: Không cho phép tùy ý ghi đè thông tin tài khoản chưa xác thực chỉ bằng email
+                throw new BusinessException("Email này đã được đăng ký nhưng chưa hoàn tất xác thực. Vui lòng kiểm tra hộp thư hoặc sử dụng tính năng gửi lại mã xác thực.");
+            }
         }
 
         User user = User.builder()
@@ -157,12 +244,146 @@ public class AuthService {
                 .address(request.getAddress())
                 .role(Role.CUSTOMER)  // Luôn là CUSTOMER — không tin client
                 .active(true)
+                .emailVerified(false)
+                .emailVerifiedAt(null)
                 .build();
 
+        // Giai đoạn 1: Lưu tài khoản pending verification vào CSDL MySQL (commit ngay, không giữ transaction khi gọi SMTP)
         user = userRepository.save(user);
-        log.info("Đăng ký tài khoản mới: {}", normalizedEmail);
+        log.info("Đăng ký tài khoản mới chờ xác thực email: {}", normalizedEmail);
 
-        // Tạo UserDetails để generate token
+        // Giai đoạn 2: Sinh OTP 6 chữ số ngẫu nhiên an toàn và băm HMAC-SHA256 lưu Redis
+        String otp = generateOtp();
+        String otpHmac = calculateHmac(otp, otpHmacSecret);
+
+        String verifyOtpKey = VERIFY_OTP_KEY_PREFIX + normalizedEmail;
+        String verifyRateLimitKey = VERIFY_RATELIMIT_PREFIX + normalizedEmail;
+        String verifyAttemptsKey = VERIFY_ATTEMPTS_PREFIX + normalizedEmail;
+
+        String lockValue = UUID.randomUUID().toString();
+        // Lưu vào Redis với TTL 300s và rate-limit 60s
+        redisTemplate.opsForValue().set(verifyOtpKey, otpHmac, otpExpirationSeconds, TimeUnit.SECONDS);
+        redisTemplate.opsForValue().set(verifyRateLimitKey, lockValue, otpRateLimitSeconds, TimeUnit.SECONDS);
+        redisTemplate.delete(verifyAttemptsKey);
+
+        // Giai đoạn 3: Gửi email OTP xác thực tài khoản qua Resend SMTP
+        try {
+            emailService.sendVerificationOtpEmail(normalizedEmail, otp, user.getFullName());
+            log.info("Đã gửi email chứa mã OTP xác thực đăng ký tài khoản tới: {}", normalizedEmail);
+        } catch (Exception ex) {
+            log.error("Gửi email xác thực thất bại cho email {}: {}", normalizedEmail, ex.getMessage());
+            // Dọn dẹp OTP không hợp lệ vì người dùng không nhận được mã
+            redisTemplate.delete(verifyOtpKey);
+            // Giải phóng khóa rate limit nguyên tử bằng Lua script (Compare-and-Delete) do chính request này sở hữu
+            releaseRateLimitLock(verifyRateLimitKey, lockValue);
+            // Tài khoản vẫn tồn tại an toàn trong DB với emailVerified = false để người dùng có thể gửi lại OTP
+            throw new BusinessException("Tài khoản đã được tạo nhưng không thể gửi email xác thực lúc này. Vui lòng bấm gửi lại mã để nhận OTP.");
+        }
+
+        return RegisterResponse.builder()
+                .email(user.getEmail())
+                .fullName(user.getFullName())
+                .emailVerified(false)
+                .build();
+    }
+
+    /**
+     * Xác thực địa chỉ email bằng mã OTP và kích hoạt phiên đăng nhập đầu tiên.
+     *
+     * @param request chứa email và OTP 6 chữ số
+     * @return AuthResponse chứa Access Token và Refresh Token
+     */
+    @Transactional
+    public AuthResponse verifyEmail(VerifyEmailRequest request) {
+        if (request == null) {
+            throw new BusinessException("Dữ liệu yêu cầu không được để trống");
+        }
+
+        String normalizedEmail = request.getEmail() != null ? request.getEmail().toLowerCase().trim() : "";
+        String otp = request.getOtp() != null ? request.getOtp().trim() : "";
+
+        User user = userRepository.findByEmail(normalizedEmail)
+                .orElseThrow(() -> new BusinessException("Tài khoản không tồn tại"));
+
+        if (Boolean.TRUE.equals(user.getEmailVerified())) {
+            throw new BusinessException("Tài khoản đã được xác thực email trước đó. Vui lòng đăng nhập.");
+        }
+
+        if (Boolean.FALSE.equals(user.getActive())) {
+            String lockReason = StringUtils.hasText(user.getLockReason()) ? user.getLockReason().trim() : null;
+            log.warn("Xác thực email thất bại do tài khoản bị khóa: email={}, lý do={}", normalizedEmail, lockReason);
+            throw new LockedAccountException("Tài khoản của bạn đã bị khóa.", lockReason);
+        }
+
+        // Xác thực OTP nguyên tử qua Redis Lua script (Chống race condition và brute-force)
+        String verifyOtpKey = VERIFY_OTP_KEY_PREFIX + normalizedEmail;
+        String verifyAttemptsKey = VERIFY_ATTEMPTS_PREFIX + normalizedEmail;
+        String expectedOtpHmac = calculateHmac(otp, otpHmacSecret);
+
+        DefaultRedisScript<String> script = new DefaultRedisScript<>(VERIFY_AND_CLAIM_LUA_SCRIPT, String.class);
+        List<String> keys = Arrays.asList(verifyOtpKey, verifyAttemptsKey);
+
+        String result;
+        try {
+            result = redisTemplate.execute(
+                    script,
+                    keys,
+                    expectedOtpHmac,
+                    String.valueOf(otpMaxAttempts),
+                    "60" // 60 giây claim window
+            );
+        } catch (Exception e) {
+            log.error("Lỗi khi thực thi script xác thực OTP trên Redis: {}", e.getMessage());
+            throw e;
+        }
+
+        if ("NOT_FOUND".equals(result)) {
+            throw new BusinessException("Mã OTP không hợp lệ hoặc đã hết hạn");
+        }
+        if ("ALREADY_USED".equals(result)) {
+            throw new BusinessException("Mã OTP đã được sử dụng");
+        }
+        if ("MAX_ATTEMPTS_EXCEEDED".equals(result)) {
+            throw new BusinessException("Bạn đã nhập sai mã OTP quá 5 lần. Mã OTP đã bị hủy, vui lòng yêu cầu mã mới.");
+        }
+        if (result != null && result.startsWith("MISMATCH:")) {
+            int attemptCount = Integer.parseInt(result.substring("MISMATCH:".length()));
+            int remainingAttempts = Math.max(0, otpMaxAttempts - attemptCount);
+            throw new BusinessException("Mã OTP không chính xác. Bạn còn " + remainingAttempts + " lần thử.");
+        }
+
+        if (result == null || !result.startsWith("SUCCESS")) {
+            throw new BusinessException("Xác thực mã OTP thất bại, vui lòng thử lại");
+        }
+
+        // Cập nhật trạng thái xác thực vào Database
+        try {
+            user.setEmailVerified(true);
+            user.setEmailVerifiedAt(LocalDateTime.now());
+            user = userRepository.save(user);
+            log.info("Xác thực email thành công trong CSDL cho tài khoản: {}", normalizedEmail);
+
+            // Xóa hoàn toàn OTP và Attempts key khỏi Redis sau khi DB thành công
+            redisTemplate.delete(Arrays.asList(verifyOtpKey, verifyAttemptsKey));
+        } catch (Exception ex) {
+            log.error("Lỗi khi cập nhật trạng thái xác thực vào DB: {}", ex.getMessage());
+            // Cơ chế phục hồi: khôi phục OTP trên Redis nếu DB thất bại
+            try {
+                long remainingTtl = 60;
+                if (result.contains(":")) {
+                    long parsedTtl = Long.parseLong(result.split(":")[1]);
+                    if (parsedTtl > 0) {
+                        remainingTtl = parsedTtl;
+                    }
+                }
+                redisTemplate.opsForValue().set(verifyOtpKey, expectedOtpHmac, remainingTtl, TimeUnit.SECONDS);
+            } catch (Exception redisRollbackEx) {
+                log.warn("Không thể khôi phục lại OTP trong Redis sau lỗi DB: {}", redisRollbackEx.getMessage());
+            }
+            throw ex;
+        }
+
+        // Tự động cấp JWT và Refresh Token để đăng nhập người dùng ngay sau khi xác thực
         UserDetails userDetails = buildUserDetailsForToken(user);
         String token = jwtUtils.generateToken(userDetails);
         String refreshToken = refreshTokenService.createRefreshToken(user);
@@ -174,6 +395,68 @@ public class AuthService {
                 .user(UserResponse.fromEntity(user))
                 .refreshToken(refreshToken)
                 .build();
+    }
+
+    /**
+     * Yêu cầu gửi lại mã OTP xác thực email (Rate limit 60s, Anti-Enumeration).
+     *
+     * @param request chứa địa chỉ email cần gửi lại mã
+     */
+    public void resendVerification(ResendVerificationRequest request) {
+        if (request == null || !StringUtils.hasText(request.getEmail())) {
+            throw new BusinessException("Email không được để trống");
+        }
+
+        String normalizedEmail = request.getEmail().toLowerCase().trim();
+
+        // 1. Kiểm tra và chiếm Rate Limit NGUYÊN TỬ (setIfAbsent - tương đương SET NX EX 60s)
+        // Chống race condition: Chỉ 1 request đồng thời duy nhất chiếm được khóa, chặn hoàn toàn bypass
+        String rateLimitKey = VERIFY_RATELIMIT_PREFIX + normalizedEmail;
+        String lockValue = UUID.randomUUID().toString();
+
+        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(rateLimitKey, lockValue, otpRateLimitSeconds, TimeUnit.SECONDS);
+        if (Boolean.FALSE.equals(acquired)) {
+            log.warn("Yêu cầu gửi lại OTP xác thực quá nhanh: email={}", normalizedEmail);
+            throw new BusinessException("Vui lòng đợi 60 giây trước khi yêu cầu mã mới");
+        }
+
+        // 2. Kiểm tra điều kiện tài khoản trong CSDL
+        User user = userRepository.findByEmail(normalizedEmail).orElse(null);
+        boolean isEligibleUser = user != null
+                && Boolean.TRUE.equals(user.getActive())
+                && Boolean.FALSE.equals(user.getEmailVerified());
+
+        if (!isEligibleUser) {
+            // User Enumeration Protection:
+            // Không gửi OTP, không tiết lộ tài khoản không tồn tại, bị khóa hay đã xác thực.
+            // GIỮ NGUYÊN khóa rate limit vừa chiếm trong Redis để chống tấn công quét dò email.
+            log.info("Yêu cầu gửi lại mã cho tài khoản không đủ điều kiện (đã xác thực hoặc không tồn tại): {}", normalizedEmail);
+            return;
+        }
+
+        // 3. Sinh OTP 6 chữ số ngẫu nhiên an toàn và băm HMAC-SHA256
+        String otp = generateOtp();
+        String otpHmac = calculateHmac(otp, otpHmacSecret);
+
+        String verifyOtpKey = VERIFY_OTP_KEY_PREFIX + normalizedEmail;
+        String verifyAttemptsKey = VERIFY_ATTEMPTS_PREFIX + normalizedEmail;
+
+        // 4. Xóa bộ đếm attempts cũ, sau đó lưu OTP mới vào Redis với TTL 300s
+        redisTemplate.delete(verifyAttemptsKey);
+        redisTemplate.opsForValue().set(verifyOtpKey, otpHmac, otpExpirationSeconds, TimeUnit.SECONDS);
+
+        // 5. Gửi email OTP xác thực
+        try {
+            emailService.sendVerificationOtpEmail(normalizedEmail, otp, user.getFullName());
+            log.info("Đã gửi lại email chứa mã OTP xác thực thành công tới: {}", normalizedEmail);
+        } catch (Exception ex) {
+            log.error("Gửi lại email OTP xác thực thất bại cho email {}: {}", normalizedEmail, ex.getMessage());
+            // Xóa OTP không hợp lệ khỏi Redis
+            redisTemplate.delete(verifyOtpKey);
+            // Giải phóng khóa rate limit nguyên tử bằng Lua script (Compare-and-Delete) do chính request này sở hữu
+            releaseRateLimitLock(rateLimitKey, lockValue);
+            throw new BusinessException("Không thể gửi email xác thực lúc này, vui lòng thử lại sau ít phút");
+        }
     }
 
     /**
@@ -221,6 +504,15 @@ public class AuthService {
         if (user == null) {
             user = userRepository.findByEmail(normalizedEmail)
                     .orElseThrow(() -> new BusinessException("Không tìm thấy thông tin người dùng"));
+        }
+
+        // Kiểm tra xác thực email đối với CUSTOMER (ADMIN không bị ảnh hưởng)
+        if (user.getRole() == Role.CUSTOMER && Boolean.FALSE.equals(user.getEmailVerified())) {
+            log.warn("Đăng nhập thất bại do tài khoản CUSTOMER chưa xác thực email: email={}", normalizedEmail);
+            throw new UnverifiedAccountException(
+                    "Tài khoản của bạn chưa được xác thực email. Vui lòng xác thực email để kích hoạt tài khoản.",
+                    normalizedEmail
+            );
         }
 
         // 3. Phân tách và kiểm soát cổng đăng nhập phía Backend (Defense in Depth)
@@ -290,6 +582,14 @@ public class AuthService {
             String lockReason = StringUtils.hasText(user.getLockReason()) ? user.getLockReason().trim() : null;
             log.warn("Làm mới token thất bại do tài khoản bị khóa: userId={}, lý do={}", user.getId(), lockReason);
             throw new LockedAccountException("Tài khoản của bạn đã bị khóa.", lockReason);
+        }
+
+        if (user.getRole() == Role.CUSTOMER && Boolean.FALSE.equals(user.getEmailVerified())) {
+            log.warn("Làm mới token thất bại do tài khoản chưa xác thực email: userId={}", user.getId());
+            throw new UnverifiedAccountException(
+                    "Tài khoản của bạn chưa được xác thực email. Vui lòng xác thực email để kích hoạt tài khoản.",
+                    user.getEmail()
+            );
         }
 
         // 3. Hòa giải trạng thái DB - Redis: Nếu mật khẩu đã thay đổi sau khi token được cấp -> từ chối
@@ -547,12 +847,14 @@ public class AuthService {
      * Chỉ dùng sau khi đăng ký (trước khi có Authentication từ authenticationManager).
      */
     private UserDetails buildUserDetailsForToken(User user) {
+        boolean isEmailVerified = Boolean.TRUE.equals(user.getEmailVerified()) || user.getRole() == Role.ADMIN;
         return new CustomUserDetails(
                 user.getId(),
                 user.getEmail(),
                 user.getPassword(),
                 user.getRole(),
-                Boolean.TRUE.equals(user.getActive())
+                Boolean.TRUE.equals(user.getActive()),
+                isEmailVerified
         );
     }
 }

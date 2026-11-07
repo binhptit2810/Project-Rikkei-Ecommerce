@@ -4,11 +4,15 @@ import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
 import com.example.ecommerce.dto.request.ResetPasswordRequest;
+import com.example.ecommerce.dto.request.ResendVerificationRequest;
+import com.example.ecommerce.dto.request.VerifyEmailRequest;
 import com.example.ecommerce.dto.response.AuthResponse;
+import com.example.ecommerce.dto.response.RegisterResponse;
 import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.LockedAccountException;
+import com.example.ecommerce.exception.UnverifiedAccountException;
 import com.example.ecommerce.repository.UserRepository;
 import com.example.ecommerce.security.JwtUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +39,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -109,27 +114,24 @@ class AuthServiceTest {
                 .fullName("Nguyễn Văn A")
                 .role(Role.CUSTOMER)
                 .active(true)
+                .emailVerified(true)
                 .build();
     }
 
     @Test
-    @DisplayName("NFR-SEC-01 & FR-AUTH-01: Đăng ký tài khoản thành công - Mật khẩu được băm BCrypt và role mặc định CUSTOMER")
+    @DisplayName("NFR-SEC-01 & FR-AUTH-01: Đăng ký tài khoản thành công - Mật khẩu được băm BCrypt, emailVerified=false, gửi OTP qua email và không cấp token")
     void register_Success() {
-        when(userRepository.existsByEmail("testuser@example.com")).thenReturn(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedPasswordExample");
-        when(userRepository.save(any(User.class))).thenReturn(mockUser);
-        when(jwtUtils.generateToken(any(UserDetails.class))).thenReturn("mock-jwt-token");
-        when(jwtUtils.getExpirationInSeconds()).thenReturn(86400L);
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
-        AuthResponse response = authService.register(registerRequest);
+        RegisterResponse response = authService.register(registerRequest);
 
         assertThat(response).isNotNull();
-        assertThat(response.getAccessToken()).isEqualTo("mock-jwt-token");
-        assertThat(response.getTokenType()).isEqualTo("Bearer");
-        assertThat(response.getExpiresIn()).isEqualTo(86400L);
-        assertThat(response.getUser()).isNotNull();
-        assertThat(response.getUser().getEmail()).isEqualTo("testuser@example.com");
-        assertThat(response.getUser().getRole()).isEqualTo(Role.CUSTOMER);
+        assertThat(response.getEmail()).isEqualTo("testuser@example.com");
+        assertThat(response.getFullName()).isEqualTo("Nguyễn Văn A");
+        assertThat(response.getEmailVerified()).isFalse();
 
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
@@ -137,12 +139,20 @@ class AuthServiceTest {
         assertThat(savedUser.getPassword()).isEqualTo("$2a$12$hashedPasswordExample");
         assertThat(savedUser.getRole()).isEqualTo(Role.CUSTOMER);
         assertThat(savedUser.getActive()).isTrue();
+        assertThat(savedUser.getEmailVerified()).isFalse();
+        assertThat(savedUser.getEmailVerifiedAt()).isNull();
+
+        verify(emailService).sendVerificationOtpEmail(eq("testuser@example.com"), anyString(), eq("Nguyễn Văn A"));
+        verify(valueOperations).set(eq("auth:verify_otp:testuser@example.com"), anyString(), eq(300L), eq(TimeUnit.SECONDS));
+        verify(valueOperations).set(eq("auth:verify_ratelimit:testuser@example.com"), anyString(), eq(60L), eq(TimeUnit.SECONDS));
+        verify(jwtUtils, never()).generateToken(any(UserDetails.class));
     }
 
     @Test
-    @DisplayName("NFR-DATA-01: Đăng ký thất bại khi email đã tồn tại trong hệ thống")
-    void register_EmailAlreadyExists_ThrowsBusinessException() {
-        when(userRepository.existsByEmail("testuser@example.com")).thenReturn(true);
+    @DisplayName("NFR-DATA-01: Đăng ký thất bại khi email đã tồn tại và đã xác thực")
+    void register_EmailAlreadyExists_Verified_ThrowsBusinessException() {
+        mockUser.setEmailVerified(true);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
 
         assertThatThrownBy(() -> authService.register(registerRequest))
                 .isInstanceOf(BusinessException.class)
@@ -152,13 +162,26 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("NFR-SEC-04: Đăng ký thất bại khi email đã tồn tại nhưng chưa xác thực (chống ghi đè tài khoản)")
+    void register_EmailAlreadyExists_Unverified_ThrowsBusinessException() {
+        mockUser.setEmailVerified(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+
+        assertThatThrownBy(() -> authService.register(registerRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("chưa hoàn tất xác thực");
+
+        verify(userRepository, never()).save(any(User.class));
+    }
+
+    @Test
     @DisplayName("NFR-DATA-02: Email được chuẩn hóa tự động (lowercase và trim khoảng trắng)")
     void register_EmailNormalization() {
         registerRequest.setEmail("  TestUser@Example.COM  ");
-        when(userRepository.existsByEmail("testuser@example.com")).thenReturn(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.empty());
         when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashed");
-        when(userRepository.save(any(User.class))).thenReturn(mockUser);
-        when(jwtUtils.generateToken(any(UserDetails.class))).thenReturn("token");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
 
         authService.register(registerRequest);
 
@@ -908,6 +931,372 @@ class AuthServiceTest {
 
         // Xác minh cơ chế rollback phục hồi lại mã OTP trên Redis
         verify(valueOperations).set(eq("auth:otp:testuser@example.com"), anyString(), eq(200L), eq(TimeUnit.SECONDS));
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-05: Đăng nhập thất bại khi tài khoản CUSTOMER chưa xác thực email - Ném UnverifiedAccountException")
+    void login_UnverifiedCustomer_ThrowsUnverifiedAccountException() {
+        mockUser.setEmailVerified(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+
+        Authentication authentication = mock(Authentication.class);
+        UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
+                .username("testuser@example.com")
+                .password("hashed")
+                .authorities("ROLE_CUSTOMER")
+                .build();
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+
+        assertThatThrownBy(() -> authService.login(loginRequest))
+                .isInstanceOf(UnverifiedAccountException.class)
+                .hasMessageContaining("chưa được xác thực email");
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-06: Đăng nhập thành công với tài khoản ADMIN ngay cả khi emailVerified=false")
+    void login_AdminUser_UnaffectedByEmailVerified() {
+        mockUser.setRole(Role.ADMIN);
+        mockUser.setEmailVerified(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+
+        Authentication authentication = mock(Authentication.class);
+        UserDetails userDetails = org.springframework.security.core.userdetails.User.builder()
+                .username("testuser@example.com")
+                .password("hashed")
+                .authorities("ROLE_ADMIN")
+                .build();
+
+        when(authentication.getPrincipal()).thenReturn(userDetails);
+        when(authenticationManager.authenticate(any(UsernamePasswordAuthenticationToken.class))).thenReturn(authentication);
+        when(jwtUtils.generateToken(userDetails)).thenReturn("mock-admin-jwt");
+        when(jwtUtils.getExpirationInSeconds()).thenReturn(86400L);
+
+        AuthResponse response = authService.login(loginRequest);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getAccessToken()).isEqualTo("mock-admin-jwt");
+        assertThat(response.getUser().getRole()).isEqualTo(Role.ADMIN);
+    }
+
+    @Test
+    @DisplayName("FR-AUTH-07: Xác thực email thành công với OTP hợp lệ - Cập nhật emailVerified=true và cấp JWT tokens")
+    void verifyEmail_Success() {
+        VerifyEmailRequest request = new VerifyEmailRequest();
+        request.setEmail("testuser@example.com");
+        request.setOtp("123456");
+
+        mockUser.setEmailVerified(false);
+        mockUser.setEmailVerifiedAt(null);
+
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString())).thenReturn("SUCCESS:200");
+        when(userRepository.save(any(User.class))).thenAnswer(i -> i.getArgument(0));
+        when(jwtUtils.generateToken(any(UserDetails.class))).thenReturn("verified-access-token");
+        when(jwtUtils.getExpirationInSeconds()).thenReturn(86400L);
+        when(refreshTokenService.createRefreshToken(any(User.class))).thenReturn("verified-refresh-token");
+
+        AuthResponse response = authService.verifyEmail(request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getAccessToken()).isEqualTo("verified-access-token");
+        assertThat(response.getRefreshToken()).isEqualTo("verified-refresh-token");
+        assertThat(response.getUser().getEmailVerified()).isTrue();
+
+        assertThat(mockUser.getEmailVerified()).isTrue();
+        assertThat(mockUser.getEmailVerifiedAt()).isNotNull();
+
+        verify(redisTemplate).delete(anyList());
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-07: Xác thực email thất bại khi tài khoản đã được xác thực trước đó")
+    void verifyEmail_AlreadyVerified_ThrowsBusinessException() {
+        VerifyEmailRequest request = new VerifyEmailRequest();
+        request.setEmail("testuser@example.com");
+        request.setOtp("123456");
+
+        mockUser.setEmailVerified(true);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+
+        assertThatThrownBy(() -> authService.verifyEmail(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("đã được xác thực");
+
+        verify(redisTemplate, never()).execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-08: Xác thực email thất bại khi mã OTP không chính xác")
+    void verifyEmail_InvalidOtp_ThrowsBusinessException() {
+        VerifyEmailRequest request = new VerifyEmailRequest();
+        request.setEmail("testuser@example.com");
+        request.setOtp("654321");
+
+        mockUser.setEmailVerified(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString())).thenReturn("MISMATCH:1");
+
+        assertThatThrownBy(() -> authService.verifyEmail(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Mã OTP không chính xác");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-09: Xác thực email thất bại khi vượt quá 5 lần nhập sai")
+    void verifyEmail_ExceededMaxAttempts_ThrowsBusinessException() {
+        VerifyEmailRequest request = new VerifyEmailRequest();
+        request.setEmail("testuser@example.com");
+        request.setOtp("654321");
+
+        mockUser.setEmailVerified(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString())).thenReturn("MAX_ATTEMPTS_EXCEEDED");
+
+        assertThatThrownBy(() -> authService.verifyEmail(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("quá 5 lần");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-10: Xác thực email thất bại khi OTP đã hết hạn hoặc không tồn tại")
+    void verifyEmail_ExpiredOtp_ThrowsBusinessException() {
+        VerifyEmailRequest request = new VerifyEmailRequest();
+        request.setEmail("testuser@example.com");
+        request.setOtp("123456");
+
+        mockUser.setEmailVerified(false);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), anyString(), anyString(), anyString())).thenReturn("NOT_FOUND");
+
+        assertThatThrownBy(() -> authService.verifyEmail(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("hết hạn");
+
+        verify(userRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("FR-AUTH-08: Gửi lại mã OTP xác thực email thành công khi đã hết thời gian rate-limit")
+    void resendVerification_Success() {
+        ResendVerificationRequest request = new ResendVerificationRequest();
+        request.setEmail("testuser@example.com");
+
+        mockUser.setEmailVerified(false);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(eq("auth:verify_ratelimit:testuser@example.com"), anyString(), eq(60L), eq(TimeUnit.SECONDS))).thenReturn(true);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+
+        authService.resendVerification(request);
+
+        verify(emailService).sendVerificationOtpEmail(eq("testuser@example.com"), anyString(), eq("Nguyễn Văn A"));
+        verify(valueOperations).set(eq("auth:verify_otp:testuser@example.com"), anyString(), eq(300L), eq(TimeUnit.SECONDS));
+        verify(redisTemplate).delete("auth:verify_attempts:testuser@example.com");
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-11: Gửi lại mã OTP thất bại khi còn trong thời gian rate limit 60 giây")
+    void resendVerification_RateLimited_ThrowsBusinessException() {
+        ResendVerificationRequest request = new ResendVerificationRequest();
+        request.setEmail("testuser@example.com");
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(eq("auth:verify_ratelimit:testuser@example.com"), anyString(), eq(60L), eq(TimeUnit.SECONDS))).thenReturn(false);
+
+        assertThatThrownBy(() -> authService.resendVerification(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vui lòng đợi 60 giây");
+
+        verify(emailService, never()).sendVerificationOtpEmail(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-12: Chống User Enumeration khi gửi lại mã OTP cho email không tồn tại hoặc đã kích hoạt")
+    void resendVerification_AntiEnumeration_ReturnsSilently() {
+        ResendVerificationRequest request = new ResendVerificationRequest();
+        request.setEmail("unknown@example.com");
+
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(eq("auth:verify_ratelimit:unknown@example.com"), anyString(), eq(60L), eq(TimeUnit.SECONDS))).thenReturn(true);
+        when(userRepository.findByEmail("unknown@example.com")).thenReturn(Optional.empty());
+
+        authService.resendVerification(request);
+
+        verify(emailService, never()).sendVerificationOtpEmail(any(), any(), any());
+        verify(valueOperations, never()).set(eq("auth:verify_otp:unknown@example.com"), anyString(), anyLong(), any(TimeUnit.class));
+        verify(redisTemplate, never()).delete(eq("auth:verify_ratelimit:unknown@example.com"));
+    }
+
+    @Test
+    @DisplayName("HIGH-01 & TASK-B: Đăng ký khi SMTP thất bại - Tài khoản vẫn được lưu, OTP bị xóa và rate-limit được giải phóng nguyên tử qua Lua script")
+    void register_SmtpFailure_UserPersistedAndRateLimitReleased() {
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$hashedPasswordExample");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        AtomicReference<String> savedLock = new AtomicReference<>();
+        doAnswer(invocation -> {
+            String key = invocation.getArgument(0);
+            if ("auth:verify_ratelimit:testuser@example.com".equals(key)) {
+                savedLock.set(invocation.getArgument(1));
+            }
+            return null;
+        }).when(valueOperations).set(anyString(), anyString(), anyLong(), any(TimeUnit.class));
+        when(redisTemplate.execute(any(DefaultRedisScript.class), eq(List.of("auth:verify_ratelimit:testuser@example.com")), anyString()))
+                .thenReturn(1L);
+
+        doThrow(new RuntimeException("Resend SMTP connection failed"))
+                .when(emailService).sendVerificationOtpEmail(anyString(), anyString(), anyString());
+
+        assertThatThrownBy(() -> authService.register(registerRequest))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Tài khoản đã được tạo nhưng không thể gửi email xác thực");
+
+        verify(userRepository).save(any(User.class));
+        verify(redisTemplate).delete("auth:verify_otp:testuser@example.com");
+        verify(redisTemplate).execute(any(DefaultRedisScript.class), eq(List.of("auth:verify_ratelimit:testuser@example.com")), eq(savedLock.get()));
+    }
+
+    @Test
+    @DisplayName("HIGH-02 & TASK-B: Gửi lại mã OTP khi SMTP thất bại - Giải phóng rate-limit lock nguyên tử bằng Lua script với đúng owner lockValue")
+    void resendVerification_SmtpFailure_ReleasesOwnedLock() {
+        ResendVerificationRequest request = new ResendVerificationRequest();
+        request.setEmail("testuser@example.com");
+
+        mockUser.setEmailVerified(false);
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        ArgumentCaptor<String> lockCaptor = ArgumentCaptor.forClass(String.class);
+        when(valueOperations.setIfAbsent(eq("auth:verify_ratelimit:testuser@example.com"), lockCaptor.capture(), eq(60L), eq(TimeUnit.SECONDS))).thenReturn(true);
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+        when(redisTemplate.execute(any(DefaultRedisScript.class), eq(List.of("auth:verify_ratelimit:testuser@example.com")), anyString()))
+                .thenReturn(1L);
+
+        doThrow(new RuntimeException("Resend SMTP connection timed out"))
+                .when(emailService).sendVerificationOtpEmail(anyString(), anyString(), anyString());
+
+        assertThatThrownBy(() -> authService.resendVerification(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Không thể gửi email xác thực lúc này");
+
+        verify(redisTemplate).delete("auth:verify_otp:testuser@example.com");
+        verify(redisTemplate).execute(any(DefaultRedisScript.class), eq(List.of("auth:verify_ratelimit:testuser@example.com")), eq(lockCaptor.getValue()));
+    }
+
+    // =========================================================================
+    // TASK-B: Dedicated Lua Compare-and-Delete Unit Tests
+    // =========================================================================
+
+    @Test
+    @DisplayName("TASK-B Test 1: releaseRateLimitLock thành công khi đúng owner (Lua trả về 1)")
+    void releaseRateLimitLock_CorrectOwner_ReturnsTrue() {
+        String key = "auth:verify_ratelimit:testuser@example.com";
+        String lockA = "lock-uuid-owner-a";
+
+        when(redisTemplate.execute(any(DefaultRedisScript.class), eq(List.of(key)), eq(lockA)))
+                .thenReturn(1L);
+
+        boolean result = authService.releaseRateLimitLock(key, lockA);
+
+        assertThat(result).isTrue();
+        verify(redisTemplate).execute(any(DefaultRedisScript.class), eq(List.of(key)), eq(lockA));
+    }
+
+    @Test
+    @DisplayName("TASK-B Test 2: releaseRateLimitLock thất bại khi sai owner (Lua trả về 0)")
+    void releaseRateLimitLock_WrongOwner_ReturnsFalse() {
+        String key = "auth:verify_ratelimit:testuser@example.com";
+        String wrongLock = "wrong-uuid";
+
+        when(redisTemplate.execute(any(DefaultRedisScript.class), eq(List.of(key)), eq(wrongLock)))
+                .thenReturn(0L);
+
+        boolean result = authService.releaseRateLimitLock(key, wrongLock);
+
+        assertThat(result).isFalse();
+        verify(redisTemplate).execute(any(DefaultRedisScript.class), eq(List.of(key)), eq(wrongLock));
+    }
+
+    @Test
+    @DisplayName("TASK-B Test 3: releaseRateLimitLock an toàn khi lock đã hết hạn hoặc key không tồn tại")
+    void releaseRateLimitLock_ExpiredOrMissingKey_ReturnsFalseWithoutError() {
+        String key = "auth:verify_ratelimit:testuser@example.com";
+        String lockValue = "any-lock-value";
+
+        when(redisTemplate.execute(any(DefaultRedisScript.class), eq(List.of(key)), eq(lockValue)))
+                .thenReturn(0L);
+
+        boolean result = authService.releaseRateLimitLock(key, lockValue);
+
+        assertThat(result).isFalse();
+
+        // Edge case: input null/empty
+        assertThat(authService.releaseRateLimitLock("", lockValue)).isFalse();
+        assertThat(authService.releaseRateLimitLock(key, null)).isFalse();
+    }
+
+    @Test
+    @DisplayName("TASK-B Test 4: Request cũ sở hữu lock cũ không thể xóa nhầm lock mới của request khác")
+    void releaseRateLimitLock_StaleRequestCannotDeleteNewLock() {
+        String key = "auth:verify_ratelimit:testuser@example.com";
+        String oldLockA = "lock-request-a-expired";
+
+        // Giả lập Redis hiện đang chứa lockB của request B -> Lua script so sánh thấy lệch -> trả về 0
+        when(redisTemplate.execute(any(DefaultRedisScript.class), eq(List.of(key)), eq(oldLockA)))
+                .thenReturn(0L);
+
+        boolean released = authService.releaseRateLimitLock(key, oldLockA);
+
+        assertThat(released).isFalse();
+        verify(redisTemplate).execute(any(DefaultRedisScript.class), eq(List.of(key)), eq(oldLockA));
+    }
+
+    @Test
+    @DisplayName("TASK-B Test 5: SMTP thất bại - chỉ giải phóng lock của chính request đó, không xóa nhầm key khác")
+    void releaseRateLimitLock_SmtpFailure_OnlyOwnLockReleased() {
+        String keyA = "auth:verify_ratelimit:userA@example.com";
+        String lockA = "uuid-request-A";
+
+        when(redisTemplate.execute(any(DefaultRedisScript.class), eq(List.of(keyA)), eq(lockA)))
+                .thenReturn(1L);
+
+        boolean released = authService.releaseRateLimitLock(keyA, lockA);
+
+        assertThat(released).isTrue();
+        // Xác nhận không bao giờ gọi nhầm key của userB
+        verify(redisTemplate, never()).execute(any(DefaultRedisScript.class), eq(List.of("auth:verify_ratelimit:userB@example.com")), any());
+        verify(redisTemplate, never()).delete("auth:verify_ratelimit:userB@example.com");
+    }
+
+    @Test
+    @DisplayName("LOW-02: Khởi động trên môi trường Docker/Prod thất bại nếu thiếu hoặc dùng default OTP_HMAC_SECRET")
+    void validateOtpHmacSecret_ProductionEnvironment_WeakSecret_ThrowsIllegalStateException() {
+        ReflectionTestUtils.setField(authService, "activeProfile", "docker");
+        ReflectionTestUtils.setField(authService, "otpHmacSecret", "ecommerce-default-otp-hmac-secret-change-in-production-2024");
+
+        assertThatThrownBy(() -> authService.validateOtpHmacSecret())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("CRITICAL SECURITY ERROR");
+
+        ReflectionTestUtils.setField(authService, "otpHmacSecret", "short-secret");
+        assertThatThrownBy(() -> authService.validateOtpHmacSecret())
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("CRITICAL SECURITY ERROR");
+    }
+
+    @Test
+    @DisplayName("LOW-02: Khởi động trên môi trường Docker/Prod thành công với OTP_HMAC_SECRET an toàn >= 32 ký tự")
+    void validateOtpHmacSecret_ProductionEnvironment_ValidSecret_Success() {
+        ReflectionTestUtils.setField(authService, "activeProfile", "docker");
+        ReflectionTestUtils.setField(authService, "otpHmacSecret", "my-super-secret-production-hmac-key-2026-safe");
+
+        // Should execute successfully without throwing exception
+        authService.validateOtpHmacSecret();
     }
 }
 

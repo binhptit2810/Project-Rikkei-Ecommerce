@@ -103,7 +103,15 @@ export const RegisterPage = () => {
         phone: formData.phone.trim(),
         address: formData.address.trim() || null,
       })
-      navigate('/profile', { replace: true })
+      navigate('/verify-email', {
+        state: {
+          email: formData.email.trim().toLowerCase(),
+          fullName: formData.fullName.trim(),
+          successMessage:
+            'Đăng ký tài khoản thành công! Vui lòng nhập mã OTP 6 chữ số đã được gửi tới email của bạn để kích hoạt tài khoản.',
+        },
+        replace: true,
+      })
     } catch (err) {
       const responseData = err?.response?.data
       const backendFieldErrors = responseData?.data

@@ -85,6 +85,24 @@ export const authService = {
     const response = await apiClient.post('/auth/reset-password', data)
     return response.data // ApiResponse<Void>
   },
+
+  /**
+   * Xác thực email bằng mã OTP 6 chữ số khi đăng ký tài khoản.
+   * POST /api/v1/auth/verify-email
+   */
+  async verifyEmail(data) {
+    const response = await apiClient.post('/auth/verify-email', data)
+    return response.data // ApiResponse<AuthResponse>
+  },
+
+  /**
+   * Gửi lại mã OTP xác thực email (Rate limit 60s).
+   * POST /api/v1/auth/resend-verification
+   */
+  async resendVerification(data) {
+    const response = await apiClient.post('/auth/resend-verification', data)
+    return response.data // ApiResponse<Void>
+  },
 }
 
 export default authService

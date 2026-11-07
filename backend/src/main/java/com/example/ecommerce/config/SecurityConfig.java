@@ -115,6 +115,9 @@ public class SecurityConfig {
                 // [TSK-D10-CCT] API Quên mật khẩu và Đặt lại mật khẩu bằng OTP qua Email
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/forgot-password").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/reset-password").permitAll()
+                // API Xác thực email đăng ký và Gửi lại mã OTP
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/verify-email").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/resend-verification").permitAll()
                 // GET sản phẩm và danh mục: khách vãng lai được xem
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()

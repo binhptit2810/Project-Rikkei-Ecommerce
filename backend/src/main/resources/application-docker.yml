@@ -23,3 +23,8 @@ spring:
 logging:
   level:
     com.example.ecommerce: INFO
+
+# Trong Docker/Production: bắt buộc phải truyền biến môi trường OTP_HMAC_SECRET, không dùng fallback mặc định
+app:
+  otp:
+    hmac-secret: ${OTP_HMAC_SECRET:}

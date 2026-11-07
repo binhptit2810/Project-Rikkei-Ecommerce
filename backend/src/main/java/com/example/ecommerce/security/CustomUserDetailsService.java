@@ -1,5 +1,6 @@
 package com.example.ecommerce.security;
 
+import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
 import com.example.ecommerce.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -51,12 +52,15 @@ public class CustomUserDetailsService implements UserDetailsService {
             log.warn("Tài khoản đã bị vô hiệu hóa: {}", email);
         }
 
+        boolean isEmailVerified = Boolean.TRUE.equals(user.getEmailVerified()) || user.getRole() == Role.ADMIN;
+
         return new CustomUserDetails(
                 user.getId(),
                 user.getEmail(),
                 user.getPassword(),
                 user.getRole(),
-                isEnabled
+                isEnabled,
+                isEmailVerified
         );
     }
 }

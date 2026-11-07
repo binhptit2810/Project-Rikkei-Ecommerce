@@ -36,4 +36,18 @@ class UserTest {
         assertThat(user.getUpdatedAt()).isNotNull();
         assertThat(user.getUpdatedAt()).isAfterOrEqualTo(initialUpdatedAt);
     }
+
+    @Test
+    @DisplayName("User Entity: Kiểm tra trường emailVerified và emailVerifiedAt")
+    void user_EmailVerifiedFields() {
+        User user = new User();
+        assertThat(user.getEmailVerified()).isFalse();
+
+        user.setEmailVerified(true);
+        java.time.LocalDateTime now = java.time.LocalDateTime.now();
+        user.setEmailVerifiedAt(now);
+
+        assertThat(user.getEmailVerified()).isTrue();
+        assertThat(user.getEmailVerifiedAt()).isEqualTo(now);
+    }
 }

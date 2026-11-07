@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS users (
     address      TEXT,
     role         ENUM('CUSTOMER', 'ADMIN') NOT NULL DEFAULT 'CUSTOMER',
     active       BOOLEAN NOT NULL DEFAULT TRUE,
+    email_verified BOOLEAN NOT NULL DEFAULT FALSE,
+    email_verified_at DATETIME,
     lock_reason  VARCHAR(500),
     locked_at    DATETIME,
     created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

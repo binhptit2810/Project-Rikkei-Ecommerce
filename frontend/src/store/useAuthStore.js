@@ -10,6 +10,8 @@ export const useAuthStore = create((set, get) => ({
   isLoading: false,
   error: null,
   lockReason: null,
+  isUnverified: false,
+  unverifiedEmail: null,
 
   /**
    * Khởi tạo và khôi phục phiên người dùng khi ứng dụng khởi chạy / reload trang (App Bootstrapping).
@@ -49,7 +51,13 @@ export const useAuthStore = create((set, get) => ({
    * Access Token được lưu thuần in-memory (không lưu localStorage).
    */
   login: async (credentials, expectedRole = null) => {
-    set({ isLoading: true, error: null, lockReason: null })
+    set({
+      isLoading: true,
+      error: null,
+      lockReason: null,
+      isUnverified: false,
+      unverifiedEmail: null,
+    })
     try {
       // Gửi portal lên Backend để kiểm soát bảo mật chặt chẽ ngay từ server
       const payload = {
@@ -82,6 +90,8 @@ export const useAuthStore = create((set, get) => ({
           isLoading: false,
           error: errorMessage,
           lockReason: null,
+          isUnverified: false,
+          unverifiedEmail: null,
         })
         const roleError = new Error(errorMessage)
         roleError.isRoleMismatch = true
@@ -97,6 +107,8 @@ export const useAuthStore = create((set, get) => ({
         isLoading: false,
         error: null,
         lockReason: null,
+        isUnverified: false,
+        unverifiedEmail: null,
       })
       return { success: true, user }
     } catch (err) {
@@ -108,23 +120,46 @@ export const useAuthStore = create((set, get) => ({
         errResponse?.message || err.message || 'Đăng nhập không thành công'
       const reason =
         errResponse?.data?.reason || errResponse?.data?.lockReason || null
+      const isUnverified = errResponse?.data?.errorCode === 'ACCOUNT_NOT_VERIFIED'
+      const unverifiedEmail = isUnverified
+        ? errResponse?.data?.email || credentials.email
+        : null
 
       set({
         isLoading: false,
         error: message,
         lockReason: reason,
+        isUnverified,
+        unverifiedEmail,
       })
       throw err
     }
   },
 
   /**
-   * Đăng ký tài khoản mới.
+   * Đăng ký tài khoản mới (CUSTOMER) — Không tự động authenticated, yêu cầu xác thực OTP.
    */
   register: async (formData) => {
     set({ isLoading: true, error: null })
     try {
       const res = await authService.register(formData)
+      set({ isLoading: false, error: null })
+      return { success: true, message: res.message, data: res.data }
+    } catch (err) {
+      const message =
+        err.response?.data?.message || err.message || 'Đăng ký không thành công'
+      set({ isLoading: false, error: message })
+      throw err
+    }
+  },
+
+  /**
+   * Xác thực mã OTP email và kích hoạt phiên đăng nhập đầu tiên.
+   */
+  verifyEmail: async (verifyData) => {
+    set({ isLoading: true, error: null })
+    try {
+      const res = await authService.verifyEmail(verifyData)
       const { accessToken, user } = res.data
 
       setInMemoryToken(accessToken)
@@ -139,7 +174,7 @@ export const useAuthStore = create((set, get) => ({
       return { success: true, message: res.message, user }
     } catch (err) {
       const message =
-        err.response?.data?.message || err.message || 'Đăng ký không thành công'
+        err.response?.data?.message || err.message || 'Xác thực email thất bại'
       set({ isLoading: false, error: message })
       throw err
     }
