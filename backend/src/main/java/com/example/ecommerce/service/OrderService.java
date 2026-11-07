@@ -56,6 +56,7 @@ public class OrderService {
     private final UserRepository userRepository;
     private final InventoryService inventoryService;
     private final PaymentService paymentService;
+    private final EmailService emailService;
 
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 100;
@@ -178,10 +179,16 @@ public class OrderService {
         Long savedOrderId = savedOrder.getId();
         BigDecimal finalTotalAmount = savedOrder.getTotalAmount();
 
-        logAfterCommitOrNow(() ->
+        logAfterCommitOrNow(() -> {
             log.info("userId={} | action=CREATE_ORDER | result=SUCCESS | orderId={} | totalAmount={}",
-                    userId, savedOrderId, finalTotalAmount)
-        );
+                    userId, savedOrderId, finalTotalAmount);
+            // Gửi email xác nhận đặt hàng thành công tới khách hàng
+            try {
+                emailService.sendOrderConfirmationEmail(user.getEmail(), savedOrder.getRecipientName(), savedOrder);
+            } catch (Exception mailEx) {
+                log.warn("Không thể gửi email xác nhận đặt hàng cho đơn #{}: {}", savedOrder.getOrderCode(), mailEx.getMessage());
+            }
+        });
 
         return mapToOrderResponse(savedOrder);
     }
@@ -353,10 +360,23 @@ public class OrderService {
         Order updatedOrder = orderRepository.save(order);
         Long orderId = updatedOrder.getId();
 
-        logAfterCommitOrNow(() ->
+        logAfterCommitOrNow(() -> {
             log.warn("userId={} | action=CANCEL_ORDER | actorRole={} | result=SUCCESS | orderId={} | reason={}",
-                    userId, actorRole, orderId, cleanReason)
-        );
+                    userId, actorRole, orderId, cleanReason);
+            // Gửi email thông báo hủy đơn hàng tới khách hàng
+            try {
+                emailService.sendOrderStatusChangedEmail(
+                        user.getEmail(),
+                        updatedOrder.getRecipientName(),
+                        updatedOrder.getOrderCode(),
+                        "PENDING / CONFIRMED",
+                        "ĐÃ HỦY (CANCELLED)",
+                        cleanReason
+                );
+            } catch (Exception mailEx) {
+                log.warn("Không thể gửi email thông báo hủy đơn hàng cho đơn #{}: {}", updatedOrder.getOrderCode(), mailEx.getMessage());
+            }
+        });
 
         return mapToOrderResponse(updatedOrder);
     }
@@ -459,6 +479,22 @@ public class OrderService {
 
         log.info("Admin cập nhật trạng thái đơn hàng {} từ {} sang {}",
                 order.getOrderCode(), currentStatus, newStatus);
+
+        // Gửi email cập nhật tiến trình đơn hàng cho khách hàng
+        try {
+            if (savedOrder.getUser() != null && savedOrder.getUser().getEmail() != null) {
+                emailService.sendOrderStatusChangedEmail(
+                        savedOrder.getUser().getEmail(),
+                        savedOrder.getRecipientName(),
+                        savedOrder.getOrderCode(),
+                        currentStatus.name(),
+                        newStatus.name(),
+                        "Trạng thái đơn hàng của bạn đã được cập nhật bởi hệ thống Rikkei Store."
+                );
+            }
+        } catch (Exception mailEx) {
+            log.warn("Không thể gửi email cập nhật trạng thái cho đơn #{}: {}", savedOrder.getOrderCode(), mailEx.getMessage());
+        }
 
         return mapToOrderResponse(savedOrder);
     }

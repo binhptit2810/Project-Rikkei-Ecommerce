@@ -86,6 +86,7 @@ services:
       MAIL_USERNAME: ${MAIL_USERNAME:-binhbadboy2810@gmail.com}
       MAIL_PASSWORD: ${MAIL_PASSWORD:-dcibqbxtoxfcghiq}
       MAIL_FROM: ${MAIL_FROM:-binhbadboy2810@gmail.com}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Rikkei Store}
       MAIL_SMTP_SSL_ENABLE: ${MAIL_SMTP_SSL_ENABLE:-false}
       MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-true}
       MAIL_SMTP_STARTTLS_REQUIRED: ${MAIL_SMTP_STARTTLS_REQUIRED:-true}

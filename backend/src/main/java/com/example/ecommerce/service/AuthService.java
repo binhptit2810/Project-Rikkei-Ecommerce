@@ -236,6 +236,14 @@ public class AuthService {
             throw new BusinessException("Email đã được sử dụng: " + normalizedEmail);
         }
 
+        // Kiểm tra tính duy nhất của số điện thoại nếu được truyền lên
+        if (StringUtils.hasText(request.getPhone())) {
+            String normalizedPhone = request.getPhone().trim();
+            if (userRepository.existsByPhone(normalizedPhone)) {
+                throw new BusinessException("Số điện thoại này đã được sử dụng bởi một tài khoản khác: " + normalizedPhone);
+            }
+        }
+
         String rateLimitKey = VERIFY_RATELIMIT_PREFIX + normalizedEmail;
         String lockValue = UUID.randomUUID().toString();
         Boolean acquired = redisTemplate.opsForValue().setIfAbsent(rateLimitKey, lockValue, otpRateLimitSeconds, TimeUnit.SECONDS);
@@ -266,6 +274,14 @@ public class AuthService {
 
     public RegisterResponse register(RegisterRequest request) {
         String normalizedEmail = request.getEmail().toLowerCase().trim();
+
+        // Kiểm tra số điện thoại không được trùng lặp giữa các tài khoản
+        if (StringUtils.hasText(request.getPhone())) {
+            String normalizedPhone = request.getPhone().trim();
+            if (userRepository.existsByPhone(normalizedPhone)) {
+                throw new BusinessException("Số điện thoại này đã được sử dụng bởi một tài khoản khác: " + normalizedPhone);
+            }
+        }
 
         // 1. Nếu có kèm mã OTP: Xác thực OTP ngay tại form đăng ký (KHÔNG lưu CSDL nếu chưa xác thực)
         if (StringUtils.hasText(request.getOtp())) {
@@ -890,6 +906,18 @@ public class AuthService {
 
             // Xóa hoàn toàn OTP và Attempts key khỏi Redis sau khi DB thành công
             redisTemplate.delete(Arrays.asList(otpKey, attemptsKey));
+
+            // Gửi email thông báo bảo mật đặt lại mật khẩu thành công
+            try {
+                emailService.sendSecurityAlertEmail(
+                        user.getEmail(),
+                        user.getFullName(),
+                        "Đặt lại mật khẩu thành công",
+                        "Mật khẩu tài khoản Rikkei Store của bạn vừa được đặt lại thành công thông qua mã xác thực OTP."
+                );
+            } catch (Exception mailEx) {
+                log.warn("Không thể gửi email thông báo đặt lại mật khẩu cho {}: {}", user.getEmail(), mailEx.getMessage());
+            }
         } catch (Exception ex) {
             log.error("Lỗi khi cập nhật mật khẩu mới vào DB: {}", ex.getMessage());
             // Cơ chế phục hồi: khôi phục OTP trên Redis nếu DB thất bại

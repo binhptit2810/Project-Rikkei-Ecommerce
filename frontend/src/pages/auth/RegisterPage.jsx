@@ -66,12 +66,18 @@ export const RegisterPage = () => {
   // Xử lý gửi mã OTP xác thực email
   const handleSendOtp = async () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    const phoneRegex = /^0\d{9}$/
+
     if (!formData.email.trim()) {
       setFormErrors((prev) => ({ ...prev, email: 'Vui lòng nhập email trước khi lấy mã xác thực' }))
       return
     }
     if (!emailRegex.test(formData.email.trim())) {
       setFormErrors((prev) => ({ ...prev, email: 'Email không đúng định dạng (VD: user@example.com)' }))
+      return
+    }
+    if (formData.phone && formData.phone.trim() && !phoneRegex.test(formData.phone.trim())) {
+      setFormErrors((prev) => ({ ...prev, phone: 'Số điện thoại không hợp lệ (gồm 10 số, bắt đầu bằng số 0)' }))
       return
     }
 
@@ -83,16 +89,19 @@ export const RegisterPage = () => {
       await sendRegistrationOtp({
         email: formData.email.trim().toLowerCase(),
         fullName: formData.fullName.trim() || undefined,
+        phone: formData.phone.trim() || undefined,
       })
       setIsOtpSent(true)
       setOtpCountdown(60)
       setOtpSuccessNotice('Mã xác thực OTP đã được gửi đến email của bạn! Vui lòng kiểm tra hộp thư.')
       setFormErrors((prev) => ({ ...prev, otp: '' }))
     } catch (err) {
-      setFormErrors((prev) => ({
-        ...prev,
-        email: err.message || 'Không thể gửi mã xác thực lúc này. Vui lòng kiểm tra email hoặc thử lại sau.',
-      }))
+      const errMsg = err.message || 'Không thể gửi mã xác thực lúc này. Vui lòng kiểm tra email hoặc thử lại sau.'
+      if (errMsg.toLowerCase().includes('số điện thoại') || errMsg.toLowerCase().includes('phone')) {
+        setFormErrors((prev) => ({ ...prev, phone: errMsg }))
+      } else {
+        setFormErrors((prev) => ({ ...prev, email: errMsg }))
+      }
     } finally {
       setIsSendingOtp(false)
     }
@@ -180,6 +189,11 @@ export const RegisterPage = () => {
     } catch (err) {
       const responseData = err?.response?.data
       const backendFieldErrors = responseData?.data
+      const rawMsg = responseData?.message || err?.message || ''
+
+      if (rawMsg.toLowerCase().includes('số điện thoại') || rawMsg.toLowerCase().includes('phone')) {
+        setFormErrors((prev) => ({ ...prev, phone: rawMsg }))
+      }
 
       if (
         backendFieldErrors &&

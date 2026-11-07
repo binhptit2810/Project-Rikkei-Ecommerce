@@ -23,4 +23,7 @@ public class SendRegistrationOtpRequest {
     private String email;
 
     private String fullName;
+
+    private String phone;
 }
+

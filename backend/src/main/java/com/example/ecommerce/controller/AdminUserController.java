@@ -113,4 +113,24 @@ public class AdminUserController {
         UserResponse user = userService.unlockUser(id, adminUserDetails);
         return ResponseEntity.ok(ApiResponse.success("Mở khóa tài khoản thành công", user));
     }
+
+    /**
+     * Xóa tài khoản người dùng khỏi hệ thống (dành cho Admin).
+     *
+     * DELETE /api/v1/admin/users/{id}
+     * Header: Authorization: Bearer <token_admin>
+     *
+     * @param id               ID người dùng cần xóa
+     * @param adminUserDetails tài khoản admin đang đăng nhập (lấy từ SecurityContext)
+     * @return ApiResponse thông báo thành công
+     */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> deleteUser(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails adminUserDetails) {
+
+        userService.deleteUser(id, adminUserDetails);
+        return ResponseEntity.ok(ApiResponse.success("Xóa tài khoản người dùng thành công", null));
+    }
 }

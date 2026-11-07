@@ -67,6 +67,9 @@ class SensitiveBusinessLoggingTest {
     @Mock
     private PaymentRepository paymentRepository;
 
+    @Mock
+    private EmailService emailService;
+
     private OrderService orderService;
     private InventoryService inventoryServiceImpl;
     private UserService userService;
@@ -78,9 +81,9 @@ class SensitiveBusinessLoggingTest {
 
     @BeforeEach
     void setUp() {
-        orderService = new OrderService(orderRepository, productRepository, userRepository, inventoryService, paymentService);
+        orderService = new OrderService(orderRepository, productRepository, userRepository, inventoryService, paymentService, emailService);
         inventoryServiceImpl = new InventoryService(productRepository, inventoryTransactionRepository);
-        userService = new UserService(userRepository, null, refreshTokenService);
+        userService = new UserService(userRepository, null, refreshTokenService, emailService);
         paymentServiceImpl = new PaymentService(paymentRepository, orderRepository, userRepository);
 
         testCustomer = User.builder()
