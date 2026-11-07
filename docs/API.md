@@ -72,6 +72,7 @@ Spring Boot Actuator health endpoint.
 
 ### `POST /api/v1/auth/register`
 Đăng ký tài khoản mới. **Không cần xác thực.**
+Sau khi đăng ký thành công, hệ thống sẽ tự động tạo tài khoản ở trạng thái chưa kích hoạt (`emailVerified = false`), tạo mã OTP 6 chữ số (hiệu lực 300 giây) và gửi qua Resend SMTP. Hệ thống **không** tự động cấp JWT token hay đăng nhập người dùng.
 
 **Request:**
 ```json
@@ -88,7 +89,45 @@ Spring Boot Actuator health endpoint.
 ```json
 {
   "success": true,
-  "message": "Đăng ký tài khoản thành công",
+  "message": "Đăng ký tài khoản thành công. Vui lòng kiểm tra email để nhận mã OTP kích hoạt tài khoản.",
+  "data": {
+    "email": "user@example.com",
+    "fullName": "Nguyễn Văn A",
+    "emailVerified": false
+  },
+  "timestamp": "2026-11-07T03:00:00"
+}
+```
+
+**Lỗi 409** — Email đã tồn tại hoặc đang chờ xác thực:
+```json
+{
+  "success": false,
+  "message": "Email đã được sử dụng. Vui lòng sử dụng email khác.",
+  "data": null,
+  "timestamp": "2026-11-07T03:00:00"
+}
+```
+
+---
+
+### `POST /api/v1/auth/verify-email`
+Xác thực email bằng mã OTP 6 chữ số gửi qua email. **Không cần xác thực.**
+Khi OTP hợp lệ, tài khoản được kích hoạt (`emailVerified = true`, `emailVerifiedAt = now()`), đồng thời cấp Access Token và Refresh Token để đăng nhập ngay vào hệ thống.
+
+**Request:**
+```json
+{
+  "email": "user@example.com",
+  "otp": "123456"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Xác thực email thành công! Tài khoản của bạn đã được kích hoạt.",
   "data": {
     "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
     "tokenType": "Bearer",
@@ -101,21 +140,57 @@ Spring Boot Actuator health endpoint.
       "address": "123 Đường ABC, TP.HCM",
       "role": "CUSTOMER",
       "active": true,
-      "createdAt": "2024-10-15T10:00:00"
+      "emailVerified": true,
+      "emailVerifiedAt": "2026-11-07T03:05:00",
+      "createdAt": "2026-11-07T03:00:00"
     }
   },
-  "timestamp": "2024-10-15T10:00:00"
+  "timestamp": "2026-11-07T03:05:00"
 }
 ```
-*Lưu ý:* `expiresIn` tính bằng **giây** (86400 giây = 24 giờ).
+*Lưu ý:* Hệ thống đồng thời đính kèm cookie HttpOnly `refresh_token` trong header `Set-Cookie`.
 
-**Lỗi 400** — Email đã tồn tại hoặc validation lỗi:
+**Lỗi 400** — OTP sai, hết hạn hoặc vượt quá số lần thử:
 ```json
 {
   "success": false,
-  "message": "Email đã được sử dụng: user@example.com",
+  "message": "Mã OTP không chính xác. Bạn còn 4 lần thử.",
   "data": null,
-  "timestamp": "2024-10-15T10:00:00"
+  "timestamp": "2026-11-07T03:05:00"
+}
+```
+
+---
+
+### `POST /api/v1/auth/resend-verification`
+Gửi lại mã OTP xác thực qua email cho tài khoản chưa kích hoạt. **Không cần xác thực.**
+Áp dụng cơ chế Rate Limiting: Giới hạn tối thiểu cách nhau 60 giây giữa các lần gửi.
+
+**Request:**
+```json
+{
+  "email": "user@example.com"
+}
+```
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Mã OTP xác thực mới đã được gửi đến email của bạn. Vui lòng kiểm tra hộp thư.",
+  "data": null,
+  "timestamp": "2026-11-07T03:06:00"
+}
+```
+*Lưu ý bảo mật (Anti-enumeration):* Nếu email chưa từng đăng ký hoặc đã được xác thực thành công từ trước, endpoint vẫn trả về `200 OK` giả lập để bảo vệ quyền riêng tư người dùng.
+
+**Lỗi 429** — Yêu cầu gửi lại quá nhanh (Rate limited):
+```json
+{
+  "success": false,
+  "message": "Vui lòng đợi 45 giây trước khi yêu cầu gửi lại mã xác thực mới.",
+  "data": null,
+  "timestamp": "2026-11-07T03:06:15"
 }
 ```
 
@@ -170,9 +245,24 @@ Spring Boot Actuator health endpoint.
 ```json
 {
   "success": false,
-  "message": "Tài khoản đã bị vô hiệu hóa",
-  "data": null,
-  "timestamp": "2024-10-15T10:00:00"
+  "message": "Tài khoản của bạn đã bị khóa.",
+  "data": {
+    "reason": "Lý do khóa từ quản trị viên"
+  },
+  "timestamp": "2026-11-07T03:00:00"
+}
+```
+
+**Lỗi 403** — Tài khoản chưa xác thực email (`ACCOUNT_NOT_VERIFIED`):
+```json
+{
+  "success": false,
+  "message": "Tài khoản của bạn chưa được xác thực email. Vui lòng xác thực email để kích hoạt tài khoản.",
+  "data": {
+    "errorCode": "ACCOUNT_NOT_VERIFIED",
+    "email": "user@example.com"
+  },
+  "timestamp": "2026-11-07T03:00:00"
 }
 ```
 

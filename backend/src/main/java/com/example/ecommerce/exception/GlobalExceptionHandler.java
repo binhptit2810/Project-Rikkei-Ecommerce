@@ -100,6 +100,25 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Lỗi tài khoản chưa xác thực email — trả 403 FORBIDDEN kèm Business Error Code "ACCOUNT_NOT_VERIFIED".
+     */
+    @ExceptionHandler(UnverifiedAccountException.class)
+    public ResponseEntity<ApiResponse<Map<String, Object>>> handleUnverifiedAccount(UnverifiedAccountException ex) {
+        log.warn("Unverified account access attempt: email={}", ex.getEmail());
+        Map<String, Object> data = new HashMap<>();
+        data.put("errorCode", ex.getErrorCode());
+        data.put("email", ex.getEmail());
+
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.<Map<String, Object>>builder()
+                        .success(false)
+                        .message(ex.getMessage())
+                        .data(data)
+                        .timestamp(LocalDateTime.now())
+                        .build());
+    }
+
+    /**
      * Lỗi tài khoản bị vô hiệu hóa — trả 403 thay vì 401.
      */
     @ExceptionHandler(DisabledException.class)

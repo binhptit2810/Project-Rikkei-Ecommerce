@@ -70,6 +70,50 @@ class CustomUserDetailsServiceTest {
         assertThat(userDetails.getAuthorities())
                 .extracting("authority")
                 .containsExactly("ROLE_ADMIN");
+        assertThat(((CustomUserDetails) userDetails).isEmailVerified()).isTrue();
+    }
+
+    @Test
+    @DisplayName("FR-SEC-02: Khách hàng CUSTOMER có emailVerified=false trả CustomUserDetails có isEmailVerified=false")
+    void loadUserByUsername_UnverifiedCustomer_ReturnsEmailVerifiedFalse() {
+        User unverifiedCustomer = User.builder()
+                .id(3L)
+                .email("unverified@example.com")
+                .password("$2a$12$hashedPassword")
+                .role(Role.CUSTOMER)
+                .active(true)
+                .emailVerified(false)
+                .build();
+
+        when(userRepository.findByEmail("unverified@example.com")).thenReturn(Optional.of(unverifiedCustomer));
+
+        UserDetails userDetails = customUserDetailsService.loadUserByUsername("unverified@example.com");
+
+        assertThat(userDetails).isInstanceOf(CustomUserDetails.class);
+        CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
+        assertThat(customUserDetails.isEmailVerified()).isFalse();
+        assertThat(customUserDetails.isEnabled()).isTrue();
+    }
+
+    @Test
+    @DisplayName("FR-SEC-03: Khách hàng CUSTOMER có emailVerified=true trả CustomUserDetails có isEmailVerified=true")
+    void loadUserByUsername_VerifiedCustomer_ReturnsEmailVerifiedTrue() {
+        User verifiedCustomer = User.builder()
+                .id(4L)
+                .email("verified@example.com")
+                .password("$2a$12$hashedPassword")
+                .role(Role.CUSTOMER)
+                .active(true)
+                .emailVerified(true)
+                .build();
+
+        when(userRepository.findByEmail("verified@example.com")).thenReturn(Optional.of(verifiedCustomer));
+
+        UserDetails userDetails = customUserDetailsService.loadUserByUsername("verified@example.com");
+
+        assertThat(userDetails).isInstanceOf(CustomUserDetails.class);
+        CustomUserDetails customUserDetails = (CustomUserDetails) userDetails;
+        assertThat(customUserDetails.isEmailVerified()).isTrue();
     }
 
     @Test

@@ -37,13 +37,15 @@ const apiClient = axios.create({
 // ============================================================================
 apiClient.interceptors.request.use(
   (config) => {
-    // Không đính kèm Bearer token cho các endpoint công khai (Login, Register, Refresh, Forgot/Reset Password)
+    // Không đính kèm Bearer token cho các endpoint công khai (Login, Register, Refresh, Forgot/Reset Password, Verify/Resend)
     const isPublicAuthEndpoint =
       config.url?.includes('/auth/login') ||
       config.url?.includes('/auth/register') ||
       config.url?.includes('/auth/refresh') ||
       config.url?.includes('/auth/forgot-password') ||
-      config.url?.includes('/auth/reset-password')
+      config.url?.includes('/auth/reset-password') ||
+      config.url?.includes('/auth/verify-email') ||
+      config.url?.includes('/auth/resend-verification')
 
     if (!isPublicAuthEndpoint) {
       const token = inMemoryAccessToken
@@ -127,7 +129,9 @@ apiClient.interceptors.response.use(
       originalRequest.url?.includes('/auth/refresh') ||
       originalRequest.url?.includes('/auth/logout') ||
       originalRequest.url?.includes('/auth/forgot-password') ||
-      originalRequest.url?.includes('/auth/reset-password')
+      originalRequest.url?.includes('/auth/reset-password') ||
+      originalRequest.url?.includes('/auth/verify-email') ||
+      originalRequest.url?.includes('/auth/resend-verification')
 
     // BƯỚC 1: Nếu gặp lỗi 401 Unauthorized và không phải request từ auth endpoint
     if (error.response?.status === 401 && !isAuthEndpoint) {

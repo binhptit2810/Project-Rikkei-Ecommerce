@@ -4,10 +4,14 @@ import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
 import com.example.ecommerce.dto.request.ResetPasswordRequest;
+import com.example.ecommerce.dto.request.ResendVerificationRequest;
+import com.example.ecommerce.dto.request.VerifyEmailRequest;
 import com.example.ecommerce.dto.response.AuthResponse;
+import com.example.ecommerce.dto.response.RegisterResponse;
 import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.exception.LockedAccountException;
+import com.example.ecommerce.exception.UnverifiedAccountException;
 import com.example.ecommerce.service.AuthService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
@@ -61,36 +65,91 @@ class AuthControllerTest {
     private com.example.ecommerce.service.RefreshTokenService refreshTokenService;
 
     @Test
-    @DisplayName("FR-AUTH-03: Đăng ký tài khoản với dữ liệu hợp lệ trả 201 CREATED")
-    void register_ValidRequest_Returns201AndToken() throws Exception {
+    @DisplayName("FR-AUTH-03: Đăng ký tài khoản với dữ liệu hợp lệ trả 201 CREATED kèm thông tin yêu cầu xác thực email")
+    void register_ValidRequest_Returns201AndRegisterResponse() throws Exception {
         RegisterRequest request = new RegisterRequest();
         request.setFullName("Lê Văn C");
         request.setEmail("levanc@example.com");
         request.setPassword("Password123@");
         request.setPhone("0912345678");
 
-        AuthResponse authResponse = AuthResponse.builder()
-                .accessToken("mock-token-xyz")
-                .tokenType("Bearer")
-                .expiresIn(86400L)
-                .user(UserResponse.builder()
-                        .id(10L)
-                        .email("levanc@example.com")
-                        .fullName("Lê Văn C")
-                        .role(Role.CUSTOMER)
-                        .active(true)
-                        .build())
+        RegisterResponse registerResponse = RegisterResponse.builder()
+                .email("levanc@example.com")
+                .fullName("Lê Văn C")
+                .emailVerified(false)
                 .build();
 
-        when(authService.register(any(RegisterRequest.class))).thenReturn(authResponse);
+        when(authService.register(any(RegisterRequest.class))).thenReturn(registerResponse);
 
         mockMvc.perform(post("/api/v1/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data.accessToken").value("mock-token-xyz"))
-                .andExpect(jsonPath("$.data.user.email").value("levanc@example.com"));
+                .andExpect(jsonPath("$.data.email").value("levanc@example.com"))
+                .andExpect(jsonPath("$.data.fullName").value("Lê Văn C"))
+                .andExpect(jsonPath("$.data.emailVerified").value(false))
+                .andExpect(jsonPath("$.data.accessToken").doesNotExist());
+    }
+
+    @Test
+    @DisplayName("FR-AUTH-05: Xác thực email với mã OTP hợp lệ trả 200 OK và cấp JWT token")
+    void verifyEmail_ValidOtp_Returns200AndTokens() throws Exception {
+        VerifyEmailRequest request = new VerifyEmailRequest();
+        request.setEmail("user@example.com");
+        request.setOtp("123456");
+
+        AuthResponse authResponse = AuthResponse.builder()
+                .accessToken("mock-verified-jwt")
+                .tokenType("Bearer")
+                .expiresIn(86400L)
+                .user(UserResponse.builder()
+                        .id(1L)
+                        .email("user@example.com")
+                        .fullName("Nguyễn Văn A")
+                        .role(Role.CUSTOMER)
+                        .active(true)
+                        .emailVerified(true)
+                        .build())
+                .build();
+
+        when(authService.verifyEmail(any(VerifyEmailRequest.class))).thenReturn(authResponse);
+
+        mockMvc.perform(post("/api/v1/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").value("mock-verified-jwt"))
+                .andExpect(jsonPath("$.data.user.emailVerified").value(true));
+    }
+
+    @Test
+    @DisplayName("NFR-DATA-15: Xác thực email với mã OTP không đủ 6 chữ số trả 400 BAD REQUEST")
+    void verifyEmail_InvalidOtpFormat_Returns400() throws Exception {
+        VerifyEmailRequest request = new VerifyEmailRequest();
+        request.setEmail("user@example.com");
+        request.setOtp("12345"); // chỉ 5 chữ số
+
+        mockMvc.perform(post("/api/v1/auth/verify-email")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.data.otp").value("Mã OTP phải gồm đúng 6 chữ số"));
+    }
+
+    @Test
+    @DisplayName("FR-AUTH-06: Gửi lại mã OTP xác thực email trả 200 OK")
+    void resendVerification_ValidEmail_Returns200() throws Exception {
+        ResendVerificationRequest request = new ResendVerificationRequest();
+        request.setEmail("user@example.com");
+
+        mockMvc.perform(post("/api/v1/auth/resend-verification")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
     }
 
     @Test
@@ -259,6 +318,26 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.message").value("Tài khoản của bạn đã bị khóa."))
                 .andExpect(jsonPath("$.data.reason").value("Vi phạm quy chế bán hàng gian lận"))
                 .andExpect(jsonPath("$.data.lockReason").value("Vi phạm quy chế bán hàng gian lận"));
+    }
+
+    @Test
+    @DisplayName("NFR-SEC-31: Đăng nhập với tài khoản chưa xác thực email trả 403 FORBIDDEN kèm mã lỗi ACCOUNT_NOT_VERIFIED")
+    void login_UnverifiedAccount_Returns403WithErrorCode() throws Exception {
+        LoginRequest request = new LoginRequest();
+        request.setEmail("unverified@example.com");
+        request.setPassword("Password123@");
+
+        when(authService.login(any(LoginRequest.class)))
+                .thenThrow(new UnverifiedAccountException("Tài khoản chưa được kích hoạt. Vui lòng xác thực email để tiếp tục.", "unverified@example.com"));
+
+        mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.success").value(false))
+                .andExpect(jsonPath("$.message").value("Tài khoản chưa được kích hoạt. Vui lòng xác thực email để tiếp tục."))
+                .andExpect(jsonPath("$.data.errorCode").value("ACCOUNT_NOT_VERIFIED"))
+                .andExpect(jsonPath("$.data.email").value("unverified@example.com"));
     }
 
     @Test

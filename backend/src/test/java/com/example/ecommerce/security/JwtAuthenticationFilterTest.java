@@ -1,5 +1,6 @@
 package com.example.ecommerce.security;
 
+import com.example.ecommerce.entity.Role;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.MalformedJwtException;
@@ -278,6 +279,31 @@ class JwtAuthenticationFilterTest {
         request.addHeader("Authorization", "Bearer error.jwt.token");
         when(jwtUtils.parseClaims("error.jwt.token"))
                 .thenThrow(new RuntimeException("Database error or unexpected failure"));
+
+        jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+    }
+
+    @Test
+    @DisplayName("Branch: CustomUserDetails chưa xác thực email (emailVerified=false) -> Không thiết lập Authentication")
+    void doFilter_UserNotEmailVerified_DoesNotAuthenticate() throws ServletException, IOException {
+        request.addHeader("Authorization", "Bearer valid.jwt.token");
+
+        Claims claims = mock(Claims.class);
+        when(claims.getSubject()).thenReturn("unverified@example.com");
+        when(claims.getExpiration()).thenReturn(new Date(System.currentTimeMillis() + 3600000));
+        when(jwtUtils.parseClaims("valid.jwt.token")).thenReturn(claims);
+
+        CustomUserDetails unverifiedUser = new CustomUserDetails(
+                10L,
+                "unverified@example.com",
+                "password",
+                Role.CUSTOMER,
+                true,
+                false // emailVerified = false
+        );
+        when(userDetailsService.loadUserByUsername("unverified@example.com")).thenReturn(unverifiedUser);
 
         jwtAuthenticationFilter.doFilterInternal(request, response, filterChain);
 

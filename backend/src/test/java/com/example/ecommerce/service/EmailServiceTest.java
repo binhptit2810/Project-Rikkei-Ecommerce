@@ -135,5 +135,42 @@ class EmailServiceTest {
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("Lỗi hệ thống khi gửi email xác thực");
     }
+
+    @Test
+    @DisplayName("EmailService: Gửi email OTP xác thực tài khoản đăng ký mới thành công")
+    void sendVerificationOtpEmail_Success() throws Exception {
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+        doNothing().when(mailSender).send(any(MimeMessage.class));
+
+        emailService.sendVerificationOtpEmail("newuser@example.com", "654321", "Nguyễn Văn B");
+
+        verify(mailSender).createMimeMessage();
+        verify(mailSender).send(mimeMessage);
+
+        assertThat(mimeMessage.getFrom()).isNotNull();
+        assertThat(mimeMessage.getFrom()[0].toString()).isEqualTo("onboarding@resend.dev");
+        assertThat(mimeMessage.getAllRecipients()).isNotNull();
+        assertThat(mimeMessage.getAllRecipients()[0].toString()).isEqualTo("newuser@example.com");
+        assertThat(mimeMessage.getSubject()).isEqualTo("Xác thực địa chỉ email - Rikkei Store");
+
+        String bodyText = extractTextFromMessage(mimeMessage.getContent());
+        assertThat(bodyText).contains("654321");
+        assertThat(bodyText).contains("Nguyễn Văn B");
+        assertThat(bodyText).contains("Rikkei Store");
+    }
+
+    @Test
+    @DisplayName("EmailService: sendVerificationOtpEmail bắt lỗi MailSendException và ném BusinessException")
+    void sendVerificationOtpEmail_SmtpFailure_ThrowsBusinessException() {
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+        doThrow(new MailSendException("SMTP connection refused"))
+                .when(mailSender).send(any(MimeMessage.class));
+
+        assertThatThrownBy(() -> emailService.sendVerificationOtpEmail("newuser@example.com", "654321", "Nguyễn Văn B"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Không thể gửi email xác thực lúc này");
+
+        verify(mailSender).send(mimeMessage);
+    }
 }
 

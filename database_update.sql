@@ -245,6 +245,8 @@ CREATE TABLE `users` (
   `address` text COLLATE utf8mb4_unicode_ci,
   `role` enum('ADMIN','CUSTOMER') COLLATE utf8mb4_unicode_ci NOT NULL,
   `active` tinyint(1) NOT NULL DEFAULT '1',
+  `email_verified` tinyint(1) NOT NULL DEFAULT '0',
+  `email_verified_at` datetime DEFAULT NULL,
   `lock_reason` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `locked_at` datetime DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -262,7 +264,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES (1,'admin@eshop.com','$2a$12$DeJXKsMNyJICotlNotxyRu/9P8LFnQlt5E96Z6V2Vx.eNtRMjdfUC','Quản trị viên','0900000001','Hà Nội, Việt Nam','ADMIN',1,NULL,NULL,'2026-11-02 21:45:18','2026-11-02 21:45:18'),(2,'customer1@example.com','$2a$12$.SsIZ3p2ZhYDIEYzPsOKdOVD2UGgW8zC83zXrXD1LBhAY/0bCUJdK','Nguyễn Văn An','0912345678','123 Đường Lê Lợi, Quận 1, TP.HCM','CUSTOMER',1,NULL,NULL,'2026-11-02 21:45:18','2026-11-02 21:45:18'),(3,'customer2@example.com','$2a$12$.SsIZ3p2ZhYDIEYzPsOKdOVD2UGgW8zC83zXrXD1LBhAY/0bCUJdK','Trần Thị Bình','0987654321','456 Đường Nguyễn Huệ, Quận 3, TP.HCM','CUSTOMER',1,NULL,NULL,'2026-11-02 21:45:18','2026-11-02 21:45:18'),(4,'binhbadboy2810@gmail.com','$2a$12$3zdzGdk4C.Ae8XX4eACo4Ohd5MtlLZXppo8nupC2ZoJNz9Jb8/NSy','Đặng Thanh Bình','0372987662','Ngọc Trục','CUSTOMER',1,NULL,NULL,'2026-11-02 22:48:10','2026-11-02 22:48:10');
+INSERT INTO `users` VALUES (1,'admin@eshop.com','$2a$12$DeJXKsMNyJICotlNotxyRu/9P8LFnQlt5E96Z6V2Vx.eNtRMjdfUC','Quản trị viên','0900000001','Hà Nội, Việt Nam','ADMIN',1,1,'2026-11-02 21:45:18',NULL,NULL,'2026-11-02 21:45:18','2026-11-02 21:45:18'),(2,'customer1@example.com','$2a$12$.SsIZ3p2ZhYDIEYzPsOKdOVD2UGgW8zC83zXrXD1LBhAY/0bCUJdK','Nguyễn Văn An','0912345678','123 Đường Lê Lợi, Quận 1, TP.HCM','CUSTOMER',1,1,'2026-11-02 21:45:18',NULL,NULL,'2026-11-02 21:45:18','2026-11-02 21:45:18'),(3,'customer2@example.com','$2a$12$.SsIZ3p2ZhYDIEYzPsOKdOVD2UGgW8zC83zXrXD1LBhAY/0bCUJdK','Trần Thị Bình','0987654321','456 Đường Nguyễn Huệ, Quận 3, TP.HCM','CUSTOMER',1,1,'2026-11-02 21:45:18',NULL,NULL,'2026-11-02 21:45:18','2026-11-02 21:45:18'),(4,'binhbadboy2810@gmail.com','$2a$12$3zdzGdk4C.Ae8XX4eACo4Ohd5MtlLZXppo8nupC2ZoJNz9Jb8/NSy','Đặng Thanh Bình','0372987662','Ngọc Trục','CUSTOMER',1,1,'2026-11-02 22:48:10',NULL,NULL,'2026-11-02 22:48:10','2026-11-02 22:48:10');
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;

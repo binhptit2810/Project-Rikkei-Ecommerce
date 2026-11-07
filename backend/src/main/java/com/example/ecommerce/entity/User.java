@@ -58,6 +58,15 @@ public class User {
     @Builder.Default
     private Boolean active = true;
 
+    /** Cờ xác thực email: true nếu đã xác thực, false nếu chưa xác thực (CUSTOMER mới). */
+    @Column(name = "email_verified", nullable = false)
+    @Builder.Default
+    private Boolean emailVerified = false;
+
+    /** Thời điểm hoàn tất xác thực email. */
+    @Column(name = "email_verified_at")
+    private LocalDateTime emailVerifiedAt;
+
     /** Lý do khóa tài khoản nếu active = false. */
     @Column(name = "lock_reason", length = 500)
     private String lockReason;

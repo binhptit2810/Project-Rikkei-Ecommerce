@@ -10,6 +10,7 @@ import RoleRoute from './components/auth/RoleRoute'
 import HomePage from './pages/HomePage'
 import LoginPage from './pages/auth/LoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
+import VerifyEmailPage from './pages/auth/VerifyEmailPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
 import AdminLoginPage from './pages/admin/AdminLoginPage'
@@ -105,6 +106,14 @@ function App() {
             element={
               <GuestRoute>
                 <RegisterPage />
+              </GuestRoute>
+            }
+          />
+          <Route
+            path="/verify-email"
+            element={
+              <GuestRoute>
+                <VerifyEmailPage />
               </GuestRoute>
             }
           />

@@ -21,8 +21,9 @@ public class CustomUserDetails extends User {
 
     private final Long userId;
     private final Role role;
+    private final boolean emailVerified;
 
-    public CustomUserDetails(Long userId, String email, String password, Role role, boolean enabled) {
+    public CustomUserDetails(Long userId, String email, String password, Role role, boolean enabled, boolean emailVerified) {
         super(
                 email,
                 password,
@@ -34,12 +35,22 @@ public class CustomUserDetails extends User {
         );
         this.userId = userId;
         this.role = role;
+        this.emailVerified = emailVerified;
+    }
+
+    public CustomUserDetails(Long userId, String email, String password, Role role, boolean enabled) {
+        this(userId, email, password, role, enabled, true);
     }
 
     public CustomUserDetails(Long userId, String email, String password, Role role, boolean enabled, Collection<? extends GrantedAuthority> authorities) {
         super(email, password, enabled, true, true, true, authorities);
         this.userId = userId;
         this.role = role;
+        this.emailVerified = true;
+    }
+
+    public boolean isEmailVerified() {
+        return emailVerified;
     }
 
     public Long getId() {
