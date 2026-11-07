@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   User,
@@ -10,17 +10,20 @@ import {
   EyeOff,
   AlertCircle,
   Zap,
+  ShieldCheck,
+  CheckCircle2,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 
 export const RegisterPage = () => {
   const navigate = useNavigate()
-  const { register, isLoading, error, clearError } = useAuthStore()
+  const { register, sendRegistrationOtp, isLoading, error, clearError } = useAuthStore()
 
   const [formData, setFormData] = useState({
     fullName: '',
     email: '',
+    otp: '',
     password: '',
     confirmPassword: '',
     phone: '',
@@ -31,6 +34,23 @@ export const RegisterPage = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
+  // Trạng thái gửi mã xác thực OTP
+  const [isOtpSent, setIsOtpSent] = useState(false)
+  const [isSendingOtp, setIsSendingOtp] = useState(false)
+  const [otpCountdown, setOtpCountdown] = useState(0)
+  const [otpSuccessNotice, setOtpSuccessNotice] = useState(null)
+
+  // Countdown timer cho nút gửi lại mã OTP (60 giây)
+  useEffect(() => {
+    let timer
+    if (otpCountdown > 0) {
+      timer = setInterval(() => {
+        setOtpCountdown((prev) => prev - 1)
+      }, 1000)
+    }
+    return () => clearInterval(timer)
+  }, [otpCountdown])
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -40,6 +60,41 @@ export const RegisterPage = () => {
     }
     if (error) {
       clearError()
+    }
+  }
+
+  // Xử lý gửi mã OTP xác thực email
+  const handleSendOtp = async () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!formData.email.trim()) {
+      setFormErrors((prev) => ({ ...prev, email: 'Vui lòng nhập email trước khi lấy mã xác thực' }))
+      return
+    }
+    if (!emailRegex.test(formData.email.trim())) {
+      setFormErrors((prev) => ({ ...prev, email: 'Email không đúng định dạng (VD: user@example.com)' }))
+      return
+    }
+
+    setIsSendingOtp(true)
+    setOtpSuccessNotice(null)
+    if (error) clearError()
+
+    try {
+      await sendRegistrationOtp({
+        email: formData.email.trim().toLowerCase(),
+        fullName: formData.fullName.trim() || undefined,
+      })
+      setIsOtpSent(true)
+      setOtpCountdown(60)
+      setOtpSuccessNotice('Mã xác thực OTP đã được gửi đến email của bạn! Vui lòng kiểm tra hộp thư.')
+      setFormErrors((prev) => ({ ...prev, otp: '' }))
+    } catch (err) {
+      setFormErrors((prev) => ({
+        ...prev,
+        email: err.message || 'Không thể gửi mã xác thực lúc này. Vui lòng kiểm tra email hoặc thử lại sau.',
+      }))
+    } finally {
+      setIsSendingOtp(false)
     }
   }
 
@@ -62,6 +117,15 @@ export const RegisterPage = () => {
       errors.email = 'Email không đúng định dạng (VD: user@example.com)'
     } else if (formData.email.trim().length > 100) {
       errors.email = 'Email không được vượt quá 100 ký tự'
+    }
+
+    // Bắt buộc xác thực OTP email trước khi tạo tài khoản vào CSDL
+    if (!formData.otp || !formData.otp.trim()) {
+      errors.otp = isOtpSent
+        ? 'Vui lòng nhập mã OTP 6 chữ số vừa nhận được trong email'
+        : 'Vui lòng bấm "Gửi mã xác thực" để nhận mã OTP qua email'
+    } else if (formData.otp.trim().length !== 6 || !/^\d{6}$/.test(formData.otp.trim())) {
+      errors.otp = 'Mã xác thực phải gồm đúng 6 chữ số'
     }
 
     // Mật khẩu
@@ -102,13 +166,14 @@ export const RegisterPage = () => {
         password: formData.password,
         phone: formData.phone.trim(),
         address: formData.address.trim() || null,
+        otp: formData.otp.trim(),
       })
-      navigate('/verify-email', {
+
+      // Đăng ký và xác thực thành công ngay tại form -> Điều hướng sang Login
+      navigate('/login', {
         state: {
-          email: formData.email.trim().toLowerCase(),
-          fullName: formData.fullName.trim(),
           successMessage:
-            'Đăng ký tài khoản thành công! Vui lòng nhập mã OTP 6 chữ số đã được gửi tới email của bạn để kích hoạt tài khoản.',
+            'Đăng ký tài khoản và xác thực email thành công! Bạn có thể đăng nhập ngay bây giờ.',
         },
         replace: true,
       })
@@ -193,9 +258,30 @@ export const RegisterPage = () => {
 
             {/* Email */}
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-800 block">
-                Email đăng nhập
-              </label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800 block">
+                  Email đăng nhập <span className="text-red-500">*</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleSendOtp}
+                  disabled={isSendingOtp || otpCountdown > 0}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 disabled:text-slate-400 disabled:cursor-not-allowed transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  {isSendingOtp ? (
+                    <>
+                      <LoadingSpinner size="sm" className="w-3.5 h-3.5" />
+                      <span>Đang gửi mã...</span>
+                    </>
+                  ) : otpCountdown > 0 ? (
+                    <span>Gửi lại sau ({otpCountdown}s)</span>
+                  ) : isOtpSent ? (
+                    <span>Gửi lại mã OTP</span>
+                  ) : (
+                    <span>Gửi mã xác thực</span>
+                  )}
+                </button>
+              </div>
               <div className="relative">
                 <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
@@ -214,9 +300,56 @@ export const RegisterPage = () => {
               </div>
               {formErrors.email && (
                 <p className="text-xs text-red-600 font-semibold flex items-center gap-1">
-                  <AlertCircle className="w-3.5 h-3.5" />
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
                   <span>{formErrors.email}</span>
                 </p>
+              )}
+            </div>
+
+            {/* OTP Verification Code */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800 block">
+                  Mã xác thực email (OTP) <span className="text-red-500">*</span>
+                </label>
+                {isOtpSent && (
+                  <span className="text-[11px] font-medium text-emerald-600 flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Đã gửi OTP đến email
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <ShieldCheck className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  name="otp"
+                  maxLength={6}
+                  value={formData.otp}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 6)
+                    setFormData((prev) => ({ ...prev, otp: val }))
+                    if (formErrors.otp) setFormErrors((prev) => ({ ...prev, otp: '' }))
+                  }}
+                  placeholder="Nhập 6 số OTP (VD: 123456)"
+                  className={`flex h-11 w-full rounded-xl border bg-slate-50 pl-10 pr-3 py-1 text-sm font-mono tracking-widest shadow-xs transition-colors placeholder:font-sans placeholder:tracking-normal placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 ${
+                    formErrors.otp
+                      ? 'border-red-500 focus:ring-red-500/20'
+                      : 'border-slate-200'
+                  }`}
+                />
+              </div>
+              {formErrors.otp && (
+                <p className="text-xs text-red-600 font-semibold flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>{formErrors.otp}</span>
+                </p>
+              )}
+              {otpSuccessNotice && !formErrors.otp && (
+                <div className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{otpSuccessNotice}</span>
+                </div>
               )}
             </div>
 

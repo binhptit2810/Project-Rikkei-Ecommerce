@@ -3,6 +3,7 @@ package com.example.ecommerce.controller;
 import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
+import com.example.ecommerce.dto.request.SendRegistrationOtpRequest;
 import com.example.ecommerce.dto.request.ResetPasswordRequest;
 import com.example.ecommerce.dto.request.ResendVerificationRequest;
 import com.example.ecommerce.dto.request.VerifyEmailRequest;
@@ -65,8 +66,27 @@ public class AuthController {
 
         RegisterResponse response = authService.register(request);
 
+        String successMsg = Boolean.TRUE.equals(response.getEmailVerified())
+                ? "Đăng ký và xác thực tài khoản thành công."
+                : "Đăng ký tài khoản thành công. Vui lòng kiểm tra email để nhận mã xác thực OTP.";
+
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.success("Đăng ký tài khoản thành công. Vui lòng kiểm tra email để nhận mã xác thực OTP.", response));
+                .body(ApiResponse.success(successMsg, response));
+    }
+
+    /**
+     * Gửi mã OTP xác thực email trước khi đăng ký tài khoản.
+     * POST /api/v1/auth/send-registration-otp
+     */
+    @PostMapping("/send-registration-otp")
+    public ResponseEntity<ApiResponse<Void>> sendRegistrationOtp(
+            @Valid @RequestBody SendRegistrationOtpRequest request) {
+
+        authService.sendRegistrationOtp(request);
+
+        return ResponseEntity.ok(
+                ApiResponse.success("Mã xác thực đã được gửi đến email của bạn. Vui lòng kiểm tra hộp thư.", null)
+        );
     }
 
     /**

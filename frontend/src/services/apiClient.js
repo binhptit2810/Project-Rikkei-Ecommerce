@@ -41,6 +41,7 @@ apiClient.interceptors.request.use(
     const isPublicAuthEndpoint =
       config.url?.includes('/auth/login') ||
       config.url?.includes('/auth/register') ||
+      config.url?.includes('/auth/send-registration-otp') ||
       config.url?.includes('/auth/refresh') ||
       config.url?.includes('/auth/forgot-password') ||
       config.url?.includes('/auth/reset-password') ||
@@ -126,6 +127,7 @@ apiClient.interceptors.response.use(
     const isAuthEndpoint =
       originalRequest.url?.includes('/auth/login') ||
       originalRequest.url?.includes('/auth/register') ||
+      originalRequest.url?.includes('/auth/send-registration-otp') ||
       originalRequest.url?.includes('/auth/refresh') ||
       originalRequest.url?.includes('/auth/logout') ||
       originalRequest.url?.includes('/auth/forgot-password') ||

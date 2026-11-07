@@ -81,14 +81,14 @@ services:
       REDIS_PORT: 6379
       UPLOAD_DIR: /app/uploads
       TZ: Asia/Ho_Chi_Minh
-      RESEND_API_KEY: ${RESEND_API_KEY:-}
-      MAIL_HOST: ${MAIL_HOST:-smtp.resend.com}
-      MAIL_PORT: ${MAIL_PORT:-465}
-      MAIL_USERNAME: ${MAIL_USERNAME:-resend}
-      MAIL_PASSWORD: ${RESEND_API_KEY:-${MAIL_PASSWORD:-}}
-      MAIL_FROM: ${MAIL_FROM:-noreply@mail.rikkei-shop.me}
-      MAIL_SMTP_SSL_ENABLE: ${MAIL_SMTP_SSL_ENABLE:-true}
-      MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-false}
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-binhbadboy2810@gmail.com}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-dcibqbxtoxfcghiq}
+      MAIL_FROM: ${MAIL_FROM:-binhbadboy2810@gmail.com}
+      MAIL_SMTP_SSL_ENABLE: ${MAIL_SMTP_SSL_ENABLE:-false}
+      MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-true}
+      MAIL_SMTP_STARTTLS_REQUIRED: ${MAIL_SMTP_STARTTLS_REQUIRED:-true}
       OTP_HMAC_SECRET: ${OTP_HMAC_SECRET:-}
     volumes:
       - ./uploads:/app/uploads

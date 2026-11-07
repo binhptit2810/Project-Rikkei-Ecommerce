@@ -3,6 +3,7 @@ package com.example.ecommerce.service;
 import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
+import com.example.ecommerce.dto.request.SendRegistrationOtpRequest;
 import com.example.ecommerce.dto.request.ResetPasswordRequest;
 import com.example.ecommerce.dto.request.ResendVerificationRequest;
 import com.example.ecommerce.dto.request.VerifyEmailRequest;
@@ -223,15 +224,114 @@ public class AuthService {
      * @return RegisterResponse chứa thông tin tài khoản và cờ emailVerified=false
      * @throws BusinessException nếu email đã tồn tại hoặc đã đăng ký chờ xác thực
      */
+    /**
+     * Gửi mã OTP xác thực email trước khi tạo tài khoản vào CSDL.
+     * Hoàn toàn không ghi dữ liệu người dùng vào MySQL tại bước này.
+     */
+    public void sendRegistrationOtp(SendRegistrationOtpRequest request) {
+        String normalizedEmail = request.getEmail().toLowerCase().trim();
+
+        User existingUser = userRepository.findByEmail(normalizedEmail).orElse(null);
+        if (existingUser != null && Boolean.TRUE.equals(existingUser.getEmailVerified())) {
+            throw new BusinessException("Email đã được sử dụng: " + normalizedEmail);
+        }
+
+        String rateLimitKey = VERIFY_RATELIMIT_PREFIX + normalizedEmail;
+        String lockValue = UUID.randomUUID().toString();
+        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(rateLimitKey, lockValue, otpRateLimitSeconds, TimeUnit.SECONDS);
+        if (Boolean.FALSE.equals(acquired)) {
+            throw new BusinessException("Vui lòng đợi 60 giây trước khi yêu cầu mã mới");
+        }
+
+        String otp = generateOtp();
+        String otpHmac = calculateHmac(otp, otpHmacSecret);
+
+        String verifyOtpKey = VERIFY_OTP_KEY_PREFIX + normalizedEmail;
+        String verifyAttemptsKey = VERIFY_ATTEMPTS_PREFIX + normalizedEmail;
+
+        redisTemplate.delete(verifyAttemptsKey);
+        redisTemplate.opsForValue().set(verifyOtpKey, otpHmac, otpExpirationSeconds, TimeUnit.SECONDS);
+
+        try {
+            String fullName = request.getFullName() != null ? request.getFullName().trim() : "";
+            emailService.sendVerificationOtpEmail(normalizedEmail, otp, fullName);
+            log.info("Đã gửi mã OTP xác thực trước đăng ký tới: {}", normalizedEmail);
+        } catch (Exception ex) {
+            log.error("Gửi mã xác thực trước đăng ký thất bại cho email {}: {}", normalizedEmail, ex.getMessage());
+            redisTemplate.delete(verifyOtpKey);
+            releaseRateLimitLock(rateLimitKey, lockValue);
+            throw new BusinessException("Không thể gửi email xác thực lúc này, vui lòng kiểm tra lại địa chỉ email hoặc thử lại sau.");
+        }
+    }
+
     public RegisterResponse register(RegisterRequest request) {
         String normalizedEmail = request.getEmail().toLowerCase().trim();
 
+        // 1. Nếu có kèm mã OTP: Xác thực OTP ngay tại form đăng ký (KHÔNG lưu CSDL nếu chưa xác thực)
+        if (StringUtils.hasText(request.getOtp())) {
+            User existingUser = userRepository.findByEmail(normalizedEmail).orElse(null);
+            if (existingUser != null && Boolean.TRUE.equals(existingUser.getEmailVerified())) {
+                throw new BusinessException("Email đã được sử dụng: " + normalizedEmail);
+            }
+
+            String verifyOtpKey = VERIFY_OTP_KEY_PREFIX + normalizedEmail;
+            String verifyAttemptsKey = VERIFY_ATTEMPTS_PREFIX + normalizedEmail;
+
+            String storedHmac = redisTemplate.opsForValue().get(verifyOtpKey);
+            if (storedHmac == null) {
+                throw new BusinessException("Mã xác thực đã hết hạn hoặc chưa được gửi. Vui lòng bấm 'Gửi mã xác thực'.");
+            }
+
+            String inputHmac = calculateHmac(request.getOtp().trim(), otpHmacSecret);
+            if (!storedHmac.equals(inputHmac)) {
+                Long attempts = redisTemplate.opsForValue().increment(verifyAttemptsKey);
+                if (attempts != null && attempts >= otpMaxAttempts) {
+                    redisTemplate.delete(verifyOtpKey);
+                    redisTemplate.delete(verifyAttemptsKey);
+                    throw new BusinessException("Bạn đã nhập sai mã OTP quá 5 lần. Mã đã bị hủy, vui lòng bấm gửi lại mã mới.");
+                }
+                long remaining = Math.max(0, otpMaxAttempts - (attempts != null ? attempts : 1));
+                throw new BusinessException("Mã xác thực không chính xác. Bạn còn " + remaining + " lần thử.");
+            }
+
+            // Xóa OTP trong Redis vì đã xác thực thành công
+            redisTemplate.delete(verifyOtpKey);
+            redisTemplate.delete(verifyAttemptsKey);
+
+            // Dọn dẹp tài khoản chưa xác thực trước đó nếu có
+            if (existingUser != null) {
+                userRepository.delete(existingUser);
+            }
+
+            // CHỈ LƯU VÀO DATABASE KHI MÃ OTP ĐÃ ĐƯỢC XÁC THỰC THÀNH CÔNG!
+            User user = User.builder()
+                    .email(normalizedEmail)
+                    .password(passwordEncoder.encode(request.getPassword()))
+                    .fullName(request.getFullName().trim())
+                    .phone(request.getPhone())
+                    .address(request.getAddress())
+                    .role(Role.CUSTOMER)
+                    .active(true)
+                    .emailVerified(true)
+                    .emailVerifiedAt(LocalDateTime.now())
+                    .build();
+
+            user = userRepository.save(user);
+            log.info("Xác thực email thành công tại form đăng ký và tạo tài khoản vào CSDL: {}", normalizedEmail);
+
+            return RegisterResponse.builder()
+                    .email(user.getEmail())
+                    .fullName(user.getFullName())
+                    .emailVerified(true)
+                    .build();
+        }
+
+        // 2. Fallback luồng cũ (phục vụ tương thích ngược với unit tests):
         User existingUser = userRepository.findByEmail(normalizedEmail).orElse(null);
         if (existingUser != null) {
             if (Boolean.TRUE.equals(existingUser.getEmailVerified())) {
                 throw new BusinessException("Email đã được sử dụng: " + normalizedEmail);
             } else {
-                // Bảo mật: Không cho phép tùy ý ghi đè thông tin tài khoản chưa xác thực chỉ bằng email
                 throw new BusinessException("Email này đã được đăng ký nhưng chưa hoàn tất xác thực. Vui lòng kiểm tra hộp thư hoặc sử dụng tính năng gửi lại mã xác thực.");
             }
         }

@@ -137,6 +137,20 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
+   * Gửi mã OTP xác thực email trước khi tạo tài khoản.
+   */
+  sendRegistrationOtp: async (data) => {
+    try {
+      const res = await authService.sendRegistrationOtp(data)
+      return { success: true, message: res.message }
+    } catch (err) {
+      const message =
+        err.response?.data?.message || err.message || 'Không thể gửi mã xác thực lúc này'
+      throw new Error(message)
+    }
+  },
+
+  /**
    * Đăng ký tài khoản mới (CUSTOMER) — Không tự động authenticated, yêu cầu xác thực OTP.
    */
   register: async (formData) => {

@@ -38,4 +38,7 @@ public class RegisterRequest {
     private String phone;
 
     private String address;
+
+    /** Mã OTP xác thực email (6 chữ số). */
+    private String otp;
 }

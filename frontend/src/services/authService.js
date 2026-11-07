@@ -78,6 +78,15 @@ export const authService = {
   },
 
   /**
+   * Gửi mã OTP xác thực email trước khi tạo tài khoản.
+   * POST /api/v1/auth/send-registration-otp
+   */
+  async sendRegistrationOtp(data) {
+    const response = await apiClient.post('/auth/send-registration-otp', data)
+    return response.data // ApiResponse<Void>
+  },
+
+  /**
    * Xác thực OTP và đặt lại mật khẩu mới (TSK-D10-CCT).
    * POST /api/v1/auth/reset-password
    */
