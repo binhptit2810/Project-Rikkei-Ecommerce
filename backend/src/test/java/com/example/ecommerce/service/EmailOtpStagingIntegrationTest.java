@@ -54,8 +54,8 @@ import static org.mockito.Mockito.*;
     "spring.jpa.hibernate.ddl-auto=create-drop",
     "jwt.secret=staging-test-secret-key-must-be-at-least-32-chars-long-1234567890",
     "jwt.expiration=3600000",
-    "spring.data.redis.host=localhost",
-    "spring.data.redis.port=6379"
+    "spring.data.redis.host=${REDIS_HOST:localhost}",
+    "spring.data.redis.port=${REDIS_PORT:6379}"
 })
 class EmailOtpStagingIntegrationTest {
 
