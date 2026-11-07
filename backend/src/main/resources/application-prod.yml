@@ -1,10 +1,9 @@
 # =============================================================================
-# application-prod.yml — Cấu hình môi trường Production (Resend SMTP)
+# application-prod.yml — Cấu hình môi trường Production
 # =============================================================================
 
 app:
   mail:
-    # Môi trường Production bắt buộc sử dụng sender chính thức của domain mail.rikkei-shop.me
-    # Tuyệt đối không fallback sang onboarding@resend.dev
-    from: ${MAIL_FROM:noreply@mail.rikkei-shop.me}
+    from: ${MAIL_FROM:binhbadboy2810@gmail.com}
+    from-name: ${MAIL_FROM_NAME:Rikkei Store}
 

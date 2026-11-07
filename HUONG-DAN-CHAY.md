@@ -175,3 +175,19 @@ docker compose up -d redis
 
 ### 3. Lỗi `vite is not recognized` ở frontend
 Chạy lệnh `npm install` bên trong thư mục `frontend` trước khi chạy `npm run dev`.
+
+### 4. Lỗi gửi mã OTP xác thực email thất bại khi đăng ký
+1. **Kiểm tra file `.env`:** Đảm bảo bạn đã sao chép từ `.env.example`:
+   ```powershell
+   Copy-Item .env.example .env
+   ```
+   File `.env.example` đã nạp sẵn cấu hình Gmail SMTP và mã bí mật HMAC OTP chuẩn.
+2. **Kiểm tra Redis:** Tính năng OTP và Rate-limit yêu cầu Redis đang chạy tại cổng `6379`. Hãy bật Redis bằng:
+   ```powershell
+   docker compose up -d redis
+   ```
+3. **Số điện thoại không được trùng:** Mỗi số điện thoại chỉ được đăng ký cho 01 tài khoản duy nhất. Hãy nhập số điện thoại mới (10 số, bắt đầu bằng `0`).
+4. **Nếu chạy bằng Docker Compose:** Chạy lệnh build lại container để áp dụng cấu hình mới nhất:
+   ```powershell
+   docker compose up -d --build
+   ```

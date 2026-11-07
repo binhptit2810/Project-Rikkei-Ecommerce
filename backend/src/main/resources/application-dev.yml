@@ -1,10 +1,9 @@
 # =============================================================================
-# application-dev.yml — Cấu hình môi trường Development (Resend SMTP)
+# application-dev.yml — Cấu hình môi trường Development
 # =============================================================================
 
 app:
   mail:
-    # Môi trường Development sử dụng sender thử nghiệm của Resend
-    # Lưu ý: onboarding@resend.dev chỉ gửi được tới chính email chủ tài khoản Resend
-    from: ${MAIL_FROM:onboarding@resend.dev}
+    from: ${MAIL_FROM:binhbadboy2810@gmail.com}
+    from-name: ${MAIL_FROM_NAME:Rikkei Store}
 
