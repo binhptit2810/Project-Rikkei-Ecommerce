@@ -90,7 +90,7 @@ services:
       MAIL_SMTP_SSL_ENABLE: ${MAIL_SMTP_SSL_ENABLE:-false}
       MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-true}
       MAIL_SMTP_STARTTLS_REQUIRED: ${MAIL_SMTP_STARTTLS_REQUIRED:-true}
-      OTP_HMAC_SECRET: ${OTP_HMAC_SECRET:-}
+      OTP_HMAC_SECRET: ${OTP_HMAC_SECRET:-k9X2mP5vL8qR3wY6zF1nH4bC7jD0sT2x}
     volumes:
       - ./uploads:/app/uploads
     ports:
