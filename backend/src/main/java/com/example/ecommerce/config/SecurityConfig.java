@@ -122,7 +122,8 @@ public class SecurityConfig {
                 // GET sản phẩm và danh mục: khách vãng lai được xem
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/uploads/**").permitAll()
+                // Static assets & uploads
+                .requestMatchers("/api/v1/uploads/**", "/uploads/**").permitAll()
 
                 // --- Admin only ---
                 .requestMatchers("/api/v1/admin/**", "/admin/**").hasRole("ADMIN")
