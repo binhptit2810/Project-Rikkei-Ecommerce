@@ -134,3 +134,11 @@ logging:
     com.example.ecommerce: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+
+# =============================================================================
+# Cấu hình Google Gemini AI Chatbot Client (OpenAI-compatible) (TSK-D11-CCT)
+# =============================================================================
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+  base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta/openai/chat/completions}
+  model: ${GEMINI_MODEL:gemini-2.5-flash}
