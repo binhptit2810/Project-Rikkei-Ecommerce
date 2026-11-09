@@ -19,6 +19,7 @@ import {
   Clock,
   Package,
   X,
+  QrCode,
 } from 'lucide-react'
 import orderService from '../../services/orderService'
 import paymentService from '../../services/paymentService'
@@ -26,6 +27,7 @@ import { useCartStore } from '../../store/useCartStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import CancelOrderModal from './CancelOrderModal'
 import SimulatePaymentModal from './SimulatePaymentModal'
+import VNPayQRModal from './VNPayQRModal'
 import {
   OrderStatusBadge,
   PaymentStatusBadge,
@@ -106,6 +108,30 @@ export const OrderDetailPage = () => {
 
   // Simulate payment modal
   const [paymentModalOpen, setPaymentModalOpen] = useState(false)
+
+  // VNPay QR modal
+  const [vnpayQRModalOpen, setVnpayQRModalOpen] = useState(false)
+  const [vnpayQRData, setVnpayQRData] = useState(null)
+  const [loadingVNPayQR, setLoadingVNPayQR] = useState(false)
+
+  const handleOpenVNPayQR = async () => {
+    if (!order?.id) return
+    setLoadingVNPayQR(true)
+    try {
+      const res = await paymentService.createVNPayPayment(
+        order.id,
+        'NCB',
+        `Thanh toan don hang #${order.orderCode || order.id}`
+      )
+      const data = res?.data || res
+      setVnpayQRData(data)
+      setVnpayQRModalOpen(true)
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Không thể tạo mã QR VNPAY lúc này', 'error')
+    } finally {
+      setLoadingVNPayQR(false)
+    }
+  }
 
   // Reorder loading
   const [reordering, setReordering] = useState(false)
@@ -341,6 +367,16 @@ export const OrderDetailPage = () => {
         onError={handlePaymentError}
       />
 
+      {/* Modal Quét mã VNPAY-QR */}
+      <VNPayQRModal
+        isOpen={vnpayQRModalOpen}
+        order={order}
+        paymentData={vnpayQRData}
+        onClose={() => setVnpayQRModalOpen(false)}
+        onSuccess={handlePaymentSuccess}
+        onError={handlePaymentError}
+      />
+
       <div className="max-w-7xl mx-auto">
         {/* Thông báo chúc mừng khi vừa đặt hàng thành công */}
         {justCreated && !paymentFailedNotice && (
@@ -383,14 +419,25 @@ export const OrderDetailPage = () => {
                 <p className="text-xs text-amber-800 mt-1 leading-relaxed">
                   Giao dịch thanh toán mô phỏng chưa thành công. Giỏ hàng của bạn đã được giữ nguyên và đơn hàng vẫn đang ở trạng thái Chờ xác nhận. Bạn có thể nhấn nút bên dưới để thanh toán lại.
                 </p>
-                <button
-                  type="button"
-                  onClick={() => setPaymentModalOpen(true)}
-                  className="mt-3 inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 cursor-pointer"
-                >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>Thực hiện thanh toán mô phỏng ngay</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={handleOpenVNPayQR}
+                    disabled={loadingVNPayQR}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50"
+                  >
+                    <QrCode className="w-3.5 h-3.5" />
+                    <span>{loadingVNPayQR ? 'Đang tạo QR...' : 'Quét mã VNPAY-QR'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentModalOpen(true)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 transition-colors cursor-pointer"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>Mô phỏng tức thì</span>
+                  </button>
+                </div>
               </div>
             </div>
             <button
@@ -788,18 +835,23 @@ export const OrderDetailPage = () => {
 
                     {/* Nút hành động thanh toán mô phỏng khi chưa hoàn tất */}
                     {order.paymentStatus !== 'PAID' && order.orderStatus !== 'CANCELLED' && (
-                      <div className="pt-3 border-t border-slate-100">
+                      <div className="pt-3 border-t border-slate-100 space-y-2">
+                        <button
+                          type="button"
+                          onClick={handleOpenVNPayQR}
+                          disabled={loadingVNPayQR}
+                          className="w-full py-2.5 px-3 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-blue-500/20 disabled:opacity-50"
+                        >
+                          <QrCode className="w-3.5 h-3.5" />
+                          <span>{loadingVNPayQR ? 'Đang tạo QR...' : 'Quét mã VNPAY-QR'}</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => setPaymentModalOpen(true)}
-                          className="w-full py-2.5 px-3 rounded-xl text-xs font-bold text-white bg-zinc-900 hover:bg-zinc-800 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
+                          className="w-full py-2.5 px-3 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                         >
                           <CreditCard className="w-3.5 h-3.5" />
-                          <span>
-                            {order.paymentStatus === 'FAILED'
-                              ? 'Thử lại thanh toán mô phỏng'
-                              : 'Thực hiện thanh toán mô phỏng'}
-                          </span>
+                          <span>Mô phỏng tức thì</span>
                         </button>
                       </div>
                     )}

@@ -1,7 +1,9 @@
 package com.example.ecommerce.controller;
 
+import com.example.ecommerce.dto.request.CreateVNPayPaymentRequest;
 import com.example.ecommerce.dto.request.ProcessPaymentRequest;
 import com.example.ecommerce.dto.response.PaymentResponse;
+import com.example.ecommerce.dto.response.VNPayPaymentResponse;
 import com.example.ecommerce.entity.PaymentMethod;
 import com.example.ecommerce.entity.PaymentStatus;
 import com.example.ecommerce.service.PaymentService;
@@ -200,6 +202,72 @@ class PaymentControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.transactionCode").value(code));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/payments/create-vnpay: Sinh URL thanh toán VNPay Sandbox thành công")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void createVNPayPayment_Success() throws Exception {
+        CreateVNPayPaymentRequest request = CreateVNPayPaymentRequest.builder()
+                .orderId(15L)
+                .bankCode("NCB")
+                .orderInfo("Thanh toan don hang #15")
+                .build();
+
+        VNPayPaymentResponse response = VNPayPaymentResponse.builder()
+                .paymentUrl("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?vnp_Amount=150000000&vnp_TxnRef=PAY-20261109-12345678")
+                .vnpTxnRef("PAY-20261109-12345678")
+                .orderId(15L)
+                .amount(BigDecimal.valueOf(1500000))
+                .message("Tạo URL chuyển hướng thanh toán VNPay thành công")
+                .build();
+
+        when(paymentService.createVNPayPayment(any(CreateVNPayPaymentRequest.class), any(), eq("customer@example.com")))
+                .thenReturn(response);
+
+        mockMvc.perform(post("/api/v1/payments/create-vnpay")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.paymentUrl").value(response.getPaymentUrl()))
+                .andExpect(jsonPath("$.data.vnpTxnRef").value("PAY-20261109-12345678"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/payments/create-vnpay: Chưa đăng nhập trả 401 Unauthorized")
+    void createVNPayPayment_Unauthorized_Returns401() throws Exception {
+        CreateVNPayPaymentRequest request = CreateVNPayPaymentRequest.builder()
+                .orderId(15L)
+                .build();
+
+        mockMvc.perform(post("/api/v1/payments/create-vnpay")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/payments/vnpay-callback: Callback công khai không cần token xử lý thành công")
+    void handleVNPayCallback_Success() throws Exception {
+        PaymentResponse response = PaymentResponse.builder()
+                .id(1L)
+                .transactionCode("PAY-20261109-12345678")
+                .orderId(15L)
+                .status(PaymentStatus.PAID)
+                .build();
+
+        when(paymentService.processVNPayCallback(any()))
+                .thenReturn(response);
+
+        mockMvc.perform(get("/api/v1/payments/vnpay-callback")
+                        .param("vnp_TxnRef", "PAY-20261109-12345678")
+                        .param("vnp_ResponseCode", "00")
+                        .param("vnp_SecureHash", "mockedhash"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.transactionCode").value("PAY-20261109-12345678"))
+                .andExpect(jsonPath("$.data.status").value("PAID"));
     }
 }
 

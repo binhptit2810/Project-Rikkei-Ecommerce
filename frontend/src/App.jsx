@@ -22,6 +22,7 @@ import CartPage from './pages/shop/CartPage'
 import CheckoutPage from './pages/checkout/CheckoutPage'
 import OrderHistoryPage from './pages/orders/OrderHistoryPage'
 import OrderDetailPage from './pages/orders/OrderDetailPage'
+import VNPayReturnPage from './pages/orders/VNPayReturnPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
 import AdminProductsPage from './pages/admin/AdminProductsPage'
 import AdminCategoriesPage from './pages/admin/AdminCategoriesPage'
@@ -167,6 +168,7 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route path="/orders/vnpay-return" element={<VNPayReturnPage />} />
 
           {/* Error & Fallback Routes */}
           <Route path="/forbidden" element={<ForbiddenPage />} />

@@ -1,9 +1,13 @@
 package com.example.ecommerce.controller;
 
+import com.example.ecommerce.dto.request.CreateVNPayPaymentRequest;
 import com.example.ecommerce.dto.request.ProcessPaymentRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.PaymentResponse;
+import com.example.ecommerce.dto.response.VNPayPaymentResponse;
 import com.example.ecommerce.service.PaymentService;
+import com.example.ecommerce.util.VNPayUtil;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +15,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.Map;
 
 /**
  * Controller xử lý thanh toán và tra cứu giao dịch PAY- (Payment Module).
@@ -22,6 +28,42 @@ import org.springframework.web.bind.annotation.*;
 public class PaymentController {
 
     private final PaymentService paymentService;
+
+    /**
+     * Khởi tạo yêu cầu thanh toán VNPay và sinh URL chuyển hướng cổng thanh toán Sandbox.
+     * POST /api/v1/payments/create-vnpay
+     * POST /payments/create-vnpay
+     */
+    @PostMapping("/create-vnpay")
+    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    public ResponseEntity<ApiResponse<VNPayPaymentResponse>> createVNPayPayment(
+            @Valid @RequestBody(required = false) CreateVNPayPaymentRequest request,
+            @RequestParam(required = false) Long orderId,
+            HttpServletRequest httpRequest,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        String email = userDetails != null ? userDetails.getUsername() : null;
+        if (request == null) {
+            request = new CreateVNPayPaymentRequest();
+        }
+        if (request.getOrderId() == null && orderId != null) {
+            request.setOrderId(orderId);
+        }
+        String clientIp = VNPayUtil.getIpAddress(httpRequest);
+        VNPayPaymentResponse response = paymentService.createVNPayPayment(request, clientIp, email);
+        return ResponseEntity.ok(ApiResponse.success("Tạo URL thanh toán VNPay thành công", response));
+    }
+
+    /**
+     * Xử lý phản hồi (callback/IPN) trả về từ Cổng thanh toán VNPay.
+     * GET /api/v1/payments/vnpay-callback
+     * GET /payments/vnpay-callback
+     */
+    @GetMapping("/vnpay-callback")
+    public ResponseEntity<ApiResponse<PaymentResponse>> handleVNPayCallback(
+            @RequestParam Map<String, String> queryParams) {
+        PaymentResponse response = paymentService.processVNPayCallback(queryParams);
+        return ResponseEntity.ok(ApiResponse.success("Xử lý phản hồi thanh toán VNPay thành công", response));
+    }
 
     /**
      * Xử lý thanh toán đơn hàng (COD hoặc SIMULATED) và sinh/cập nhật mã giao dịch duy nhất PAY-.

@@ -1,13 +1,17 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.config.VNPayConfig;
+import com.example.ecommerce.dto.request.CreateVNPayPaymentRequest;
 import com.example.ecommerce.dto.request.ProcessPaymentRequest;
 import com.example.ecommerce.dto.response.PaymentResponse;
+import com.example.ecommerce.dto.response.VNPayPaymentResponse;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.repository.OrderRepository;
 import com.example.ecommerce.repository.PaymentRepository;
 import com.example.ecommerce.repository.UserRepository;
+import com.example.ecommerce.util.VNPayUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -19,6 +23,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,6 +49,12 @@ class PaymentServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private VNPayConfig vnPayConfig;
+
+    @Mock
+    private EmailService emailService;
 
     @InjectMocks
     private PaymentService paymentService;
@@ -368,6 +380,124 @@ class PaymentServiceTest {
             assertThat(response).isNotNull();
             assertThat(response.getOrderId()).isEqualTo(10L);
             assertThat(response.getTransactionCode()).startsWith("PAY-");
+        }
+    }
+
+    @Nested
+    @DisplayName("Thanh toán VNPay Sandbox (createVNPayPayment & processVNPayCallback)")
+    class VNPayPaymentTests {
+
+        private final String secretKey = "RAIQUIBGCARJHNLKZCPGUCUMRHQKGZDF";
+
+        @Test
+        @DisplayName("createVNPayPayment: Khởi tạo URL VNPay Sandbox thành công với đầy đủ chữ ký bảo mật")
+        void createVNPayPayment_Success() {
+            when(orderRepository.findById(10L)).thenReturn(Optional.of(testOrder));
+            when(userRepository.findByEmail(customer.getEmail())).thenReturn(Optional.of(customer));
+            when(paymentRepository.findByOrderId(10L)).thenReturn(Optional.of(existingPayment));
+            when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            when(vnPayConfig.getVersion()).thenReturn("2.1.0");
+            when(vnPayConfig.getCommand()).thenReturn("pay");
+            when(vnPayConfig.getTmnCode()).thenReturn("2QXUI4J4");
+            when(vnPayConfig.getCurrCode()).thenReturn("VND");
+            when(vnPayConfig.getOrderType()).thenReturn("other");
+            when(vnPayConfig.getLocale()).thenReturn("vn");
+            when(vnPayConfig.getReturnUrl()).thenReturn("http://localhost:3000/orders/vnpay-return");
+            when(vnPayConfig.getPayUrl()).thenReturn("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html");
+            when(vnPayConfig.getHashSecret()).thenReturn(secretKey);
+
+            CreateVNPayPaymentRequest request = CreateVNPayPaymentRequest.builder()
+                    .orderId(10L)
+                    .bankCode("NCB")
+                    .orderInfo("Thanh toan don hang test")
+                    .build();
+
+            VNPayPaymentResponse response = paymentService.createVNPayPayment(request, "127.0.0.1", customer.getEmail());
+
+            assertThat(response).isNotNull();
+            assertThat(response.getOrderId()).isEqualTo(10L);
+            assertThat(response.getPaymentUrl()).contains("https://sandbox.vnpayment.vn/paymentv2/vpcpay.html?");
+            assertThat(response.getPaymentUrl()).contains("vnp_TmnCode=2QXUI4J4");
+            assertThat(response.getPaymentUrl()).contains("vnp_BankCode=NCB");
+            assertThat(response.getPaymentUrl()).contains("vnp_SecureHash=");
+            assertThat(response.getVnpTxnRef()).isNotNull();
+        }
+
+        @Test
+        @DisplayName("createVNPayPayment: Đơn hàng đã hủy ném BusinessException")
+        void createVNPayPayment_CancelledOrder_ThrowsException() {
+            testOrder.setOrderStatus(OrderStatus.CANCELLED);
+            when(orderRepository.findById(10L)).thenReturn(Optional.of(testOrder));
+            when(userRepository.findByEmail(customer.getEmail())).thenReturn(Optional.of(customer));
+
+            CreateVNPayPaymentRequest request = CreateVNPayPaymentRequest.builder()
+                    .orderId(10L)
+                    .build();
+
+            assertThatThrownBy(() -> paymentService.createVNPayPayment(request, "127.0.0.1", customer.getEmail()))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("Không thể thanh toán cho đơn hàng đã bị hủy");
+        }
+
+        @Test
+        @DisplayName("createVNPayPayment: Đơn hàng đã thanh toán PAID ném BusinessException")
+        void createVNPayPayment_AlreadyPaid_ThrowsException() {
+            testOrder.setPaymentStatus(PaymentStatus.PAID);
+            when(orderRepository.findById(10L)).thenReturn(Optional.of(testOrder));
+            when(userRepository.findByEmail(customer.getEmail())).thenReturn(Optional.of(customer));
+
+            CreateVNPayPaymentRequest request = CreateVNPayPaymentRequest.builder()
+                    .orderId(10L)
+                    .build();
+
+            assertThatThrownBy(() -> paymentService.createVNPayPayment(request, "127.0.0.1", customer.getEmail()))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("Đơn hàng này đã được thanh toán thành công");
+        }
+
+        @Test
+        @DisplayName("processVNPayCallback: Xử lý thành công cập nhật trạng thái PAID cho đơn hàng")
+        void processVNPayCallback_Success() {
+            when(vnPayConfig.getHashSecret()).thenReturn(secretKey);
+
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("vnp_Amount", "150000000");
+            queryParams.put("vnp_BankCode", "NCB");
+            queryParams.put("vnp_ResponseCode", "00");
+            queryParams.put("vnp_TxnRef", existingPayment.getTransactionCode());
+            queryParams.put("vnp_TransactionNo", "14567890");
+
+            String secureHash = VNPayUtil.hashAllFields(queryParams, secretKey);
+            queryParams.put("vnp_SecureHash", secureHash);
+
+            when(paymentRepository.findByTransactionCode(existingPayment.getTransactionCode()))
+                    .thenReturn(Optional.of(existingPayment));
+            when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+            when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+            PaymentResponse response = paymentService.processVNPayCallback(queryParams);
+
+            assertThat(response).isNotNull();
+            assertThat(response.getStatus()).isEqualTo(PaymentStatus.PAID);
+            assertThat(testOrder.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
+            assertThat(testOrder.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+        }
+
+        @Test
+        @DisplayName("processVNPayCallback: Chữ ký không hợp lệ ném BusinessException")
+        void processVNPayCallback_InvalidSignature_ThrowsException() {
+            when(vnPayConfig.getHashSecret()).thenReturn(secretKey);
+
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("vnp_Amount", "150000000");
+            queryParams.put("vnp_ResponseCode", "00");
+            queryParams.put("vnp_TxnRef", "PAY-INVALID");
+            queryParams.put("vnp_SecureHash", "invalid-hash-value");
+
+            assertThatThrownBy(() -> paymentService.processVNPayCallback(queryParams))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("Chữ ký bảo mật VNPay không hợp lệ");
         }
     }
 }

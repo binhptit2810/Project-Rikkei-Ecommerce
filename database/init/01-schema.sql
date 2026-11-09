@@ -134,7 +134,7 @@ CREATE TABLE IF NOT EXISTS payments (
     id                BIGINT AUTO_INCREMENT PRIMARY KEY,
     order_id          BIGINT NOT NULL UNIQUE,
     transaction_code  VARCHAR(64) UNIQUE,        -- Mã giao dịch định dạng PAY-YYYYMMDD-XXXX
-    payment_method    ENUM('COD', 'SIMULATED') NOT NULL,
+    payment_method    ENUM('COD', 'SIMULATED', 'VNPAY') NOT NULL,
     status            ENUM('UNPAID','PAID','FAILED','REFUNDED') NOT NULL DEFAULT 'UNPAID',
     amount            DECIMAL(15, 2) NOT NULL CHECK (amount >= 0),
     transaction_note  VARCHAR(255),              -- Ghi chú kết quả mô phỏng
