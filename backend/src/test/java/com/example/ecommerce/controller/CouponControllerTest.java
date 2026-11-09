@@ -3,6 +3,7 @@ package com.example.ecommerce.controller;
 import com.example.ecommerce.dto.request.ValidateCouponRequest;
 import com.example.ecommerce.dto.response.CouponValidationResponse;
 import com.example.ecommerce.entity.DiscountType;
+import com.example.ecommerce.entity.Coupon;
 import com.example.ecommerce.service.CouponService;
 import com.example.ecommerce.service.RefreshTokenService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,10 +19,12 @@ import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -109,5 +112,40 @@ class CouponControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest());
     }
-}
 
+    @Test
+    @DisplayName("GET /api/v1/coupons/active: Lấy danh sách mã giảm giá đang hoạt động")
+    void getActiveCoupons_Success() throws Exception {
+        Coupon c = Coupon.builder()
+                .id(1L)
+                .code("ACTIVE10")
+                .discountType(DiscountType.PERCENT)
+                .discountValue(BigDecimal.TEN)
+                .active(true)
+                .build();
+        when(couponService.getActiveCoupons()).thenReturn(List.of(c));
+
+        mockMvc.perform(get("/api/v1/coupons/active"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].code").value("ACTIVE10"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/coupons/{code}: Tra cứu chi tiết một mã giảm giá thành công")
+    void getCouponByCode_Success() throws Exception {
+        Coupon c = Coupon.builder()
+                .id(2L)
+                .code("SUMMER20")
+                .discountType(DiscountType.PERCENT)
+                .discountValue(BigDecimal.valueOf(20))
+                .active(true)
+                .build();
+        when(couponService.getCouponByCode("SUMMER20")).thenReturn(c);
+
+        mockMvc.perform(get("/api/v1/coupons/SUMMER20"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.code").value("SUMMER20"));
+    }
+}

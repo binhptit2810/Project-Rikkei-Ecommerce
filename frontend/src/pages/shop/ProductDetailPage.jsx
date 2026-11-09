@@ -14,7 +14,6 @@ import {
   Plus,
   Star,
   Zap,
-  Heart
 } from 'lucide-react'
 import productService from '../../services/productService'
 import { useCartStore } from '../../store/useCartStore'

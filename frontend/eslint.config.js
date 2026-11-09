@@ -26,6 +26,8 @@ export default [
         window: 'readonly',
         document: 'readonly',
         console: 'readonly',
+        alert: 'readonly',
+        FormData: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         setInterval: 'readonly',

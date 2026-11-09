@@ -2,6 +2,7 @@ import React from 'react'
 import { Outlet } from 'react-router-dom'
 import Navbar from './Navbar'
 import Footer from './Footer'
+import ChatWidget from './ChatWidget'
 
 /**
  * Layout dành riêng cho khu vực khách hàng (Customer Layout).
@@ -15,6 +16,7 @@ export const CustomerLayout = () => {
         <Outlet />
       </main>
       <Footer />
+      <ChatWidget />
     </div>
   )
 }

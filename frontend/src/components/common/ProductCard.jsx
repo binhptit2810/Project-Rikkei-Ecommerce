@@ -33,7 +33,6 @@ export const ProductCard = ({ product, onAddToCart }) => {
     product.stockQuantity === undefined ||
     product.stockQuantity === null ||
     Number(product.stockQuantity) <= 0
-  const stockCount = Number(product.stockQuantity) || 0
 
   // Định dạng giá chuẩn VNĐ
   const formattedPrice = new Intl.NumberFormat('vi-VN', {
