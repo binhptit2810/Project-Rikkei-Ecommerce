@@ -3,6 +3,7 @@ package com.example.ecommerce.service;
 import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
+import com.example.ecommerce.dto.request.SendRegistrationOtpRequest;
 import com.example.ecommerce.dto.request.ResetPasswordRequest;
 import com.example.ecommerce.dto.request.ResendVerificationRequest;
 import com.example.ecommerce.dto.request.VerifyEmailRequest;
@@ -1298,5 +1299,109 @@ class AuthServiceTest {
         // Should execute successfully without throwing exception
         authService.validateOtpHmacSecret();
     }
-}
 
+    @Test
+    @DisplayName("sendRegistrationOtp thành công")
+    void sendRegistrationOtp_Success() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
+        when(userRepository.existsByPhone("0987654321")).thenReturn(false);
+        when(valueOperations.setIfAbsent(eq("auth:verify_ratelimit:newuser@example.com"), anyString(), eq(60L), eq(TimeUnit.SECONDS)))
+                .thenReturn(true);
+
+        SendRegistrationOtpRequest req = SendRegistrationOtpRequest.builder()
+                .email("newuser@example.com")
+                .fullName("Nguyen Van B")
+                .phone("0987654321")
+                .build();
+
+        authService.sendRegistrationOtp(req);
+
+        verify(emailService, times(1)).sendVerificationOtpEmail(eq("newuser@example.com"), anyString(), eq("Nguyen Van B"));
+    }
+
+    @Test
+    @DisplayName("sendRegistrationOtp ném lỗi khi email đã được xác thực")
+    void sendRegistrationOtp_Throws_WhenEmailAlreadyVerified() {
+        when(userRepository.findByEmail("testuser@example.com")).thenReturn(Optional.of(mockUser));
+
+        SendRegistrationOtpRequest req = SendRegistrationOtpRequest.builder()
+                .email("testuser@example.com")
+                .build();
+
+        assertThatThrownBy(() -> authService.sendRegistrationOtp(req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Email đã được sử dụng");
+    }
+
+    @Test
+    @DisplayName("sendRegistrationOtp ném lỗi khi số điện thoại đã tồn tại")
+    void sendRegistrationOtp_Throws_WhenPhoneExists() {
+        when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
+        when(userRepository.existsByPhone("0987654321")).thenReturn(true);
+
+        SendRegistrationOtpRequest req = SendRegistrationOtpRequest.builder()
+                .email("newuser@example.com")
+                .phone("0987654321")
+                .build();
+
+        assertThatThrownBy(() -> authService.sendRegistrationOtp(req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Số điện thoại này đã được sử dụng");
+    }
+
+    @Test
+    @DisplayName("sendRegistrationOtp ném lỗi khi bị rate limit 60s")
+    void sendRegistrationOtp_Throws_WhenRateLimited() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
+        when(userRepository.existsByPhone("0987654321")).thenReturn(false);
+        when(valueOperations.setIfAbsent(eq("auth:verify_ratelimit:newuser@example.com"), anyString(), eq(60L), eq(TimeUnit.SECONDS)))
+                .thenReturn(false);
+
+        SendRegistrationOtpRequest req = SendRegistrationOtpRequest.builder()
+                .email("newuser@example.com")
+                .phone("0987654321")
+                .build();
+
+        assertThatThrownBy(() -> authService.sendRegistrationOtp(req))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vui lòng đợi 60 giây");
+    }
+
+    @Test
+    @DisplayName("register với OTP hợp lệ thành công")
+    void register_WithOtp_Success() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(userRepository.findByEmail("newuser@example.com")).thenReturn(Optional.empty());
+        when(userRepository.existsByPhone("0987654321")).thenReturn(false);
+
+        String otp = "123456";
+        String secret = "test-otp-hmac-secret-key-at-least-32-chars";
+        String expectedHmac = ReflectionTestUtils.invokeMethod(authService, "calculateHmac", otp, secret);
+        when(valueOperations.get("auth:verify_otp:newuser@example.com")).thenReturn(expectedHmac);
+
+        when(passwordEncoder.encode(anyString())).thenReturn("$2a$12$encodedPassword");
+        User savedUser = User.builder()
+                .id(99L)
+                .email("newuser@example.com")
+                .fullName("Nguyen Van C")
+                .role(Role.CUSTOMER)
+                .active(true)
+                .emailVerified(true)
+                .build();
+        when(userRepository.save(any(User.class))).thenReturn(savedUser);
+
+        RegisterRequest req = new RegisterRequest();
+        req.setEmail("newuser@example.com");
+        req.setPassword("Password123@");
+        req.setFullName("Nguyen Van C");
+        req.setPhone("0987654321");
+        req.setOtp("123456");
+
+        RegisterResponse resp = authService.register(req);
+        assertThat(resp).isNotNull();
+        assertThat(resp.getEmail()).isEqualTo("newuser@example.com");
+        assertThat(resp.getEmailVerified()).isTrue();
+    }
+}

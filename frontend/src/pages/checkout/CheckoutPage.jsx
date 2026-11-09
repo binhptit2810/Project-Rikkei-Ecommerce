@@ -11,7 +11,6 @@ import {
   MapPin,
   FileText,
   Lock,
-  Zap,
   Tag,
   X,
 } from 'lucide-react'

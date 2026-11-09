@@ -3,6 +3,7 @@ package com.example.ecommerce.controller;
 import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
+import com.example.ecommerce.dto.request.SendRegistrationOtpRequest;
 import com.example.ecommerce.dto.request.ResetPasswordRequest;
 import com.example.ecommerce.dto.request.ResendVerificationRequest;
 import com.example.ecommerce.dto.request.VerifyEmailRequest;
@@ -29,6 +30,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doNothing;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -471,5 +473,23 @@ class AuthControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false))
                 .andExpect(jsonPath("$.data.confirmPassword").value("Xác nhận mật khẩu mới không được để trống"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/send-registration-otp thành công trả 200 OK")
+    void sendRegistrationOtp_Success() throws Exception {
+        SendRegistrationOtpRequest request = SendRegistrationOtpRequest.builder()
+                .email("testnew@example.com")
+                .fullName("Nguyen Van Test")
+                .phone("0987654321")
+                .build();
+
+        doNothing().when(authService).sendRegistrationOtp(any(SendRegistrationOtpRequest.class));
+
+        mockMvc.perform(post("/api/v1/auth/send-registration-otp")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
     }
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { useSearchParams, Link, useNavigate } from 'react-router-dom'
-import { CheckCircle2, XCircle, ArrowRight, Home, CreditCard, ShieldCheck } from 'lucide-react'
+import { useSearchParams, Link } from 'react-router-dom'
+import { CheckCircle2, XCircle, ArrowRight, Home, CreditCard } from 'lucide-react'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import paymentService from '../../services/paymentService'
 import { formatPrice } from './OrderBadges'
@@ -11,7 +11,6 @@ import { formatPrice } from './OrderBadges'
  */
 export const VNPayReturnPage = () => {
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
   const [success, setSuccess] = useState(false)

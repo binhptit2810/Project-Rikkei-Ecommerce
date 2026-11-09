@@ -7,9 +7,6 @@ import {
   ShieldCheck,
   AlertCircle,
   X,
-  CreditCard,
-  RefreshCw,
-  Sparkles,
 } from 'lucide-react'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import paymentService from '../../services/paymentService'

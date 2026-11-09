@@ -136,4 +136,25 @@ class AdminInventoryControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.totalElements").value(1));
     }
+
+    @Test
+    @DisplayName("GET /api/v1/admin/inventory/{id}/transactions: ADMIN tra cứu lịch sử theo sản phẩm thành công")
+    @WithMockUser(username = "admin@eshop.com", roles = {"ADMIN"})
+    void getTransactionsByProduct_Success_WhenAdmin() throws Exception {
+        InventoryTransactionResponse tx = InventoryTransactionResponse.builder()
+                .id(2L)
+                .productId(15L)
+                .changeQuantity(5)
+                .stockAfter(20)
+                .transactionType(InventoryTransactionType.MANUAL_IMPORT)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        when(inventoryService.getTransactionsByProduct(15L)).thenReturn(List.of(tx));
+
+        mockMvc.perform(get("/api/v1/admin/inventory/15/transactions"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].id").value(2));
+    }
 }

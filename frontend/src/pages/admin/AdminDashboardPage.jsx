@@ -11,7 +11,6 @@ import {
   Tags,
   ClipboardList,
   RefreshCw,
-  User,
   AlertTriangle,
   Clock,
   TrendingUp,
