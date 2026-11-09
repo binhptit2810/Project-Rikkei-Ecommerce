@@ -24,6 +24,8 @@ public class ProductResponse {
     private String categoryName;
     private Integer stockQuantity;
     private Boolean active;
+    private Double ratingAverage;
+    private Integer totalReviews;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -48,6 +50,8 @@ public class ProductResponse {
                 .categoryName(catName)
                 .stockQuantity(product.getStockQuantity())
                 .active(product.getActive())
+                .ratingAverage(product.getRatingAverage() != null ? product.getRatingAverage() : 0.0)
+                .totalReviews(product.getTotalReviews() != null ? product.getTotalReviews() : 0)
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())
                 .build();
