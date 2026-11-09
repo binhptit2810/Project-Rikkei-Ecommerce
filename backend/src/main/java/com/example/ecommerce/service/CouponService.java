@@ -35,7 +35,7 @@ public class CouponService {
     private final CouponRepository couponRepository;
 
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-    private static final NumberFormat CURRENCY_FORMAT = NumberFormat.getInstance(new Locale("vi", "VN"));
+    private static final NumberFormat CURRENCY_FORMAT = NumberFormat.getInstance(Locale.of("vi", "VN"));
 
     /**
      * Kiểm tra tính hợp lệ và điều kiện áp mã giảm giá khi checkout.

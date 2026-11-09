@@ -47,7 +47,6 @@ import java.util.UUID;
  * - Quản trị viên lấy danh sách đơn hàng hệ thống và cập nhật trạng thái (updateOrderStatus).
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class OrderService {
 
@@ -59,6 +58,38 @@ public class OrderService {
     private final EmailService emailService;
     private final CouponService couponService;
     private final com.example.ecommerce.repository.CouponRepository couponRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public OrderService(
+            OrderRepository orderRepository,
+            ProductRepository productRepository,
+            UserRepository userRepository,
+            InventoryService inventoryService,
+            PaymentService paymentService,
+            EmailService emailService,
+            CouponService couponService,
+            com.example.ecommerce.repository.CouponRepository couponRepository
+    ) {
+        this.orderRepository = orderRepository;
+        this.productRepository = productRepository;
+        this.userRepository = userRepository;
+        this.inventoryService = inventoryService;
+        this.paymentService = paymentService;
+        this.emailService = emailService;
+        this.couponService = couponService;
+        this.couponRepository = couponRepository;
+    }
+
+    public OrderService(
+            OrderRepository orderRepository,
+            ProductRepository productRepository,
+            UserRepository userRepository,
+            InventoryService inventoryService,
+            PaymentService paymentService,
+            EmailService emailService
+    ) {
+        this(orderRepository, productRepository, userRepository, inventoryService, paymentService, emailService, null, null);
+    }
 
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 100;
@@ -161,7 +192,7 @@ public class OrderService {
         }
 
         BigDecimal discountAmount = BigDecimal.ZERO;
-        if (request.getCouponCode() != null && !request.getCouponCode().trim().isEmpty()) {
+        if (request.getCouponCode() != null && !request.getCouponCode().trim().isEmpty() && couponService != null) {
             discountAmount = couponService.applyCouponForOrder(request.getCouponCode().trim(), totalAmount);
             order.setCouponCode(request.getCouponCode().trim().toUpperCase());
             order.setDiscountAmount(discountAmount);
@@ -368,7 +399,7 @@ public class OrderService {
         }
 
         // Hoàn lại 1 lượt sử dụng cho mã giảm giá nếu có
-        if (order.getCouponCode() != null && !order.getCouponCode().trim().isEmpty()) {
+        if (order.getCouponCode() != null && !order.getCouponCode().trim().isEmpty() && couponRepository != null) {
             try {
                 couponRepository.findByCodeForUpdate(order.getCouponCode()).ifPresent(c -> {
                     if (c.getUsedCount() != null && c.getUsedCount() > 0) {
