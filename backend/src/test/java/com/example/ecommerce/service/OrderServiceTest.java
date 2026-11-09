@@ -54,6 +54,15 @@ class OrderServiceTest {
     @Mock
     private PaymentService paymentService;
 
+    @Mock
+    private EmailService emailService;
+
+    @Mock
+    private CouponService couponService;
+
+    @Mock
+    private com.example.ecommerce.repository.CouponRepository couponRepository;
+
     @InjectMocks
     private OrderService orderService;
 

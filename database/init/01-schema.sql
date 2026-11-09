@@ -166,3 +166,25 @@ CREATE TABLE IF NOT EXISTS inventory_transactions (
     INDEX idx_inv_product (product_id),
     INDEX idx_inv_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================================
+-- Bảng coupons — Mã giảm giá / Khuyến mãi
+-- discount_type: PERCENT (giảm %) hoặc FIXED (giảm số tiền cố định)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS coupons (
+    id               BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code             VARCHAR(50) NOT NULL UNIQUE,
+    discount_type    ENUM('PERCENT', 'FIXED') NOT NULL,
+    discount_value   DECIMAL(15, 2) NOT NULL CHECK (discount_value > 0),
+    min_order_value  DECIMAL(15, 2) DEFAULT 0 CHECK (min_order_value >= 0),
+    max_discount     DECIMAL(15, 2) CHECK (max_discount IS NULL OR max_discount >= 0),
+    usage_limit      INT DEFAULT NULL CHECK (usage_limit IS NULL OR usage_limit >= 0),
+    used_count       INT NOT NULL DEFAULT 0 CHECK (used_count >= 0),
+    expire_at        DATETIME,
+    active           BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_coupons_code (code),
+    INDEX idx_coupons_active (active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

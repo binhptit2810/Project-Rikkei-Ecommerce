@@ -1,8 +1,11 @@
 package com.example.ecommerce.config;
 
 import com.example.ecommerce.entity.Category;
+import com.example.ecommerce.entity.Coupon;
+import com.example.ecommerce.entity.DiscountType;
 import com.example.ecommerce.entity.Product;
 import com.example.ecommerce.repository.CategoryRepository;
+import com.example.ecommerce.repository.CouponRepository;
 import com.example.ecommerce.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,6 +14,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 
@@ -27,11 +31,15 @@ public class DataInitializer implements CommandLineRunner {
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final CouponRepository couponRepository;
 
     private static final String WATCH_IMAGE_FRAGMENT = "photo-1523275335684-37898b6baf30";
 
     @Override
     public void run(String... args) {
+        // Khởi tạo các mã giảm giá mẫu nếu bảng coupons đang trống
+        initCouponsIfEmpty();
+
         // 1. Tự động rà soát và sửa ảnh các sản phẩm đã có nếu bị gán nhầm ảnh đồng hồ
         fixExistingMismatchedImages();
 
@@ -327,5 +335,71 @@ public class DataInitializer implements CommandLineRunner {
                 .stockQuantity(stock)
                 .active(true)
                 .build();
+    }
+
+    private void initCouponsIfEmpty() {
+        try {
+            long couponCount = couponRepository.count();
+            if (couponCount == 0) {
+                log.info("Bảng coupons chưa có dữ liệu. Đang tự động nạp các mã giảm giá mẫu...");
+                couponRepository.saveAll(List.of(
+                        Coupon.builder()
+                                .code("WELCOME10")
+                                .discountType(DiscountType.PERCENT)
+                                .discountValue(BigDecimal.valueOf(10))
+                                .minOrderValue(BigDecimal.valueOf(200000))
+                                .maxDiscount(BigDecimal.valueOf(50000))
+                                .usageLimit(100)
+                                .usedCount(0)
+                                .expireAt(LocalDateTime.now().plusDays(30))
+                                .active(true)
+                                .build(),
+                        Coupon.builder()
+                                .code("GIAM50K")
+                                .discountType(DiscountType.FIXED)
+                                .discountValue(BigDecimal.valueOf(50000))
+                                .minOrderValue(BigDecimal.valueOf(300000))
+                                .usageLimit(50)
+                                .usedCount(0)
+                                .expireAt(LocalDateTime.now().plusDays(15))
+                                .active(true)
+                                .build(),
+                        Coupon.builder()
+                                .code("FREESHIP")
+                                .discountType(DiscountType.FIXED)
+                                .discountValue(BigDecimal.valueOf(30000))
+                                .minOrderValue(BigDecimal.valueOf(150000))
+                                .usageLimit(200)
+                                .usedCount(0)
+                                .expireAt(LocalDateTime.now().plusDays(60))
+                                .active(true)
+                                .build(),
+                        Coupon.builder()
+                                .code("EXPIRED20")
+                                .discountType(DiscountType.PERCENT)
+                                .discountValue(BigDecimal.valueOf(20))
+                                .minOrderValue(BigDecimal.valueOf(100000))
+                                .maxDiscount(BigDecimal.valueOf(100000))
+                                .usageLimit(10)
+                                .usedCount(0)
+                                .expireAt(LocalDateTime.now().minusDays(1))
+                                .active(true)
+                                .build(),
+                        Coupon.builder()
+                                .code("MAXOUT")
+                                .discountType(DiscountType.FIXED)
+                                .discountValue(BigDecimal.valueOf(20000))
+                                .minOrderValue(BigDecimal.valueOf(100000))
+                                .usageLimit(5)
+                                .usedCount(5)
+                                .expireAt(LocalDateTime.now().plusDays(10))
+                                .active(true)
+                                .build()
+                ));
+                log.info("Đã nạp thành công 5 mã giảm giá mẫu vào cơ sở dữ liệu.");
+            }
+        } catch (Exception e) {
+            log.warn("Không thể tự động nạp coupons mẫu: {}", e.getMessage());
+        }
     }
 }

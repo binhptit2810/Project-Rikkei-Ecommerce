@@ -57,6 +57,8 @@ public class OrderService {
     private final InventoryService inventoryService;
     private final PaymentService paymentService;
     private final EmailService emailService;
+    private final CouponService couponService;
+    private final com.example.ecommerce.repository.CouponRepository couponRepository;
 
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 100;
@@ -156,6 +158,14 @@ public class OrderService {
                     .build();
 
             order.addItem(orderItem);
+        }
+
+        BigDecimal discountAmount = BigDecimal.ZERO;
+        if (request.getCouponCode() != null && !request.getCouponCode().trim().isEmpty()) {
+            discountAmount = couponService.applyCouponForOrder(request.getCouponCode().trim(), totalAmount);
+            order.setCouponCode(request.getCouponCode().trim().toUpperCase());
+            order.setDiscountAmount(discountAmount);
+            totalAmount = totalAmount.subtract(discountAmount).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
         }
 
         order.setTotalAmount(totalAmount);
@@ -355,6 +365,21 @@ public class OrderService {
                 );
             }
             log.info("Đã tự động chuyển trạng thái thanh toán đơn #{} sang REFUNDED", order.getOrderCode());
+        }
+
+        // Hoàn lại 1 lượt sử dụng cho mã giảm giá nếu có
+        if (order.getCouponCode() != null && !order.getCouponCode().trim().isEmpty()) {
+            try {
+                couponRepository.findByCodeForUpdate(order.getCouponCode()).ifPresent(c -> {
+                    if (c.getUsedCount() != null && c.getUsedCount() > 0) {
+                        c.setUsedCount(c.getUsedCount() - 1);
+                        couponRepository.save(c);
+                        log.info("Đã hoàn lại 1 lượt sử dụng cho mã giảm giá '{}'", c.getCode());
+                    }
+                });
+            } catch (Exception e) {
+                log.warn("Không thể hoàn lượt sử dụng mã coupon: {}", order.getCouponCode(), e);
+            }
         }
 
         Order updatedOrder = orderRepository.save(order);
@@ -613,6 +638,8 @@ public class OrderService {
                 .paymentMethodDescription(paymentMethodDesc)
                 .transactionCode(transactionCode)
                 .note(order.getNote())
+                .couponCode(order.getCouponCode())
+                .discountAmount(order.getDiscountAmount())
                 .itemCount(itemCount)
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())

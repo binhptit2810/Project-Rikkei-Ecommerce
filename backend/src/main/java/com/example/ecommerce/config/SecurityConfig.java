@@ -126,6 +126,9 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()
                 // Static assets & uploads
                 .requestMatchers("/api/v1/uploads/**", "/uploads/**").permitAll()
+                // Coupons: xem và validate mã giảm giá
+                .requestMatchers(HttpMethod.POST, "/api/v1/coupons/validate").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/coupons/**").permitAll()
 
                 // --- Admin only ---
                 .requestMatchers("/api/v1/admin/**", "/admin/**").hasRole("ADMIN")
