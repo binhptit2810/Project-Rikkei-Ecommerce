@@ -80,7 +80,7 @@ public class CorsConfig implements WebMvcConfigurer {
         if (!location.endsWith("/")) {
             location += "/";
         }
-        registry.addResourceHandler("/api/v1/uploads/**")
+        registry.addResourceHandler("/api/v1/uploads/**", "/uploads/**")
                 .addResourceLocations(location);
     }
 }

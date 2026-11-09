@@ -12,6 +12,10 @@ export default defineConfig({
         target: process.env.BACKEND_URL || 'http://localhost:8080',
         changeOrigin: true,
         rewrite: (path) => path, // giữ nguyên path /api/v1/...
+      },
+      '/uploads': {
+        target: process.env.BACKEND_URL || 'http://localhost:8080',
+        changeOrigin: true,
       }
     }
   },

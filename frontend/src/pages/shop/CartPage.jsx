@@ -184,7 +184,7 @@ export const CartPage = () => {
                             onError={(e) => {
                               e.currentTarget.onerror = null
                               e.currentTarget.src =
-                                'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=200&auto=format&fit=crop&q=80'
+                                'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=200&auto=format&fit=crop&q=80'
                             }}
                           />
                         ) : (
