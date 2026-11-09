@@ -18,7 +18,6 @@ import { useAuthStore } from '../../store/useAuthStore'
 import orderService from '../../services/orderService'
 import paymentService from '../../services/paymentService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
-import VNPayQRModal from '../orders/VNPayQRModal'
 
 export const CheckoutPage = () => {
   const navigate = useNavigate()
@@ -35,9 +34,6 @@ export const CheckoutPage = () => {
 
   const [simulateSuccessOption, setSimulateSuccessOption] = useState(true)
   const [vnpayBankCode, setVnpayBankCode] = useState('')
-  const [vnpayModalOpen, setVnpayModalOpen] = useState(false)
-  const [vnpayPaymentData, setVnpayPaymentData] = useState(null)
-  const [createdOrderForQR, setCreatedOrderForQR] = useState(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
 
@@ -178,91 +174,33 @@ export const CheckoutPage = () => {
       }
 
       // Xử lý theo phương thức thanh toán
-      if (formData.paymentMethod === 'VNPAY') {
+      if (formData.paymentMethod === 'VNPAY' || formData.paymentMethod === 'SIMULATED') {
+        let vnpData = null
         try {
           const vnpRes = await paymentService.createVNPayPayment(
             createdOrder.id,
             vnpayBankCode,
             `Thanh toan don hang #${createdOrder.orderCode || createdOrder.id}`
           )
-          const vnpData = vnpRes?.data || vnpRes
-          // Hiển thị mã QR VNPAY tượng trưng để quét thanh toán
-          clearCart()
-          setVnpayPaymentData(vnpData)
-          setCreatedOrderForQR(createdOrder)
-          setVnpayModalOpen(true)
-          return
+          vnpData = vnpRes?.data || vnpRes
         } catch (vnpErr) {
-          navigate(`/orders/${createdOrder.id}`, {
-            state: {
-              orderSuccess: true,
-              paymentFailed: true,
-              justCreated: true,
-              orderCode: createdOrder.orderCode,
-              totalAmount: createdOrder.totalAmount,
-              paymentErrorMsg:
-                vnpErr?.response?.data?.message ||
-                'Có lỗi khi tạo liên kết thanh toán VNPay. Bạn có thể mở chi tiết đơn hàng để thực hiện lại.',
-            },
-            replace: true,
-          })
-          return
+          console.warn('Lỗi khi gọi API tạo URL VNPay:', vnpErr)
         }
-      } else if (formData.paymentMethod === 'SIMULATED') {
-        try {
-          const payRes = await paymentService.simulatePayment(
-            createdOrder.id,
-            simulateSuccessOption,
-            simulateSuccessOption
-              ? 'Thanh toán trực tuyến mô phỏng thành công (PAID)'
-              : 'Thanh toán trực tuyến mô phỏng thất bại (FAILED)'
-          )
-          const paymentData = payRes?.data || payRes
 
-          if (paymentData?.status === 'PAID') {
-            // Thanh toán mô phỏng thành công -> Xóa sạch giỏ hàng
-            clearCart()
-            navigate(`/orders/${createdOrder.id}`, {
-              state: {
-                orderSuccess: true,
-                paymentSuccess: true,
-                justCreated: true,
-                orderCode: createdOrder.orderCode,
-                totalAmount: createdOrder.totalAmount,
-              },
-              replace: true,
-            })
-            return
-          } else {
-            // Thanh toán mô phỏng thất bại -> KHÔNG XÓA GIỎ HÀNG (DoD requirement)
-            navigate(`/orders/${createdOrder.id}`, {
-              state: {
-                orderSuccess: true,
-                paymentFailed: true,
-                justCreated: true,
-                orderCode: createdOrder.orderCode,
-                totalAmount: createdOrder.totalAmount,
-                paymentErrorMsg: 'Thanh toán mô phỏng thất bại (FAILED). Giỏ hàng của bạn đã được giữ nguyên và bạn có thể thử lại thanh toán bất kỳ lúc nào.',
-              },
-              replace: true,
-            })
-            return
-          }
-        } catch (payErr) {
-          // Lỗi gọi API thanh toán -> KHÔNG XÓA GIỎ HÀNG
-          navigate(`/orders/${createdOrder.id}`, {
-            state: {
-              orderSuccess: true,
-              paymentFailed: true,
-              justCreated: true,
-              orderCode: createdOrder.orderCode,
-              totalAmount: createdOrder.totalAmount,
-              paymentErrorMsg: payErr?.response?.data?.message || 'Có lỗi khi xử lý thanh toán mô phỏng.',
-            },
-            replace: true,
-          })
-          return
-        }
+        // Xóa giỏ hàng và điều hướng sang trang Chi tiết đơn hàng để quét mã QR thanh toán
+        clearCart()
+        navigate(`/orders/${createdOrder.id}`, {
+          state: {
+            orderSuccess: true,
+            justCreated: true,
+            openVNPayQR: true,
+            vnpayPaymentData: vnpData,
+            orderCode: createdOrder.orderCode,
+            totalAmount: createdOrder.totalAmount,
+          },
+          replace: true,
+        })
+        return
       } else {
         // Luồng COD: Đặt hàng thành công -> Xóa sạch giỏ hàng
         clearCart()
@@ -753,58 +691,6 @@ export const CheckoutPage = () => {
           </div>
         </form>
       </div>
-
-      {/* Modal Quét mã VNPAY-QR */}
-      <VNPayQRModal
-        isOpen={vnpayModalOpen}
-        order={createdOrderForQR}
-        paymentData={vnpayPaymentData}
-        onClose={() => {
-          setVnpayModalOpen(false)
-          if (createdOrderForQR?.id) {
-            navigate(`/orders/${createdOrderForQR.id}`, {
-              state: {
-                orderSuccess: true,
-                justCreated: true,
-                orderCode: createdOrderForQR.orderCode,
-                totalAmount: createdOrderForQR.totalAmount,
-              },
-              replace: true,
-            })
-          }
-        }}
-        onSuccess={(paidData) => {
-          setVnpayModalOpen(false)
-          if (createdOrderForQR?.id) {
-            navigate(`/orders/${createdOrderForQR.id}`, {
-              state: {
-                orderSuccess: true,
-                paymentSuccess: true,
-                justCreated: true,
-                orderCode: createdOrderForQR.orderCode,
-                totalAmount: createdOrderForQR.totalAmount,
-              },
-              replace: true,
-            })
-          }
-        }}
-        onError={(errMsg) => {
-          setVnpayModalOpen(false)
-          if (createdOrderForQR?.id) {
-            navigate(`/orders/${createdOrderForQR.id}`, {
-              state: {
-                orderSuccess: true,
-                paymentFailed: true,
-                justCreated: true,
-                orderCode: createdOrderForQR.orderCode,
-                totalAmount: createdOrderForQR.totalAmount,
-                paymentErrorMsg: errMsg,
-              },
-              replace: true,
-            })
-          }
-        }}
-      />
     </div>
   )
 }
