@@ -33,6 +33,7 @@ export const CheckoutPage = () => {
   })
 
   const [simulateSuccessOption, setSimulateSuccessOption] = useState(true)
+  const [vnpayBankCode, setVnpayBankCode] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
 
@@ -128,7 +129,7 @@ export const CheckoutPage = () => {
     }
 
     if (!formData.paymentMethod) {
-      setErrorMessage('Vui lòng chọn phương thức thanh toán (COD hoặc SIMULATED)')
+      setErrorMessage('Vui lòng chọn phương thức thanh toán (COD, SIMULATED hoặc VNPAY)')
       return
     }
 
@@ -173,61 +174,33 @@ export const CheckoutPage = () => {
       }
 
       // Xử lý theo phương thức thanh toán
-      if (formData.paymentMethod === 'SIMULATED') {
+      if (formData.paymentMethod === 'VNPAY' || formData.paymentMethod === 'SIMULATED') {
+        let vnpData = null
         try {
-          const payRes = await paymentService.simulatePayment(
+          const vnpRes = await paymentService.createVNPayPayment(
             createdOrder.id,
-            simulateSuccessOption,
-            simulateSuccessOption
-              ? 'Thanh toán trực tuyến mô phỏng thành công (PAID)'
-              : 'Thanh toán trực tuyến mô phỏng thất bại (FAILED)'
+            vnpayBankCode,
+            `Thanh toan don hang #${createdOrder.orderCode || createdOrder.id}`
           )
-          const paymentData = payRes?.data || payRes
-
-          if (paymentData?.status === 'PAID') {
-            // Thanh toán mô phỏng thành công -> Xóa sạch giỏ hàng
-            clearCart()
-            navigate(`/orders/${createdOrder.id}`, {
-              state: {
-                orderSuccess: true,
-                paymentSuccess: true,
-                justCreated: true,
-                orderCode: createdOrder.orderCode,
-                totalAmount: createdOrder.totalAmount,
-              },
-              replace: true,
-            })
-            return
-          } else {
-            // Thanh toán mô phỏng thất bại -> KHÔNG XÓA GIỎ HÀNG (DoD requirement)
-            navigate(`/orders/${createdOrder.id}`, {
-              state: {
-                orderSuccess: true,
-                paymentFailed: true,
-                justCreated: true,
-                orderCode: createdOrder.orderCode,
-                totalAmount: createdOrder.totalAmount,
-                paymentErrorMsg: 'Thanh toán mô phỏng thất bại (FAILED). Giỏ hàng của bạn đã được giữ nguyên và bạn có thể thử lại thanh toán bất kỳ lúc nào.',
-              },
-              replace: true,
-            })
-            return
-          }
-        } catch (payErr) {
-          // Lỗi gọi API thanh toán -> KHÔNG XÓA GIỎ HÀNG
-          navigate(`/orders/${createdOrder.id}`, {
-            state: {
-              orderSuccess: true,
-              paymentFailed: true,
-              justCreated: true,
-              orderCode: createdOrder.orderCode,
-              totalAmount: createdOrder.totalAmount,
-              paymentErrorMsg: payErr?.response?.data?.message || 'Có lỗi khi xử lý thanh toán mô phỏng.',
-            },
-            replace: true,
-          })
-          return
+          vnpData = vnpRes?.data || vnpRes
+        } catch (vnpErr) {
+          console.warn('Lỗi khi gọi API tạo URL VNPay:', vnpErr)
         }
+
+        // Xóa giỏ hàng và điều hướng sang trang Chi tiết đơn hàng để quét mã QR thanh toán
+        clearCart()
+        navigate(`/orders/${createdOrder.id}`, {
+          state: {
+            orderSuccess: true,
+            justCreated: true,
+            openVNPayQR: true,
+            vnpayPaymentData: vnpData,
+            orderCode: createdOrder.orderCode,
+            totalAmount: createdOrder.totalAmount,
+          },
+          replace: true,
+        })
+        return
       } else {
         // Luồng COD: Đặt hàng thành công -> Xóa sạch giỏ hàng
         clearCart()
@@ -463,6 +436,108 @@ export const CheckoutPage = () => {
                       </p>
                     </div>
                   </label>
+
+                  {/* Cổng thanh toán VNPay Sandbox */}
+                  <div
+                    className={`rounded-2xl border transition-all ${
+                      formData.paymentMethod === 'VNPAY'
+                        ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                        : 'border-slate-200 hover:border-slate-300'
+                    }`}
+                  >
+                    <label
+                      className={`flex items-start gap-3.5 p-4 cursor-pointer ${
+                        isSubmitting ? 'pointer-events-none opacity-70' : ''
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value="VNPAY"
+                        checked={formData.paymentMethod === 'VNPAY'}
+                        onChange={handleChange}
+                        disabled={isSubmitting}
+                        className="mt-0.5 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <CreditCard className="w-4 h-4 text-red-600" />
+                          <span className="font-bold text-sm text-slate-900">
+                            Cổng thanh toán VNPay (Sandbox)
+                          </span>
+                          <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                            Khuyên dùng
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Thanh toán an toàn qua Cổng VNPay (Thẻ ATM nội địa, Internet Banking, Quét mã QR VNPay).
+                        </p>
+                      </div>
+                    </label>
+
+                    {formData.paymentMethod === 'VNPAY' && (
+                      <div className="px-4 pb-4 pt-2 border-t border-blue-200/60 pl-11 space-y-2">
+                        <span className="text-[11px] font-bold text-slate-700 block uppercase tracking-wider">
+                          Chọn ngân hàng kiểm thử (tùy chọn):
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                          <label
+                            className={`flex items-center gap-2 text-xs p-2.5 rounded-xl border cursor-pointer transition-colors ${
+                              !vnpayBankCode
+                                ? 'border-blue-500 bg-blue-100/70 text-blue-900 font-bold'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="vnpayBank"
+                              checked={!vnpayBankCode}
+                              onChange={() => setVnpayBankCode('')}
+                              disabled={isSubmitting}
+                              className="text-blue-600"
+                            />
+                            <span>Tất cả / Quét QR</span>
+                          </label>
+
+                          <label
+                            className={`flex items-center gap-2 text-xs p-2.5 rounded-xl border cursor-pointer transition-colors ${
+                              vnpayBankCode === 'NCB'
+                                ? 'border-blue-500 bg-blue-100/70 text-blue-900 font-bold'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="vnpayBank"
+                              checked={vnpayBankCode === 'NCB'}
+                              onChange={() => setVnpayBankCode('NCB')}
+                              disabled={isSubmitting}
+                              className="text-blue-600"
+                            />
+                            <span>Ngân hàng NCB</span>
+                          </label>
+
+                          <label
+                            className={`flex items-center gap-2 text-xs p-2.5 rounded-xl border cursor-pointer transition-colors ${
+                              vnpayBankCode === 'VNPAYQR'
+                                ? 'border-blue-500 bg-blue-100/70 text-blue-900 font-bold'
+                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="vnpayBank"
+                              checked={vnpayBankCode === 'VNPAYQR'}
+                              onChange={() => setVnpayBankCode('VNPAYQR')}
+                              disabled={isSubmitting}
+                              className="text-blue-600"
+                            />
+                            <span>VNPAY QR</span>
+                          </label>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   <div
                     className={`rounded-2xl border transition-all ${

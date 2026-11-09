@@ -91,6 +91,10 @@ services:
       MAIL_SMTP_STARTTLS_ENABLE: ${MAIL_SMTP_STARTTLS_ENABLE:-true}
       MAIL_SMTP_STARTTLS_REQUIRED: ${MAIL_SMTP_STARTTLS_REQUIRED:-true}
       OTP_HMAC_SECRET: ${OTP_HMAC_SECRET:-k9X2mP5vL8qR3wY6zF1nH4bC7jD0sT2x}
+      VNPAY_PAY_URL: ${VNPAY_PAY_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
+      VNPAY_TMN_CODE: ${VNPAY_TMN_CODE:-2QXUI4J4}
+      VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-RAIQUIBGCARJHNLKZCPGUCUMRHQKGZDF}
+      VNPAY_RETURN_URL: ${VNPAY_RETURN_URL:-http://localhost:3000/orders/vnpay-return}
     volumes:
       - ./uploads:/app/uploads
     ports:

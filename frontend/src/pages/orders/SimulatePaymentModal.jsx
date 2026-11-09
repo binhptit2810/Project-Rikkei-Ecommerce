@@ -218,7 +218,7 @@ export const SimulatePaymentModal = ({
             {submitting ? (
               <>
                 <LoadingSpinner size="sm" className="text-white" />
-                <span>Đang xử lý giao dịch...</span>
+                <span>Đang xử lý...</span>
               </>
             ) : (
               <span>Xác nhận thanh toán</span>

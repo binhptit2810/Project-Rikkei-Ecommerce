@@ -7,7 +7,8 @@ package com.example.ecommerce.entity;
  */
 public enum PaymentMethod {
     COD("Thanh toán khi nhận hàng (COD)"),
-    SIMULATED("Thanh toán trực tuyến (Mô phỏng)");
+    SIMULATED("Thanh toán trực tuyến (Mô phỏng)"),
+    VNPAY("Cổng thanh toán VNPay (Sandbox)");
 
     private final String description;
 

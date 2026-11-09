@@ -47,6 +47,30 @@ export const paymentService = {
     const response = await apiClient.get(`/payments/transaction/${transactionCode}`)
     return response.data
   },
+
+  /**
+   * Tạo URL thanh toán VNPay Sandbox
+   * @param {number|string} orderId
+   * @param {string} [bankCode] Ví dụ: NCB, VNPAYQR
+   * @param {string} [orderInfo] Ghi chú đơn hàng
+   */
+  createVNPayPayment: async (orderId, bankCode = '', orderInfo = '') => {
+    const response = await apiClient.post('/payments/create-vnpay', {
+      orderId,
+      bankCode: bankCode || undefined,
+      orderInfo: orderInfo || undefined,
+    })
+    return response.data
+  },
+
+  /**
+   * Xác thực và xử lý kết quả callback trả về từ VNPay
+   * @param {Object} queryParams
+   */
+  handleVNPayCallback: async (queryParams) => {
+    const response = await apiClient.get('/payments/vnpay-callback', { params: queryParams })
+    return response.data
+  },
 }
 
 export default paymentService
