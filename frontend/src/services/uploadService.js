@@ -24,3 +24,4 @@ export const uploadService = {
 }
 
 export default uploadService
+

@@ -123,3 +123,4 @@ WHERE name LIKE '%Con lăn tập cơ bụng%';
 
 UPDATE products SET image_url = 'https://images.unsplash.com/photo-1598289431512-b97b0917affc?w=600&auto=format&fit=crop&q=80'
 WHERE name LIKE '%Bộ dây kháng lực%';
+

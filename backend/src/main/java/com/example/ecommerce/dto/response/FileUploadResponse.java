@@ -19,3 +19,4 @@ public class FileUploadResponse {
     private Long size;
     private String contentType;
 }
+
