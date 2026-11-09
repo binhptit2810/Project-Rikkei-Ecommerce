@@ -12,11 +12,14 @@ import {
   FileText,
   Lock,
   Zap,
+  Tag,
+  X,
 } from 'lucide-react'
 import { useCartStore } from '../../store/useCartStore'
 import { useAuthStore } from '../../store/useAuthStore'
 import orderService from '../../services/orderService'
 import paymentService from '../../services/paymentService'
+import couponService from '../../services/couponService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 
 export const CheckoutPage = () => {
@@ -36,6 +39,12 @@ export const CheckoutPage = () => {
   const [vnpayBankCode, setVnpayBankCode] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState(null)
+
+  // Mã giảm giá / Voucher
+  const [couponCodeInput, setCouponCodeInput] = useState('')
+  const [appliedCoupon, setAppliedCoupon] = useState(null)
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false)
+  const [couponError, setCouponError] = useState(null)
 
   // Tự động điền thông tin có sẵn từ tài khoản người dùng
   useEffect(() => {
@@ -68,6 +77,34 @@ export const CheckoutPage = () => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
     if (errorMessage) setErrorMessage(null)
+  }
+
+  const handleApplyCoupon = async (e) => {
+    e?.preventDefault()
+    if (!couponCodeInput.trim()) {
+      setCouponError('Vui lòng nhập mã giảm giá')
+      return
+    }
+    setIsValidatingCoupon(true)
+    setCouponError(null)
+    try {
+      const res = await couponService.validateCoupon(couponCodeInput.trim(), getTotalPrice())
+      const data = res?.data || res
+      setAppliedCoupon(data)
+      setCouponError(null)
+    } catch (err) {
+      const msg = err.response?.data?.message || err.message || 'Mã giảm giá không hợp lệ'
+      setCouponError(msg)
+      setAppliedCoupon(null)
+    } finally {
+      setIsValidatingCoupon(false)
+    }
+  }
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null)
+    setCouponCodeInput('')
+    setCouponError(null)
   }
 
   const handleSubmit = async (e) => {
@@ -154,6 +191,7 @@ export const CheckoutPage = () => {
       shippingAddress: formData.shippingAddress.trim(),
       paymentMethod: formData.paymentMethod,
       note: formData.note.trim() || null,
+      couponCode: appliedCoupon?.code || null,
       items: items.map((item) => ({
         productId: Number(item.id),
         quantity: Number(item.quantity),
@@ -257,6 +295,8 @@ export const CheckoutPage = () => {
 
   const totalPrice = getTotalPrice()
   const totalCount = getTotalCount()
+  const discountAmount = appliedCoupon?.discountAmount || 0
+  const finalPrice = Math.max(0, totalPrice - discountAmount)
 
   if (items.length === 0) {
     return null
@@ -312,7 +352,7 @@ export const CheckoutPage = () => {
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
             {/* Left Column: Recipient info & Payment methods (7/12) */}
             <div className="lg:col-span-7 space-y-6">
-              
+
               {/* Card thông tin giao hàng */}
               <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-8 space-y-5">
                 <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
@@ -411,11 +451,10 @@ export const CheckoutPage = () => {
 
                 <div className="space-y-3.5">
                   <label
-                    className={`flex items-start gap-3.5 p-4 rounded-2xl border transition-all cursor-pointer ${
-                      formData.paymentMethod === 'COD'
-                        ? 'border-blue-600 bg-blue-50/50 shadow-sm'
-                        : 'border-slate-200 hover:border-slate-300'
-                    } ${isSubmitting ? 'pointer-events-none opacity-70' : ''}`}
+                    className={`flex items-start gap-3.5 p-4 rounded-2xl border transition-all cursor-pointer ${formData.paymentMethod === 'COD'
+                      ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300'
+                      } ${isSubmitting ? 'pointer-events-none opacity-70' : ''}`}
                   >
                     <input
                       type="radio"
@@ -439,16 +478,14 @@ export const CheckoutPage = () => {
 
                   {/* Cổng thanh toán VNPay Sandbox */}
                   <div
-                    className={`rounded-2xl border transition-all ${
-                      formData.paymentMethod === 'VNPAY'
-                        ? 'border-blue-600 bg-blue-50/50 shadow-sm'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
+                    className={`rounded-2xl border transition-all ${formData.paymentMethod === 'VNPAY'
+                      ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300'
+                      }`}
                   >
                     <label
-                      className={`flex items-start gap-3.5 p-4 cursor-pointer ${
-                        isSubmitting ? 'pointer-events-none opacity-70' : ''
-                      }`}
+                      className={`flex items-start gap-3.5 p-4 cursor-pointer ${isSubmitting ? 'pointer-events-none opacity-70' : ''
+                        }`}
                     >
                       <input
                         type="radio"
@@ -482,11 +519,10 @@ export const CheckoutPage = () => {
                         </span>
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                           <label
-                            className={`flex items-center gap-2 text-xs p-2.5 rounded-xl border cursor-pointer transition-colors ${
-                              !vnpayBankCode
-                                ? 'border-blue-500 bg-blue-100/70 text-blue-900 font-bold'
-                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                            }`}
+                            className={`flex items-center gap-2 text-xs p-2.5 rounded-xl border cursor-pointer transition-colors ${!vnpayBankCode
+                              ? 'border-blue-500 bg-blue-100/70 text-blue-900 font-bold'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                              }`}
                           >
                             <input
                               type="radio"
@@ -500,11 +536,10 @@ export const CheckoutPage = () => {
                           </label>
 
                           <label
-                            className={`flex items-center gap-2 text-xs p-2.5 rounded-xl border cursor-pointer transition-colors ${
-                              vnpayBankCode === 'NCB'
-                                ? 'border-blue-500 bg-blue-100/70 text-blue-900 font-bold'
-                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                            }`}
+                            className={`flex items-center gap-2 text-xs p-2.5 rounded-xl border cursor-pointer transition-colors ${vnpayBankCode === 'NCB'
+                              ? 'border-blue-500 bg-blue-100/70 text-blue-900 font-bold'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                              }`}
                           >
                             <input
                               type="radio"
@@ -518,11 +553,10 @@ export const CheckoutPage = () => {
                           </label>
 
                           <label
-                            className={`flex items-center gap-2 text-xs p-2.5 rounded-xl border cursor-pointer transition-colors ${
-                              vnpayBankCode === 'VNPAYQR'
-                                ? 'border-blue-500 bg-blue-100/70 text-blue-900 font-bold'
-                                : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                            }`}
+                            className={`flex items-center gap-2 text-xs p-2.5 rounded-xl border cursor-pointer transition-colors ${vnpayBankCode === 'VNPAYQR'
+                              ? 'border-blue-500 bg-blue-100/70 text-blue-900 font-bold'
+                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                              }`}
                           >
                             <input
                               type="radio"
@@ -540,16 +574,14 @@ export const CheckoutPage = () => {
                   </div>
 
                   <div
-                    className={`rounded-2xl border transition-all ${
-                      formData.paymentMethod === 'SIMULATED'
-                        ? 'border-blue-600 bg-blue-50/50 shadow-sm'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
+                    className={`rounded-2xl border transition-all ${formData.paymentMethod === 'SIMULATED'
+                      ? 'border-blue-600 bg-blue-50/50 shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300'
+                      }`}
                   >
                     <label
-                      className={`flex items-start gap-3.5 p-4 cursor-pointer ${
-                        isSubmitting ? 'pointer-events-none opacity-70' : ''
-                      }`}
+                      className={`flex items-start gap-3.5 p-4 cursor-pointer ${isSubmitting ? 'pointer-events-none opacity-70' : ''
+                        }`}
                     >
                       <input
                         type="radio"
@@ -648,19 +680,84 @@ export const CheckoutPage = () => {
                   ))}
                 </div>
 
+                {/* Mã giảm giá / Voucher */}
+                <div className="pt-3 border-t border-slate-100">
+                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-2">
+                    <Tag className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Mã giảm giá / Voucher</span>
+                  </label>
+                  {appliedCoupon ? (
+                    <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-emerald-800 tracking-wide">{appliedCoupon.code}</span>
+                          <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800 text-[10px] font-bold">
+                            -{formatPrice(appliedCoupon.discountAmount)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-emerald-700 mt-0.5">{appliedCoupon.message}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleRemoveCoupon}
+                        className="text-slate-400 hover:text-red-600 p-1 font-bold text-xs cursor-pointer"
+                        title="Gỡ mã giảm giá"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={couponCodeInput}
+                          onChange={(e) => {
+                            setCouponCodeInput(e.target.value.toUpperCase())
+                            if (couponError) setCouponError(null)
+                          }}
+                          disabled={isValidatingCoupon || isSubmitting}
+                          placeholder="Nhập mã (VD: WELCOME10)"
+                          className="flex-1 h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs uppercase font-semibold tracking-wider placeholder:normal-case placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleApplyCoupon}
+                          disabled={isValidatingCoupon || isSubmitting || !couponCodeInput.trim()}
+                          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all shrink-0 cursor-pointer flex items-center gap-1"
+                        >
+                          {isValidatingCoupon ? <LoadingSpinner size="xs" className="text-white" /> : 'Áp dụng'}
+                        </button>
+                      </div>
+                      {couponError && (
+                        <p className="text-[11px] text-red-600 font-medium flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          <span>{couponError}</span>
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 {/* Chi phí */}
                 <div className="pt-3 border-t border-slate-100 space-y-2.5 text-xs">
                   <div className="flex justify-between text-slate-600">
                     <span>Tạm tính</span>
                     <span className="font-bold text-slate-900 tabular-nums">{formatPrice(totalPrice)}</span>
                   </div>
+                  {appliedCoupon && (
+                    <div className="flex justify-between text-emerald-700">
+                      <span>Giảm giá voucher ({appliedCoupon.code})</span>
+                      <span className="font-bold tabular-nums">-{formatPrice(appliedCoupon.discountAmount)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between text-slate-600">
                     <span>Phí vận chuyển</span>
                     <span className="font-bold text-emerald-600">Miễn phí toàn quốc</span>
                   </div>
                   <div className="pt-3 border-t border-slate-100 flex justify-between text-sm">
                     <span className="font-bold text-slate-900">Tổng thanh toán</span>
-                    <span className="font-extrabold text-slate-900 text-xl tabular-nums">{formatPrice(totalPrice)}</span>
+                    <span className="font-extrabold text-slate-900 text-xl tabular-nums">{formatPrice(finalPrice)}</span>
                   </div>
                 </div>
 

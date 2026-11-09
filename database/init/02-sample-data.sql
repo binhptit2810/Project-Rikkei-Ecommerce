@@ -106,6 +106,16 @@ INSERT INTO inventory_transactions (product_id, change_quantity, stock_after, tr
 (13,  0,   0, 'INITIAL_STOCK', 'Nhập kho ban đầu — hết hàng'),
 (14, 15,  15, 'INITIAL_STOCK', 'Nhập kho ban đầu');
 
+-- =============================================================================
+-- Dữ liệu mã giảm giá mẫu (Coupons)
+-- =============================================================================
+INSERT INTO coupons (code, discount_type, discount_value, min_order_value, max_discount, usage_limit, used_count, expire_at, active) VALUES
+('WELCOME10', 'PERCENT', 10.00, 200000, 50000, 100, 0, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 30 DAY), TRUE),
+('GIAM50K',   'FIXED',   50000, 300000, NULL,  50,  0, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 15 DAY), TRUE),
+('FREESHIP',  'FIXED',   30000, 150000, NULL,  200, 0, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 60 DAY), TRUE),
+('EXPIRED20', 'PERCENT', 20.00, 100000, 100000, 10, 0, DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 1 DAY),  TRUE),
+('MAXOUT',    'FIXED',   20000, 100000, NULL,  5,   5, DATE_ADD(CURRENT_TIMESTAMP, INTERVAL 10 DAY), TRUE);
+
 -- Xác nhận dữ liệu đã được nạp thành công
 SELECT 'Schema và dữ liệu mẫu đã được khởi tạo thành công!' AS message;
 SELECT COUNT(*) AS total_users FROM users;

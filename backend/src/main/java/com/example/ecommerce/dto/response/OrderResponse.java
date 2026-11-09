@@ -34,6 +34,8 @@ public class OrderResponse {
     private String paymentMethodDescription;
     private String transactionCode;
     private String note;
+    private String couponCode;
+    private BigDecimal discountAmount;
     private Integer itemCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

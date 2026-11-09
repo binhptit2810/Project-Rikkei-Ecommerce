@@ -43,6 +43,9 @@ public class CreateOrderRequest {
     @Size(max = 1000, message = "Ghi chú không được vượt quá 1000 ký tự")
     private String note;
 
+    @Size(max = 50, message = "Mã giảm giá không được vượt quá 50 ký tự")
+    private String couponCode;
+
     @NotEmpty(message = "Giỏ hàng không có sản phẩm nào để đặt hàng")
     @Valid
     private List<OrderItemRequest> items;
