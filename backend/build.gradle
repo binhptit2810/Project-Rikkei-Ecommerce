@@ -22,11 +22,21 @@ configurations {
 
 repositories {
     mavenCentral()
+    maven { url 'https://repo.spring.io/milestone' }
+}
+
+dependencyManagement {
+    imports {
+        mavenBom 'org.springframework.ai:spring-ai-bom:1.0.0-M4'
+    }
 }
 
 dependencies {
     // Spring Boot Web
     implementation 'org.springframework.boot:spring-boot-starter-web'
+
+    // Spring AI OpenAI Starter (1.0.0-M4 tương thích Spring Boot 3.3.x)
+    implementation 'org.springframework.ai:spring-ai-openai-spring-boot-starter'
 
     // Spring Data JPA & MySQL
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
@@ -106,6 +116,25 @@ jacocoTestCoverageVerification {
         rule {
             limit {
                 minimum = 0.85
+            }
+        }
+    }
+}
+
+bootRun {
+    // Tự động tìm và nạp file .env từ thư mục cha hoặc thư mục hiện tại nếu có
+    def envFile = rootProject.file("../.env").exists() ? rootProject.file("../.env") : file(".env")
+    if (envFile.exists()) {
+        envFile.eachLine("UTF-8") { line ->
+            def trimmed = line.trim()
+            if (trimmed && !trimmed.startsWith("#") && trimmed.contains("=")) {
+                def parts = trimmed.split("=", 2)
+                def key = parts[0].trim()
+                def value = parts[1].trim()
+                if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                    value = value.substring(1, value.length() - 1)
+                }
+                environment key, value
             }
         }
     }

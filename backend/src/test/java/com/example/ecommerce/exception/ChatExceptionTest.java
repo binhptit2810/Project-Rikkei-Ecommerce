@@ -1,7 +1,8 @@
 package com.example.ecommerce.exception;
 
-import com.example.ecommerce.chat.client.GeminiRestClient.GeminiServiceException;
-import com.example.ecommerce.chat.client.GeminiRestClient.GeminiTimeoutException;
+import com.example.ecommerce.exception.ChatAuthenticationException;
+import com.example.ecommerce.exception.GeminiServiceException;
+import com.example.ecommerce.exception.GeminiTimeoutException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -128,6 +129,29 @@ class ChatExceptionTest {
 
         ChatRateLimitExceededException exNeg = new ChatRateLimitExceededException("Limit reached", -5L);
         assertThat(exNeg.getRetryAfterSeconds()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("EX-11: ChatAuthenticationException khởi tạo thành công với message")
+    void testChatAuthenticationException_WithMessage() {
+        String message = "Guest token bắt buộc đối với khách vãng lai (truyền qua header X-Guest-Token)";
+        ChatAuthenticationException ex = new ChatAuthenticationException(message);
+
+        assertThat(ex).isNotNull();
+        assertThat(ex.getMessage()).isEqualTo(message);
+        assertThat(ex.getCause()).isNull();
+    }
+
+    @Test
+    @DisplayName("EX-12: ChatAuthenticationException khởi tạo thành công với message và cause")
+    void testChatAuthenticationException_WithMessageAndCause() {
+        String message = "Guest token không hợp lệ";
+        RuntimeException cause = new RuntimeException("Invalid token signature");
+        ChatAuthenticationException ex = new ChatAuthenticationException(message, cause);
+
+        assertThat(ex).isNotNull();
+        assertThat(ex.getMessage()).isEqualTo(message);
+        assertThat(ex.getCause()).isEqualTo(cause);
     }
 }
 

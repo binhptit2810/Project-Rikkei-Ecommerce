@@ -49,7 +49,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
 @org.springframework.test.context.TestPropertySource(properties = {
-    "spring.datasource.url=jdbc:h2:mem:testdb_chat_sec;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE",
+    "spring.datasource.url=jdbc:h2:mem:testdb_chat_sec;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL",
     "spring.datasource.driver-class-name=org.h2.Driver",
     "spring.jpa.hibernate.ddl-auto=create-drop",
     "jwt.secret=test-secret-key-for-unit-tests-must-be-at-least-32-characters-long",
@@ -154,6 +154,29 @@ class ChatSecurityIntegrationTest {
         }
 
         @Test
+        @DisplayName("SEC-02b: Không có Authorization header nhưng có X-Guest-Token, POST /api/v1/chat được permitAll")
+        void testGuestSendMessage_BaseEndpoint_PermitAll() throws Exception {
+            ChatRequest request = ChatRequest.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .message("Hỏi thông tin sản phẩm")
+                    .build();
+
+            when(chatService.sendMessage(eq(TEST_SESSION_ID), eq("Hỏi thông tin sản phẩm"), eq(TEST_GUEST_TOKEN), isNull()))
+                    .thenReturn(ChatResponse.builder()
+                            .sessionId(TEST_SESSION_ID)
+                            .message("Dạ chào bạn!")
+                            .version(2L)
+                            .build());
+
+            mockMvc.perform(post("/api/v1/chat")
+                            .header("X-Guest-Token", TEST_GUEST_TOKEN)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true));
+        }
+
+        @Test
         @DisplayName("SEC-03: Không có Authorization header, POST /claim bị chặn 403 Forbidden")
         void testGuestClaimSession_Forbidden() throws Exception {
             ClaimSessionRequest request = ClaimSessionRequest.builder()
@@ -221,7 +244,7 @@ class ChatSecurityIntegrationTest {
                     .message("Tôi đã đăng nhập")
                     .build();
 
-            when(chatService.sendMessage(eq(TEST_SESSION_ID), eq("Tôi đã đăng nhập"), isNull(), eq(String.valueOf(TEST_USER_ID))))
+            when(chatService.sendMessage(eq(TEST_SESSION_ID), eq("Tôi đã đăng nhập"), isNull(), eq(String.valueOf(TEST_USER_ID)), any()))
                     .thenReturn(ChatResponse.builder()
                             .sessionId(TEST_SESSION_ID)
                             .message("Chào mừng bạn quay lại!")

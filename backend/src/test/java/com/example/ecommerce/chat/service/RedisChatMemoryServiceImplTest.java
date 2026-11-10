@@ -4,7 +4,9 @@ import com.example.ecommerce.chat.model.ChatMessage;
 import com.example.ecommerce.chat.model.ChatMemoryData;
 import com.example.ecommerce.chat.model.ChatSessionMetadata;
 import com.example.ecommerce.chat.model.GuestSessionCreationResult;
+import com.example.ecommerce.chat.model.IdempotencyCheckResult;
 import com.example.ecommerce.chat.service.impl.RedisChatMemoryServiceImpl;
+import com.example.ecommerce.dto.response.ChatResponse;
 import com.example.ecommerce.exception.ChatLockContentionException;
 import com.example.ecommerce.exception.ChatVersionConflictException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
@@ -24,6 +26,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import com.example.ecommerce.exception.ChatAuthenticationException;
 
 import java.time.LocalDateTime;
 import java.util.Base64;
@@ -245,11 +248,11 @@ class RedisChatMemoryServiceImplTest {
         }
 
         @Test
-        @DisplayName("UT-08: Đọc memory ném BadCredentialsException khi thiếu hoặc sai guest token")
+        @DisplayName("UT-08: Đọc memory ném ChatAuthenticationException khi thiếu hoặc sai guest token")
         void testGetChatMemory_InvalidGuestToken() {
             // Thiếu token
             assertThatThrownBy(() -> service.getChatMemory(TEST_SESSION_ID, "", null))
-                    .isInstanceOf(BadCredentialsException.class)
+                    .isInstanceOf(ChatAuthenticationException.class)
                     .hasMessageContaining("Guest token bắt buộc");
 
             // Sai token trong Redis
@@ -257,7 +260,7 @@ class RedisChatMemoryServiceImplTest {
                     .thenReturn(List.of(-11L, ""));
 
             assertThatThrownBy(() -> service.getChatMemory(TEST_SESSION_ID, "wrong-token", null))
-                    .isInstanceOf(BadCredentialsException.class)
+                    .isInstanceOf(ChatAuthenticationException.class)
                     .hasMessageContaining("Guest token không hợp lệ");
         }
 
@@ -393,7 +396,7 @@ class RedisChatMemoryServiceImplTest {
         @DisplayName("UT-11: Chiếm lock thành công khi SET NX trả về true")
         void testAcquireLock_Success() {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.setIfAbsent(anyString(), anyString(), eq(45000L), eq(TimeUnit.MILLISECONDS)))
+            when(valueOperations.setIfAbsent(anyString(), anyString(), eq(60000L), eq(TimeUnit.MILLISECONDS)))
                     .thenReturn(Boolean.TRUE);
 
             String lockToken = service.acquireLock(TEST_SESSION_ID);
@@ -403,10 +406,10 @@ class RedisChatMemoryServiceImplTest {
         }
 
         @Test
-        @DisplayName("UT-12: Ném ChatLockContentionException (HTTP 429) khi SET NX trả về false")
+        @DisplayName("UT-12: Ném ChatLockContentionException (HTTP 409) khi SET NX trả về false")
         void testAcquireLock_Contention() {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.setIfAbsent(anyString(), anyString(), eq(45000L), eq(TimeUnit.MILLISECONDS)))
+            when(valueOperations.setIfAbsent(anyString(), anyString(), eq(60000L), eq(TimeUnit.MILLISECONDS)))
                     .thenReturn(Boolean.FALSE);
 
             assertThatThrownBy(() -> service.acquireLock(TEST_SESSION_ID))
@@ -631,7 +634,7 @@ class RedisChatMemoryServiceImplTest {
 
             // Guest thiếu token
             assertThatThrownBy(() -> service.saveChatMemory(TEST_SESSION_ID, TEST_LOCK_TOKEN, 1L, validUser, validAssistant, "", null))
-                    .isInstanceOf(BadCredentialsException.class).hasMessageContaining("Guest token bắt buộc");
+                    .isInstanceOf(ChatAuthenticationException.class).hasMessageContaining("Guest token bắt buộc");
         }
 
         @Test
@@ -710,7 +713,7 @@ class RedisChatMemoryServiceImplTest {
             when(redisTemplate.execute(any(), anyList(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
                     .thenReturn(-11L);
             assertThatThrownBy(() -> service.saveChatMemory(TEST_SESSION_ID, TEST_LOCK_TOKEN, 1L, userMsg, assistantMsg, TEST_GUEST_TOKEN, null))
-                    .isInstanceOf(BadCredentialsException.class).hasMessageContaining("Guest token không hợp lệ");
+                    .isInstanceOf(ChatAuthenticationException.class).hasMessageContaining("Guest token không hợp lệ");
 
             // -999 unknown
             when(redisTemplate.execute(any(), anyList(), any(), any(), any(), any(), any(), any(), any(), any(), any()))
@@ -779,7 +782,7 @@ class RedisChatMemoryServiceImplTest {
         }
 
         @Test
-        @DisplayName("UT-21: Claim ném BadCredentialsException khi guest token không khớp (-11)")
+        @DisplayName("UT-21: Claim ném ChatAuthenticationException khi guest token không khớp (-11)")
         void testClaimGuestSession_BadToken() {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
             when(valueOperations.setIfAbsent(anyString(), anyString(), anyLong(), any()))
@@ -789,7 +792,7 @@ class RedisChatMemoryServiceImplTest {
                     .thenReturn(-11L);
 
             assertThatThrownBy(() -> service.claimGuestSession(TEST_SESSION_ID, "wrong-token", "1001"))
-                    .isInstanceOf(BadCredentialsException.class)
+                    .isInstanceOf(ChatAuthenticationException.class)
                     .hasMessageContaining("Guest token không hợp lệ");
         }
 
@@ -815,7 +818,7 @@ class RedisChatMemoryServiceImplTest {
                     .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Session ID không được để trống");
 
             assertThatThrownBy(() -> service.claimGuestSession(TEST_SESSION_ID, "", "user-101"))
-                    .isInstanceOf(BadCredentialsException.class).hasMessageContaining("Guest token không được để trống");
+                    .isInstanceOf(ChatAuthenticationException.class).hasMessageContaining("Guest token không được để trống");
 
             assertThatThrownBy(() -> service.claimGuestSession(TEST_SESSION_ID, TEST_GUEST_TOKEN, ""))
                     .isInstanceOf(AccessDeniedException.class).hasMessageContaining("Yêu cầu thông tin người dùng đã xác thực");
@@ -851,6 +854,141 @@ class RedisChatMemoryServiceImplTest {
             when(redisTemplate.execute(any(), anyList(), any(), any(), any(), any(), any(), any())).thenReturn(-999L);
             assertThatThrownBy(() -> service.claimGuestSession(TEST_SESSION_ID, TEST_GUEST_TOKEN, "user-101"))
                     .isInstanceOf(IllegalStateException.class).hasMessageContaining("Mã lỗi không xác định từ Redis Lua Script: -999");
+        }
+    }
+
+    // =========================================================================
+    // 5. IDEMPOTENCY TESTS
+    // =========================================================================
+
+    @Nested
+    @DisplayName("5. Idempotency Tests")
+    class IdempotencyTests {
+
+        @Test
+        @DisplayName("IDEM-01: checkAndClaimIdempotency trả FIRST_ACQUIRED (NEW) khi clientMessageId chưa từng được gửi")
+        void testCheckAndClaim_FirstAcquired() {
+            when(redisTemplate.execute(any(), anyList(), any(), any(), any()))
+                    .thenReturn(List.of(1L));
+
+            IdempotencyCheckResult result = service.checkAndClaimIdempotency(TEST_SESSION_ID, "msg-001", "Hỏi giá áo");
+
+            assertThat(result.getStatus()).isEqualTo(IdempotencyCheckResult.Status.NEW);
+            assertThat(result.getCachedResponse()).isNull();
+        }
+
+        @Test
+        @DisplayName("IDEM-02: checkAndClaimIdempotency trả IN_PROGRESS khi request cùng clientMessageId đang chạy")
+        void testCheckAndClaim_InProgress() {
+            when(redisTemplate.execute(any(), anyList(), any(), any(), any()))
+                    .thenReturn(List.of(0L));
+
+            IdempotencyCheckResult result = service.checkAndClaimIdempotency(TEST_SESSION_ID, "msg-001", "Hỏi giá áo");
+
+            assertThat(result.getStatus()).isEqualTo(IdempotencyCheckResult.Status.IN_PROGRESS);
+            assertThat(result.getCachedResponse()).isNull();
+        }
+
+        @Test
+        @DisplayName("IDEM-03: checkAndClaimIdempotency trả COMPLETED kèm cached response khi request trước đã hoàn tất")
+        void testCheckAndClaim_Completed() {
+            String cachedJson = "{\"status\":\"COMPLETED\",\"response\":{\"sessionId\":\"" + TEST_SESSION_ID + "\",\"message\":\"Giá là 150k\",\"version\":2}}";
+            when(redisTemplate.execute(any(), anyList(), any(), any(), any()))
+                    .thenReturn(List.of(2L, cachedJson));
+
+            IdempotencyCheckResult result = service.checkAndClaimIdempotency(TEST_SESSION_ID, "msg-001", "Hỏi giá áo");
+
+            assertThat(result.getStatus()).isEqualTo(IdempotencyCheckResult.Status.COMPLETED);
+            assertThat(result.getCachedResponse()).isNotNull();
+            assertThat(result.getCachedResponse().getMessage()).isEqualTo("Giá là 150k");
+        }
+
+        @Test
+        @DisplayName("IDEM-04: checkAndClaimIdempotency trả MISMATCH khi trùng clientMessageId nhưng khác message")
+        void testCheckAndClaim_PayloadMismatch() {
+            when(redisTemplate.execute(any(), anyList(), any(), any(), any()))
+                    .thenReturn(List.of(-2L));
+
+            IdempotencyCheckResult result = service.checkAndClaimIdempotency(TEST_SESSION_ID, "msg-001", "Nội dung khác");
+
+            assertThat(result.getStatus()).isEqualTo(IdempotencyCheckResult.Status.MISMATCH);
+        }
+
+        @Test
+        @DisplayName("IDEM-05: checkAndClaimIdempotency trả NEW khi clientMessageId là null hoặc rỗng")
+        void testCheckAndClaim_NullOrBlankClientMessageId() {
+            IdempotencyCheckResult result1 = service.checkAndClaimIdempotency(TEST_SESSION_ID, null, "Hello");
+            assertThat(result1.getStatus()).isEqualTo(IdempotencyCheckResult.Status.NEW);
+
+            IdempotencyCheckResult result2 = service.checkAndClaimIdempotency(TEST_SESSION_ID, "   ", "Hello");
+            assertThat(result2.getStatus()).isEqualTo(IdempotencyCheckResult.Status.NEW);
+
+            verifyNoInteractions(redisTemplate);
+        }
+
+        @Test
+        @DisplayName("IDEM-06: saveIdempotencyResult lưu kết quả COMPLETED với TTL 300s")
+        void testSaveIdempotencyResult() {
+            when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+
+            ChatResponse response = ChatResponse.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .message("Kết quả tư vấn")
+                    .version(2L)
+                    .build();
+
+            service.saveIdempotencyResult(TEST_SESSION_ID, "msg-001", response);
+
+            verify(valueOperations).set(
+                    eq("chat:idempotency:{" + TEST_SESSION_ID + "}:msg-001"),
+                    contains("COMPLETED"),
+                    eq(300L),
+                    eq(TimeUnit.SECONDS)
+            );
+        }
+
+        @Test
+        @DisplayName("IDEM-07: clearIdempotency xóa key khỏi Redis khi request thất bại")
+        void testClearIdempotency() {
+            service.clearIdempotency(TEST_SESSION_ID, "msg-001");
+
+            verify(redisTemplate).delete("chat:idempotency:{" + TEST_SESSION_ID + "}:msg-001");
+        }
+
+        @Test
+        @DisplayName("IDEM-08: checkAndClaimIdempotency giải mã đầy đủ danh sách products từ Redis cache")
+        void testCheckAndClaim_Completed_PreservesProducts() {
+            String cachedJson = """
+                {
+                  "status": "COMPLETED",
+                  "response": {
+                    "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+                    "message": "Shop có các mẫu áo này:",
+                    "version": 3,
+                    "products": [
+                      {
+                        "id": 88,
+                        "name": "Áo khoác gió",
+                        "price": 350000,
+                        "imageUrl": "https://example.com/jacket.jpg",
+                        "stockQuantity": 10,
+                        "active": true
+                      }
+                    ]
+                  }
+                }
+                """;
+            when(redisTemplate.execute(any(), anyList(), any(), any(), any()))
+                    .thenReturn(List.of(2L, cachedJson));
+
+            IdempotencyCheckResult result = service.checkAndClaimIdempotency(TEST_SESSION_ID, "msg-002", "Tìm áo");
+
+            assertThat(result.getStatus()).isEqualTo(IdempotencyCheckResult.Status.COMPLETED);
+            assertThat(result.getCachedResponse()).isNotNull();
+            assertThat(result.getCachedResponse().getProducts()).hasSize(1);
+            assertThat(result.getCachedResponse().getProducts().get(0).getId()).isEqualTo(88L);
+            assertThat(result.getCachedResponse().getProducts().get(0).getName()).isEqualTo("Áo khoác gió");
+            assertThat(result.getCachedResponse().getProducts().get(0).getImageUrl()).isEqualTo("https://example.com/jacket.jpg");
         }
     }
 }

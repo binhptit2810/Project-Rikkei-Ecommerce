@@ -70,6 +70,8 @@ services:
       dockerfile: Dockerfile
     container_name: ecommerce-backend
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-docker}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-ecommerce_db}?useSSL=false&serverTimezone=Asia/Ho_Chi_Minh&allowPublicKeyRetrieval=true&useUnicode=true&characterEncoding=UTF-8
@@ -81,6 +83,9 @@ services:
       REDIS_PORT: 6379
       UPLOAD_DIR: /app/uploads
       TZ: Asia/Ho_Chi_Minh
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
       MAIL_PORT: ${MAIL_PORT:-587}
       MAIL_USERNAME: ${MAIL_USERNAME:-binhbadboy2810@gmail.com}

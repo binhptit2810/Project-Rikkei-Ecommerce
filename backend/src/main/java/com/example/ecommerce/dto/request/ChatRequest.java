@@ -41,5 +41,11 @@ public class ChatRequest {
     @NotBlank(message = "Nội dung tin nhắn không được để trống")
     @Size(max = 1000, message = "Nội dung tin nhắn không được vượt quá 1000 ký tự")
     private String message;
+
+    /**
+     * Mã định danh tin nhắn từ client (Idempotency Key) phục vụ chống xử lý trùng lặp và hỗ trợ Retry.
+     */
+    @Size(max = 100, message = "Client message ID không được vượt quá 100 ký tự")
+    private String clientMessageId;
 }
 

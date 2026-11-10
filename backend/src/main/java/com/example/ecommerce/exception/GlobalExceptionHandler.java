@@ -248,12 +248,12 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * [TSK-D11-CCT] Lỗi xung đột Distributed Lock khi có yêu cầu khác đang xử lý — trả 429 TOO_MANY_REQUESTS.
+     * [TSK-D11-CCT] Lỗi xung đột Distributed Lock khi có yêu cầu khác đang xử lý — trả 409 CONFLICT (CHAT_SESSION_BUSY).
      */
     @ExceptionHandler(ChatLockContentionException.class)
     public ResponseEntity<ApiResponse<Void>> handleChatLockContention(ChatLockContentionException ex) {
         log.warn("Chat lock contention: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+        return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
@@ -279,10 +279,21 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * [TSK-D11-CCT] Lỗi xác thực phiên hội thoại Chatbot (thiếu hoặc sai Guest Token) — trả 401 UNAUTHORIZED.
+     * Tách biệt hoàn toàn với BadCredentialsException của Auth để tránh trả thông báo nhầm về email/mật khẩu.
+     */
+    @ExceptionHandler(ChatAuthenticationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleChatAuthentication(ChatAuthenticationException ex) {
+        log.warn("Chat authentication failed: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    /**
      * [TSK-D11-CCT] Lỗi dịch vụ Google Gemini upstream không khả dụng hoặc lỗi xác thực — trả 503 SERVICE_UNAVAILABLE.
      */
-    @ExceptionHandler(com.example.ecommerce.chat.client.GeminiRestClient.GeminiServiceException.class)
-    public ResponseEntity<ApiResponse<Void>> handleGeminiService(com.example.ecommerce.chat.client.GeminiRestClient.GeminiServiceException ex) {
+    @ExceptionHandler(GeminiServiceException.class)
+    public ResponseEntity<ApiResponse<Void>> handleGeminiService(GeminiServiceException ex) {
         log.error("Gemini service error: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(ApiResponse.error("Dịch vụ tư vấn AI tạm thời không khả dụng, vui lòng thử lại sau"));
@@ -291,8 +302,8 @@ public class GlobalExceptionHandler {
     /**
      * [TSK-D11-CCT] Lỗi kết nối Google Gemini bị quá thời gian xử lý (Timeout) — trả 504 GATEWAY_TIMEOUT.
      */
-    @ExceptionHandler(com.example.ecommerce.chat.client.GeminiRestClient.GeminiTimeoutException.class)
-    public ResponseEntity<ApiResponse<Void>> handleGeminiTimeout(com.example.ecommerce.chat.client.GeminiRestClient.GeminiTimeoutException ex) {
+    @ExceptionHandler(GeminiTimeoutException.class)
+    public ResponseEntity<ApiResponse<Void>> handleGeminiTimeout(GeminiTimeoutException ex) {
         log.error("Gemini timeout: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT)
                 .body(ApiResponse.error("Dịch vụ tư vấn AI phản hồi quá thời gian, vui lòng thử lại sau"));

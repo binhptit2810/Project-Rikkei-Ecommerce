@@ -1,0 +1,290 @@
+{
+  "info": {
+    "_postman_id": "c1f7a2d8-5541-4c12-9c98-25cf94d80a11",
+    "name": "E-commerce Chatbot AI API (TSK-D11-CCT)",
+    "description": "Bộ sưu tập API cho trợ lý tư vấn bán hàng E-commerce sử dụng Spring AI, Gemini LLM, Redis Chat Memory và RAG Tool Calling.\n\nPhụ trách: Cao Chí Thiện\nTask ID: [TSK-D11-CCT]",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "sessionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "guestToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Khách Vãng Lai (Guest)",
+      "item": [
+        {
+          "name": "1.1 Khởi tạo phiên khách (Create Guest Session)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (pm.response.code === 201 && jsonData.success) {",
+                  "    pm.collectionVariables.set('sessionId', jsonData.data.sessionId);",
+                  "    pm.collectionVariables.set('guestToken', jsonData.data.guestToken);",
+                  "    pm.test('Khởi tạo phiên thành công với sessionId và guestToken', function () {",
+                  "        pm.expect(jsonData.data.sessionId).to.be.a('string');",
+                  "        pm.expect(jsonData.data.guestToken).to.be.a('string');",
+                  "    });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/chat/sessions",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "sessions"]
+            },
+            "description": "Tạo phiên chat mới cho khách vãng lai (Guest). Response trả về sessionId (UUIDv4) và raw guestToken để client lưu vào LocalStorage/Cookie."
+          },
+          "response": []
+        },
+        {
+          "name": "1.2 Gửi tin nhắn - Khách vãng lai (/api/v1/chat/messages)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Guest-Token",
+                "value": "{{guestToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"message\": \"Tư vấn cho tôi giày thể thao nam chạy bộ màu đen giá dưới 2 triệu\",\n  \"clientMessageId\": \"msg-client-uuid-001\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chat/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "messages"]
+            },
+            "description": "Endpoint chuẩn frontend gửi tin nhắn của khách vãng lai. Bắt buộc truyền header `X-Guest-Token`."
+          },
+          "response": []
+        },
+        {
+          "name": "1.3 Gửi tin nhắn - Endpoint tương thích (/api/v1/chat)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Guest-Token",
+                "value": "{{guestToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"message\": \"Sản phẩm này còn size 42 không shop?\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chat",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat"]
+            },
+            "description": "Endpoint tương thích bổ sung `POST /api/v1/chat` theo tiêu chí DoD ban đầu. Hoạt động giống hệt `/api/v1/chat/messages`."
+          },
+          "response": []
+        },
+        {
+          "name": "1.4 [Lỗi 401] Gửi tin nhắn thiếu X-Guest-Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"message\": \"Hỏi giá sản phẩm\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chat/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "messages"]
+            },
+            "description": "Kiểm tra xử lý lỗi khi khách vãng lai không truyền header `X-Guest-Token`. Mong đợi HTTP 401 Unauthorized kèm thông điệp nghiệp vụ rõ ràng thay vì thông báo đăng nhập sai mật khẩu."
+          },
+          "response": []
+        },
+        {
+          "name": "1.5 [Lỗi 401] Gửi tin nhắn với X-Guest-Token không hợp lệ",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Guest-Token",
+                "value": "wrong-or-tampered-token-123456"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"message\": \"Hỏi giá sản phẩm\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chat/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "messages"]
+            },
+            "description": "Kiểm tra xử lý lỗi khi guest token bị sai hoặc không khớp SHA-256 hash trong Redis metadata. Mong đợi HTTP 401 Unauthorized."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Người Dùng Đã Đăng Nhập (Authenticated User)",
+      "item": [
+        {
+          "name": "2.1 Gửi tin nhắn - Người dùng đã đăng nhập (JWT)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"message\": \"Kiểm tra trạng thái đơn hàng gần đây của tôi\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chat/messages",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "messages"]
+            },
+            "description": "Người dùng đã đăng nhập gửi tin nhắn qua header `Authorization: Bearer <JWT>`. Không cần truyền `X-Guest-Token`. Chatbot có thể gọi công cụ truy vấn đơn hàng riêng của người dùng."
+          },
+          "response": []
+        },
+        {
+          "name": "2.2 Chuyển quyền sở hữu phiên - Claim Guest Session",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"guestToken\": \"{{guestToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chat/claim",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "claim"]
+            },
+            "description": "Sau khi khách vãng lai đăng nhập thành công vào website, gọi API này để chuyển toàn bộ lịch sử trò chuyện sang tài khoản người dùng, đồng thời gia hạn TTL thành 7 ngày."
+          },
+          "response": []
+        },
+        {
+          "name": "2.3 [Lỗi 403] Claim phiên khi chưa đăng nhập",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"guestToken\": \"{{guestToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/chat/claim",
+              "host": ["{{baseUrl}}"],
+              "path": ["chat", "claim"]
+            },
+            "description": "Gọi claim session khi không truyền header Authorization hoặc JWT không hợp lệ. Mong đợi HTTP 403 Forbidden."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
+

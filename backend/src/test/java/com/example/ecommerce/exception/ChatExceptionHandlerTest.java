@@ -1,7 +1,8 @@
 package com.example.ecommerce.exception;
 
-import com.example.ecommerce.chat.client.GeminiRestClient.GeminiServiceException;
-import com.example.ecommerce.chat.client.GeminiRestClient.GeminiTimeoutException;
+import com.example.ecommerce.exception.ChatAuthenticationException;
+import com.example.ecommerce.exception.GeminiServiceException;
+import com.example.ecommerce.exception.GeminiTimeoutException;
 import com.example.ecommerce.dto.response.ApiResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -27,12 +28,12 @@ class ChatExceptionHandlerTest {
     }
 
     @Test
-    @DisplayName("EX-01: ChatLockContentionException được ánh xạ thành HTTP 429 Too Many Requests")
+    @DisplayName("EX-01: ChatLockContentionException được ánh xạ thành HTTP 409 Conflict")
     void testHandleChatLockContention() {
         ChatLockContentionException ex = new ChatLockContentionException("Phiên đang xử lý yêu cầu trước");
         ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleChatLockContention(ex);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.TOO_MANY_REQUESTS);
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().isSuccess()).isFalse();
         assertThat(response.getBody().getMessage()).isEqualTo("Phiên đang xử lý yêu cầu trước");
@@ -90,12 +91,24 @@ class ChatExceptionHandlerTest {
     @Test
     @DisplayName("EX-06: BadCredentialsException trả về HTTP 401 Unauthorized cùng thông điệp bảo mật chuẩn")
     void testHandleBadCredentials_Returns401() {
-        BadCredentialsException ex = new BadCredentialsException("Guest token bắt buộc đối với khách vãng lai");
+        BadCredentialsException ex = new BadCredentialsException("Sai mật khẩu");
         ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleBadCredentials(ex);
 
         assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().isSuccess()).isFalse();
         assertThat(response.getBody().getMessage()).isEqualTo("Email hoặc mật khẩu không đúng");
+    }
+
+    @Test
+    @DisplayName("EX-07: ChatAuthenticationException được ánh xạ thành HTTP 401 Unauthorized kèm thông điệp nghiệp vụ")
+    void testHandleChatAuthenticationException() {
+        ChatAuthenticationException ex = new ChatAuthenticationException("Guest token bắt buộc đối với khách vãng lai (truyền qua header X-Guest-Token)");
+        ResponseEntity<ApiResponse<Void>> response = exceptionHandler.handleChatAuthentication(ex);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().isSuccess()).isFalse();
+        assertThat(response.getBody().getMessage()).isEqualTo("Guest token bắt buộc đối với khách vãng lai (truyền qua header X-Guest-Token)");
     }
 }

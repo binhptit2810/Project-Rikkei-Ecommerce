@@ -15,6 +15,9 @@ import {
   Ruler,
   RefreshCw
 } from 'lucide-react'
+import chatService from '../../services/chatService'
+import { useAuthStore } from '../../store/useAuthStore'
+import { ChatProductList } from './ChatProductCard'
 
 // Các câu hỏi gợi ý nhanh bắt buộc theo yêu cầu Trello và mở rộng tiện ích
 const QUICK_PROMPTS = [
@@ -34,8 +37,9 @@ const INITIAL_MESSAGES = [
   },
 ]
 
-// Lưu trữ lịch sử chat an toàn trong sessionStorage
+// Lưu trữ lịch sử chat và phiên an toàn trong sessionStorage
 const STORAGE_KEY = 'rikkei_store_ai_chat_history'
+const SESSION_STORAGE_KEY = 'rikkei_store_ai_chat_session'
 
 const loadChatHistory = () => {
   try {
@@ -60,142 +64,66 @@ const saveChatHistory = (messages) => {
   }
 }
 
-// Bộ máy phản hồi AI thông minh chuẩn ngữ cảnh (Deterministic Knowledge Engine)
-const getAiResponse = (userInput) => {
-  const query = userInput.toLowerCase().trim()
+const loadChatSession = () => {
+  try {
+    const saved = sessionStorage.getItem(SESSION_STORAGE_KEY)
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (parsed && parsed.sessionId) {
+        return parsed
+      }
+    }
+  } catch (_e) {}
+  return null
+}
 
-  // 1. Tư vấn chọn size
-  if (
-    query.includes('tư vấn chọn size') ||
-    query.includes('chọn size') ||
-    query.includes('bảng size') ||
-    query.includes('size áo') ||
-    query.includes('size quần') ||
-    query.includes('chiều cao') ||
-    query.includes('cân nặng') ||
-    query.includes('mặc size gì')
-  ) {
-    return (
-      '📏 **BẢNG TƯ VẤN CHỌN SIZE CHUẨN RIKKEI STORE**\n\n' +
-      '👔 **Dành cho Nam:**\n' +
-      '• **Size S**: Cao 1m55 - 1m65 | Nặng 48 - 55kg\n' +
-      '• **Size M**: Cao 1m65 - 1m72 | Nặng 56 - 65kg\n' +
-      '• **Size L**: Cao 1m70 - 1m77 | Nặng 66 - 75kg\n' +
-      '• **Size XL**: Cao 1m75 - 1m85 | Nặng 76 - 85kg\n' +
-      '• **Size XXL**: Cao trên 1m80 | Nặng trên 85kg\n\n' +
-      '👗 **Dành cho Nữ:**\n' +
-      '• **Size S**: Cao 1m50 - 1m58 | Nặng 40 - 47kg\n' +
-      '• **Size M**: Cao 1m55 - 1m62 | Nặng 48 - 54kg\n' +
-      '• **Size L**: Cao 1m60 - 1m68 | Nặng 55 - 62kg\n' +
-      '• **Size XL**: Cao 1m65 - 1m72 | Nặng 63 - 70kg\n\n' +
-      '💡 **Lời khuyên:** Nếu số đo của bạn ở giữa 2 size, hãy ưu tiên chọn size lớn hơn để có form mặc thoải mái nhất nhé!'
-    )
+const saveChatSession = (session) => {
+  try {
+    if (!session) {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY)
+    } else {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session))
+    }
+  } catch (_e) {}
+}
+
+/**
+ * Định dạng thông báo lỗi thân thiện dựa trên mã phản hồi HTTP của Backend.
+ */
+const formatErrorMessage = (error) => {
+  if (!error.response) {
+    if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+      return '⚠️ Dịch vụ tư vấn AI phản hồi quá thời gian. Bạn vui lòng thử lại câu hỏi nhé.'
+    }
+    return '⚠️ Không thể kết nối tới máy chủ. Vui lòng kiểm tra lại kết nối mạng của bạn.'
   }
 
-  // 2. Chính sách đổi trả
-  if (
-    query.includes('chính sách đổi trả') ||
-    query.includes('đổi trả') ||
-    query.includes('bảo hành') ||
-    query.includes('hoàn tiền') ||
-    query.includes('đổi hàng') ||
-    query.includes('trả hàng')
-  ) {
-    return (
-      '🔄 **CHÍNH SÁCH ĐỔI TRẢ & BẢO HÀNH CHÍNH HÃNG**\n\n' +
-      '• **Thời hạn đổi trả:** Hỗ trợ đổi trả miễn phí trong vòng **7 - 30 ngày** kể từ ngày nhận hàng thành công.\n' +
-      '• **Điều kiện:** Sản phẩm còn nguyên tem mác, hộp phụ kiện, hoá đơn và chưa qua giặt tẩy hay sử dụng.\n' +
-      '• **Lỗi từ nhà sản xuất / giao sai hàng:** Rikkei Store chịu 100% phí ship 2 chiều, shipper đến tận nhà thu hồi hàng đổi.\n' +
-      '• **Đổi size theo yêu cầu:** Quý khách được đổi sang size vừa vặn hoàn toàn thuận tiện.\n' +
-      '• **Hoàn tiền:** Thực hiện qua chuyển khoản hoặc VNPay trong **24 - 48h** sau khi kho tiếp nhận hàng hoàn.\n\n' +
-      '📞 Hotline hỗ trợ khiếu nại & đổi trả: **1900-RIKKEI** (8:00 - 22:00).'
-    )
-  }
+  const status = error.response.status
+  const backendMsg = error.response.data?.message
 
-  // 3. Kiểm tra đơn hàng
-  if (
-    query.includes('kiểm tra đơn hàng') ||
-    query.includes('đơn hàng') ||
-    query.includes('vận chuyển') ||
-    query.includes('giao hàng') ||
-    query.includes('bao lâu nhận được') ||
-    query.includes('mã vận đơn')
-  ) {
-    return (
-      '📦 **TRA CỨU HÀNH TRÌNH ĐƠN HÀNG**\n\n' +
-      'Để kiểm tra tiến độ đơn hàng nhanh nhất:\n' +
-      '1. Truy cập mục **"Lịch sử đơn hàng"** trong biểu tượng tài khoản ở thanh điều hướng trên cùng.\n' +
-      '2. Xem trực tiếp mã vận đơn, trạng thái đóng gói và hành trình vận chuyển thực tế.\n' +
-      '3. **Thời gian giao hàng tiêu chuẩn:**\n' +
-      '   • Nội thành Hà Nội & TP.HCM: 1 - 2 ngày (có tuỳ chọn hỏa tốc 2 - 4h).\n' +
-      '   • Các tỉnh thành khác: 2 - 4 ngày làm việc.\n\n' +
-      '✨ Nếu bạn có mã đơn hàng (VD: #ORD-1234), hãy nhập trực tiếp vào khung chat để tôi hỗ trợ nhé!'
-    )
+  switch (status) {
+    case 400:
+      return backendMsg || '⚠️ Yêu cầu không hợp lệ. Vui lòng kiểm tra lại nội dung câu hỏi.'
+    case 401:
+      return '⚠️ Phiên trò chuyện hoặc phiên đăng nhập đã hết hạn. Vui lòng thử lại.'
+    case 403:
+      return '⚠️ Bạn không có quyền truy cập dữ liệu này. Vui lòng kiểm tra lại tài khoản.'
+    case 409:
+      return backendMsg || '⚠️ Phiên trò chuyện đang bận xử lý tin nhắn trước hoặc vừa được cập nhật. Vui lòng đợi trong giây lát.'
+    case 429: {
+      const retryAfter = error.response.headers?.['retry-after']
+      if (retryAfter) {
+        return `⚠️ Hệ thống AI đang bận do nhiều người sử dụng. Vui lòng đợi ${retryAfter} giây rồi bấm "Thử lại".`
+      }
+      return backendMsg || '⚠️ Hệ thống tư vấn AI đang nhận lượng yêu cầu lớn. Vui lòng bấm "Thử lại" sau ít giây.'
+    }
+    case 503:
+      return '⚠️ Dịch vụ tư vấn AI tạm thời không khả dụng. Bạn vui lòng thử lại sau ít phút.'
+    case 504:
+      return '⚠️ Dịch vụ tư vấn AI phản hồi quá thời gian xử lý. Bạn vui lòng thử lại câu hỏi nhé.'
+    default:
+      return backendMsg || '⚠️ Đã xảy ra sự cố trong quá trình xử lý câu hỏi. Vui lòng thử lại sau.'
   }
-
-  // 4. Mã giảm giá hôm nay
-  if (
-    query.includes('mã giảm giá') ||
-    query.includes('mã giảm giá hôm nay') ||
-    query.includes('voucher') ||
-    query.includes('coupon') ||
-    query.includes('khuyến mãi') ||
-    query.includes('ưu đãi') ||
-    query.includes('giảm giá')
-  ) {
-    return (
-      '🎟️ **DANH SÁCH MÃ GIẢM GIÁ HOT NHẤT HÔM NAY**\n\n' +
-      '• **RIKKEINEW**: Giảm ngay **15%** (tối đa 100.000₫) cho đơn hàng đầu tiên.\n' +
-      '• **FREESHIP**: Miễn phí vận chuyển toàn quốc cho đơn hàng từ **500.000₫**.\n' +
-      '• **TECHNOVA50**: Giảm trực tiếp **50.000₫** cho đơn từ **800.000₫**.\n' +
-      '• **VNPAY10**: Giảm thêm **10%** khi chọn thanh toán qua cổng quét mã VNPay-QR.\n\n' +
-      '👉 Bạn hãy sao chép mã và dán vào ô *Mã giảm giá* tại trang Giỏ hàng / Thanh toán để hưởng ưu đãi ngay!'
-    )
-  }
-
-  // 5. Thanh toán / VNPay / COD
-  if (
-    query.includes('thanh toán') ||
-    query.includes('vnpay') ||
-    query.includes('cod') ||
-    query.includes('tiền mặt') ||
-    query.includes('chuyển khoản')
-  ) {
-    return (
-      '💳 **PHƯƠNG THỨC THANH TOÁN TIỆN LỢI TẠI RIKKEI STORE**\n\n' +
-      '1. **COD (Thanh toán khi nhận hàng):** Nhận hàng kiểm tra xong mới trả tiền mặt cho shipper.\n' +
-      '2. **VNPay-QR:** Quét mã tức thì qua 40+ ứng dụng ngân hàng và ví điện tử, thanh toán bảo mật 100% không mất phí giao dịch.\n\n' +
-      'Mọi giao dịch đều được mã hoá bảo mật chuẩn PCI-DSS và xác thực SSL.'
-    )
-  }
-
-  // 6. Chào hỏi
-  if (
-    query === 'hi' ||
-    query === 'hello' ||
-    query.startsWith('chào') ||
-    query.startsWith('xin chào') ||
-    query.includes('alo')
-  ) {
-    return (
-      'Chào bạn! Rất vui được đồng hành cùng bạn tại Rikkei Store hôm nay. 😊\n\n' +
-      'Bạn đang muốn tìm kiếm sản phẩm nào, cần tư vấn size, kiểm tra đơn hàng hay nhận ưu đãi đặc biệt? Hãy nhắn tin cho mình nhé!'
-    )
-  }
-
-  // 7. Cảm ơn
-  if (query.includes('cảm ơn') || query.includes('cam on') || query.includes('thanks') || query.includes('thank')) {
-    return (
-      'Không có chi ạ! Rất hân hạnh được phục vụ bạn. Chúc bạn có trải nghiệm mua sắm tuyệt vời tại Rikkei Store! ✨\n\n' +
-      'Nếu cần thêm trợ giúp, bạn cứ nhắn tin cho tôi bất kỳ lúc nào nhé!'
-    )
-  }
-
-  // 8. Trả lời mặc định / Fallback thông minh
-  return (
-    `Cảm ơn bạn đã đặt câu hỏi về: "${userInput}".\n\n` +
-    'Hiện tại trợ lý AI đã ghi nhận yêu cầu của bạn. Bạn có thể nhấn vào các chủ đề gợi ý nhanh ở trên (chọn size, đổi trả, mã giảm giá, kiểm tra đơn hàng) hoặc liên hệ đội ngũ chuyên viên hỗ trợ 24/7 qua Hotline **1900-RIKKEI** để được phục vụ chu đáo nhất!'
-  )
 }
 
 // Format timestamp sang giờ:phút thân thiện
@@ -214,6 +142,12 @@ export const ChatWidget = () => {
   const [inputValue, setInputValue] = useState('')
   const [isTyping, setIsTyping] = useState(false)
   const [hasUnread, setHasUnread] = useState(true)
+  const [session, setSession] = useState(loadChatSession)
+
+  const { isAuthenticated } = useAuthStore()
+  const isClaimingRef = useRef(false)
+  const isSubmittingRef = useRef(false)
+  const prevAuthRef = useRef(isAuthenticated)
 
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
@@ -249,6 +183,103 @@ export const ChatWidget = () => {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [isOpen])
 
+  // Xử lý chuyển đổi trạng thái xác thực: Đăng xuất -> Xóa lịch sử bảo mật; Đăng nhập -> Claim Session
+  useEffect(() => {
+    // Trường hợp 1: Người dùng đăng xuất (true -> false)
+    if (prevAuthRef.current && !isAuthenticated) {
+      setSession(null)
+      saveChatSession(null)
+      setMessages(INITIAL_MESSAGES)
+      saveChatHistory(INITIAL_MESSAGES)
+    }
+
+    // Trường hợp 2: Người dùng đăng nhập thành công (false -> true) -> Claim phiên Guest nếu có
+    if (!prevAuthRef.current && isAuthenticated) {
+      const handleClaimOnLogin = async () => {
+        if (isClaimingRef.current) return
+        const currentSession = session || loadChatSession()
+        if (currentSession?.sessionId && currentSession?.guestToken && !currentSession?.isClaimed) {
+          isClaimingRef.current = true
+          try {
+            await chatService.claimSession(currentSession.sessionId, currentSession.guestToken)
+            const updated = {
+              ...currentSession,
+              guestToken: null,
+              isClaimed: true,
+            }
+            setSession(updated)
+            saveChatSession(updated)
+          } catch (err) {
+            console.warn('Failed to claim guest chat session on login:', err)
+          } finally {
+            isClaimingRef.current = false
+          }
+        }
+      }
+      handleClaimOnLogin()
+    }
+
+    prevAuthRef.current = isAuthenticated
+  }, [isAuthenticated, session])
+
+  /**
+   * Đảm bảo luôn có một phiên chat hợp lệ.
+   * Nếu chưa có session: Gọi Backend POST /chat/sessions.
+   * Nếu người dùng đã đăng nhập, tự động claim phiên ngay lập tức.
+   */
+  const ensureSession = async () => {
+    let currentSession = session || loadChatSession()
+
+    if (!currentSession || !currentSession.sessionId) {
+      const guestData = await chatService.createGuestSession()
+      let newSession = {
+        sessionId: guestData.sessionId,
+        guestToken: guestData.guestToken,
+        expiresAt: guestData.expiresAt,
+        isClaimed: false,
+      }
+
+      // Nếu đã đăng nhập, claim ngay phiên vừa tạo để gắn với userId
+      if (isAuthenticated) {
+        try {
+          await chatService.claimSession(newSession.sessionId, newSession.guestToken)
+          newSession = {
+            ...newSession,
+            guestToken: null,
+            isClaimed: true,
+          }
+        } catch (claimErr) {
+          console.warn('Auto claim session for authenticated user failed:', claimErr)
+        }
+      }
+
+      setSession(newSession)
+      saveChatSession(newSession)
+      return newSession
+    }
+
+    // Nếu đã đăng nhập nhưng phiên khách chưa được claim
+    if (isAuthenticated && currentSession.guestToken && !currentSession.isClaimed && !isClaimingRef.current) {
+      isClaimingRef.current = true
+      try {
+        await chatService.claimSession(currentSession.sessionId, currentSession.guestToken)
+        currentSession = {
+          ...currentSession,
+          guestToken: null,
+          isClaimed: true,
+        }
+        setSession(currentSession)
+        saveChatSession(currentSession)
+      } catch (err) {
+        console.warn('Auto claim existing guest session failed:', err)
+      } finally {
+        isClaimingRef.current = false
+      }
+    }
+
+    return currentSession
+  }
+
   // Mở/Đóng widget
   const handleToggle = () => {
     setIsOpen((prev) => {
@@ -260,34 +291,87 @@ export const ChatWidget = () => {
     })
   }
 
-  // Gửi tin nhắn
-  const handleSendMessage = (textToSend) => {
+  // Gửi tin nhắn thực tế tới Backend Spring AI
+  const handleSendMessage = async (textToSend, existingMessageId = null) => {
     const trimmed = (textToSend || inputValue).trim()
-    if (!trimmed || isTyping) return
+    if (!trimmed || isTyping || isSubmittingRef.current) return
+    isSubmittingRef.current = true
 
-    const userMessage = {
-      id: `user-${Date.now()}`,
-      sender: 'user',
-      text: trimmed,
-      timestamp: new Date().toISOString(),
+    if (trimmed.length > 1000) {
+      alert('Nội dung tin nhắn không được vượt quá 1000 ký tự')
+      isSubmittingRef.current = false
+      return
     }
 
-    setMessages((prev) => [...prev, userMessage])
-    setInputValue('')
-    setIsTyping(true)
+    const messageId = existingMessageId || `msg-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`
 
-    // Mô phỏng độ trễ suy nghĩ của AI tự nhiên (600ms - 900ms)
-    setTimeout(() => {
-      const aiResponseText = getAiResponse(trimmed)
-      const aiMessage = {
-        id: `ai-${Date.now()}`,
-        sender: 'ai',
-        text: aiResponseText,
+    // Chỉ thêm tin nhắn người dùng mới nếu không phải đang Retry tin nhắn cũ
+    if (!existingMessageId) {
+      const userMessage = {
+        id: `user-${Date.now()}`,
+        sender: 'user',
+        text: trimmed,
+        clientMessageId: messageId,
         timestamp: new Date().toISOString(),
       }
-      setMessages((prev) => [...prev, aiMessage])
+      setMessages((prev) => [...prev, userMessage])
+      setInputValue('')
+    }
+
+    setIsTyping(true)
+
+    try {
+      // 1. Đảm bảo session hợp lệ
+      const currentSession = await ensureSession()
+
+      // 2. Xác định token gửi kèm (Guest gửi guestToken, User đã đăng nhập gửi Bearer qua apiClient)
+      const tokenToSend = isAuthenticated ? null : currentSession.guestToken
+
+      // 3. Gọi Backend Spring AI + Google Gemini (kèm clientMessageId để chống duplicate)
+      const responseData = await chatService.sendMessage(
+        currentSession.sessionId,
+        trimmed,
+        tokenToSend,
+        messageId
+      )
+
+      if (responseData && responseData.message) {
+        const aiMessage = {
+          id: `ai-${Date.now()}`,
+          sender: 'ai',
+          text: responseData.message,
+          products: Array.isArray(responseData.products) ? responseData.products : [],
+          timestamp: new Date().toISOString(),
+        }
+        setMessages((prev) => [...prev, aiMessage])
+      } else {
+        throw new Error('Phản hồi từ dịch vụ AI không hợp lệ')
+      }
+    } catch (error) {
+      console.error('Lỗi gửi tin nhắn tới Chatbot AI:', error)
+      const errorText = formatErrorMessage(error)
+      const retryAfter = error.response?.headers?.['retry-after']
+      const aiErrorMessage = {
+        id: `ai-err-${Date.now()}`,
+        sender: 'ai',
+        text: errorText,
+        isError: true,
+        failedText: trimmed,
+        clientMessageId: messageId,
+        retryAfter: retryAfter ? parseInt(retryAfter, 10) : null,
+        timestamp: new Date().toISOString(),
+      }
+      setMessages((prev) => [...prev, aiErrorMessage])
+
+      // Nếu session bị 404 (hết hạn trong Redis) hoặc 401 không hợp lệ, xóa session cũ để lượt sau tạo mới
+      if (error.response?.status === 404 || error.response?.status === 401) {
+        setSession(null)
+        saveChatSession(null)
+      }
+    } finally {
       setIsTyping(false)
-    }, 750)
+      isSubmittingRef.current = false
+    }
   }
 
   const handleSubmit = (e) => {
@@ -313,12 +397,14 @@ export const ChatWidget = () => {
     ]
     setMessages(resetList)
     saveChatHistory(resetList)
+    setSession(null)
+    saveChatSession(null)
     setInputValue('')
     setIsTyping(false)
   }
 
   const charCount = inputValue.length
-  const showCharWarning = charCount > 400
+  const showCharWarning = charCount > 800
 
   return (
     <>
@@ -389,6 +475,8 @@ export const ChatWidget = () => {
         <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/70 scroll-smooth">
           {messages.map((msg) => {
             const isAi = msg.sender === 'ai'
+            const isErrMsg = Boolean(msg.isError)
+
             return (
               <div
                 key={msg.id}
@@ -398,7 +486,11 @@ export const ChatWidget = () => {
               >
                 {/* AI Avatar */}
                 {isAi && (
-                  <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs">
+                  <div className={`w-7 h-7 rounded-full text-white flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
+                    isErrMsg
+                      ? 'bg-gradient-to-tr from-rose-500 to-red-600'
+                      : 'bg-gradient-to-tr from-blue-600 to-indigo-600'
+                  }`}>
                     <Bot className="w-4 h-4" />
                   </div>
                 )}
@@ -408,12 +500,33 @@ export const ChatWidget = () => {
                   <div
                     className={`p-3 sm:p-3.5 text-sm leading-relaxed whitespace-pre-line break-words ${
                       isAi
-                        ? 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-xs shadow-xs'
+                        ? isErrMsg
+                          ? 'bg-rose-50 border border-rose-200 text-rose-800 rounded-2xl rounded-tl-xs shadow-xs'
+                          : 'bg-white border border-slate-200 text-slate-800 rounded-2xl rounded-tl-xs shadow-xs'
                         : 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-2xl rounded-tr-xs shadow-md shadow-blue-500/10'
                     }`}
                   >
                     {msg.text}
+                    {isErrMsg && msg.failedText && (
+                      <div className="mt-2 pt-2 border-t border-rose-200/60">
+                        <button
+                          type="button"
+                          disabled={isTyping}
+                          onClick={() => handleSendMessage(msg.failedText, msg.clientMessageId)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-rose-700 bg-white border border-rose-300 rounded-lg hover:bg-rose-100/60 transition-all shadow-2xs cursor-pointer disabled:opacity-50 active:scale-95"
+                        >
+                          <RefreshCw className="w-3 h-3 text-rose-600" />
+                          <span>Thử lại</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
+
+                  {/* Danh sách Product Cards bên dưới câu trả lời của AI */}
+                  {isAi && Array.isArray(msg.products) && msg.products.length > 0 && (
+                    <ChatProductList products={msg.products} />
+                  )}
+
                   <div
                     className={`flex items-center gap-1 mt-1 text-[10px] ${
                       isAi ? 'text-slate-400 pl-1' : 'text-slate-400 pr-1'
@@ -447,7 +560,7 @@ export const ChatWidget = () => {
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-bounce [animation-delay:-0.15s]" />
                   <span className="w-1.5 h-1.5 rounded-full bg-indigo-600 animate-bounce" />
                 </div>
-                <span className="text-xs text-slate-400 italic">Rikkei AI đang gõ...</span>
+                <span className="text-xs text-slate-400 italic">Rikkei AI đang suy nghĩ và phản hồi...</span>
               </div>
             </div>
           )}
@@ -492,7 +605,7 @@ export const ChatWidget = () => {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               placeholder="Nhập câu hỏi cho Rikkei AI..."
-              maxLength={500}
+              maxLength={1000}
               disabled={isTyping}
               className="flex-1 h-10 px-3.5 text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-600 transition-all text-slate-800 placeholder:text-slate-400 disabled:opacity-50"
             />
@@ -510,8 +623,8 @@ export const ChatWidget = () => {
           <div className="flex items-center justify-between px-1 text-[10px] text-slate-400">
             <span>Nhấn Enter để gửi tin nhắn</span>
             {showCharWarning && (
-              <span className={charCount >= 500 ? 'text-red-500 font-bold' : 'text-amber-500'}>
-                {charCount}/500 ký tự
+              <span className={charCount >= 1000 ? 'text-red-500 font-bold' : 'text-amber-500'}>
+                {charCount}/1000 ký tự
               </span>
             )}
           </div>
