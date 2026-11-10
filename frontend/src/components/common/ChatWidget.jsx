@@ -20,6 +20,7 @@ import chatService from '../../services/chatService'
 import orderService from '../../services/orderService'
 import { useAuthStore } from '../../store/useAuthStore'
 import { ChatProductList } from './ChatProductCard'
+import { MiniProductList } from '../chat/MiniProductCard'
 import { ChatOrderStatusCard } from './ChatOrderStatusCard'
 import {
   detectOrderQuery,
@@ -790,10 +791,10 @@ export const ChatWidget = () => {
                     </div>
                   )}
 
-                  {/* Danh sách Product Cards bên dưới câu trả lời của AI */}
+                  {/* Danh sách Mini Product Cards bên dưới câu trả lời của AI [TSK-D12-DDM] */}
                   {isAi && !isStreaming && Array.isArray(msg.products) && msg.products.length > 0 && (
                     <div className="w-full">
-                      <ChatProductList products={msg.products} />
+                      <MiniProductList products={msg.products} />
                     </div>
                   )}
 
