@@ -86,10 +86,10 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_BASE_URL: ${GEMINI_BASE_URL:-https://generativelanguage.googleapis.com/v1beta/openai}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
-      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_HOST: ${MAIL_HOST:-smtp-relay.brevo.com}
       MAIL_PORT: ${MAIL_PORT:-587}
-      MAIL_USERNAME: ${MAIL_USERNAME:-binhbadboy2810@gmail.com}
-      MAIL_PASSWORD: ${MAIL_PASSWORD:-dcibqbxtoxfcghiq}
+      MAIL_USERNAME: ${MAIL_USERNAME:-af39f5001@smtp-brevo.com}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
       MAIL_FROM: ${MAIL_FROM:-binhbadboy2810@gmail.com}
       MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Rikkei Store}
       MAIL_SMTP_SSL_ENABLE: ${MAIL_SMTP_SSL_ENABLE:-false}
