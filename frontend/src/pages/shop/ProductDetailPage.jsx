@@ -19,6 +19,7 @@ import productService from '../../services/productService'
 import { useCartStore } from '../../store/useCartStore'
 import { useAuthStore } from '../../store/useAuthStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import ProductReviewsSection from '../../components/products/ProductReviewsSection'
 
 export const ProductDetailPage = () => {
   const { id } = useParams()
@@ -408,6 +409,11 @@ export const ProductDetailPage = () => {
 
           </div>
         </div>
+
+        {/* Phân hệ Đánh giá & Nhận xét sản phẩm [TSK-D12-DDM] */}
+        {product && product.id && (
+          <ProductReviewsSection productId={product.id} />
+        )}
       </div>
     </div>
   )
