@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS products (
     category_id    BIGINT,
     stock_quantity INT NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
     active         BOOLEAN NOT NULL DEFAULT TRUE,
+    rating_average DECIMAL(3, 1) NOT NULL DEFAULT 0.0,
+    total_reviews  INT NOT NULL DEFAULT 0,
     created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -187,4 +189,26 @@ CREATE TABLE IF NOT EXISTS coupons (
 
     INDEX idx_coupons_code (code),
     INDEX idx_coupons_active (active)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================================
+-- Bảng reviews — Đánh giá & Nhận xét sản phẩm [TSK-D11-DDM]
+-- rating: 1 -> 5 sao
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS reviews (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    product_id  BIGINT NOT NULL,
+    user_id     BIGINT NOT NULL,
+    rating      INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    comment     TEXT,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_reviews_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    CONSTRAINT fk_reviews_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT uk_reviews_product_user UNIQUE (product_id, user_id),
+    INDEX idx_reviews_product (product_id),
+    INDEX idx_reviews_user (user_id),
+    INDEX idx_reviews_rating (rating),
+    INDEX idx_reviews_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

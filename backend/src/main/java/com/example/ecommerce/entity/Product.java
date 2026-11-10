@@ -5,6 +5,8 @@ import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Entity ánh xạ bảng `products` trong MySQL.
@@ -63,6 +65,23 @@ public class Product {
     @Builder.Default
     private Boolean active = true;
 
+    /** Điểm đánh giá trung bình từ 1.0 đến 5.0 (làm tròn 1 chữ số thập phân). */
+    @Column(name = "rating_average", nullable = false)
+    @Builder.Default
+    private Double ratingAverage = 0.0;
+
+    /** Tổng số lượt đánh giá của sản phẩm. */
+    @Column(name = "total_reviews", nullable = false)
+    @Builder.Default
+    private Integer totalReviews = 0;
+
+    /** Danh sách đánh giá của sản phẩm. */
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private List<Review> reviews = new ArrayList<>();
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -79,6 +98,12 @@ public class Product {
         }
         if (this.stockQuantity == null) {
             this.stockQuantity = 0;
+        }
+        if (this.ratingAverage == null) {
+            this.ratingAverage = 0.0;
+        }
+        if (this.totalReviews == null) {
+            this.totalReviews = 0;
         }
     }
 
