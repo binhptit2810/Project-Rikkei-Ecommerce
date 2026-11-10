@@ -22,12 +22,14 @@ import CartPage from './pages/shop/CartPage'
 import CheckoutPage from './pages/checkout/CheckoutPage'
 import OrderHistoryPage from './pages/orders/OrderHistoryPage'
 import OrderDetailPage from './pages/orders/OrderDetailPage'
+import PaymentResultPage from './pages/orders/PaymentResultPage'
 import VNPayReturnPage from './pages/orders/VNPayReturnPage'
 import UserManagementPage from './pages/admin/UserManagementPage'
 import AdminProductsPage from './pages/admin/AdminProductsPage'
 import AdminCategoriesPage from './pages/admin/AdminCategoriesPage'
 import AdminOrdersPage from './pages/admin/AdminOrdersPage'
 import AdminInventoryPage from './pages/admin/AdminInventoryPage'
+import AdminVouchersPage from './pages/admin/AdminVouchersPage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -83,6 +85,8 @@ function App() {
           <Route path="categories" element={<AdminCategoriesPage />} />
           <Route path="orders" element={<AdminOrdersPage />} />
           <Route path="inventory" element={<AdminInventoryPage />} />
+          <Route path="vouchers" element={<AdminVouchersPage />} />
+          <Route path="coupons" element={<AdminVouchersPage />} />
         </Route>
 
         {/* 3. Customer Area Routes (Sử dụng CustomerLayout riêng với Navbar và Footer) */}
@@ -168,7 +172,9 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/orders/vnpay-return" element={<VNPayReturnPage />} />
+          <Route path="/orders/vnpay-return" element={<PaymentResultPage />} />
+          <Route path="/payment/result" element={<PaymentResultPage />} />
+          <Route path="/payment-result" element={<PaymentResultPage />} />
 
           {/* Error & Fallback Routes */}
           <Route path="/forbidden" element={<ForbiddenPage />} />

@@ -35,6 +35,65 @@ export const couponService = {
     const response = await apiClient.get(`/coupons/${code}`)
     return response.data
   },
+
+  // ==========================================
+  // ADMIN QUẢN TRỊ MÃ GIẢM GIÁ (VOUCHER CRUD)
+  // Phụ trách: Đặng Thanh Bình (DTB) | Phối hợp: Đỗ Đức Mạnh (DDM)
+  // ==========================================
+
+  /**
+   * Lấy toàn bộ danh sách mã giảm giá cho Admin (tất cả trạng thái)
+   */
+  getAdminCoupons: async () => {
+    const response = await apiClient.get('/admin/coupons')
+    return response.data
+  },
+
+  /**
+   * Lấy chi tiết mã giảm giá theo ID
+   * @param {number|string} id
+   */
+  getAdminCouponById: async (id) => {
+    const response = await apiClient.get(`/admin/coupons/${id}`)
+    return response.data
+  },
+
+  /**
+   * Tạo mới mã giảm giá
+   * @param {Object} data
+   */
+  createCoupon: async (data) => {
+    const response = await apiClient.post('/admin/coupons', data)
+    return response.data
+  },
+
+  /**
+   * Cập nhật thông tin mã giảm giá
+   * @param {number|string} id
+   * @param {Object} data
+   */
+  updateCoupon: async (id, data) => {
+    const response = await apiClient.put(`/admin/coupons/${id}`, data)
+    return response.data
+  },
+
+  /**
+   * Xóa vĩnh viễn mã giảm giá khỏi hệ thống
+   * @param {number|string} id
+   */
+  deleteCoupon: async (id) => {
+    const response = await apiClient.delete(`/admin/coupons/${id}`)
+    return response.data
+  },
+
+  /**
+   * Bật/tắt nhanh trạng thái kích hoạt mã giảm giá (Active/Inactive)
+   * @param {number|string} id
+   */
+  toggleCouponStatus: async (id) => {
+    const response = await apiClient.patch(`/admin/coupons/${id}/toggle-status`)
+    return response.data
+  },
 }
 
 export default couponService

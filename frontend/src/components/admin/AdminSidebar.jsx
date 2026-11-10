@@ -81,11 +81,11 @@ export const AdminSidebar = ({ onClose }) => {
       groupTitle: 'TIẾP THỊ & HỆ THỐNG',
       items: [
         {
-          key: 'coupons',
-          label: 'Mã giảm giá',
-          path: '/admin/coupons',
+          key: 'vouchers',
+          label: 'Mã giảm giá (Vouchers)',
+          path: '/admin/vouchers',
           icon: Percent,
-          isImplemented: false,
+          isImplemented: true,
         },
         {
           key: 'settings',

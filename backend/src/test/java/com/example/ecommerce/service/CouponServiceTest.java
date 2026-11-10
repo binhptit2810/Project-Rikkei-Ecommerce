@@ -1,6 +1,9 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.dto.request.CreateCouponRequest;
+import com.example.ecommerce.dto.request.UpdateCouponRequest;
 import com.example.ecommerce.dto.request.ValidateCouponRequest;
+import com.example.ecommerce.dto.response.CouponResponse;
 import com.example.ecommerce.dto.response.CouponValidationResponse;
 import com.example.ecommerce.entity.Coupon;
 import com.example.ecommerce.entity.DiscountType;
@@ -238,6 +241,146 @@ class CouponServiceTest {
 
         assertThat(discount).isEqualByComparingTo(BigDecimal.valueOf(30000));
         assertThat(percentCoupon.getUsedCount()).isEqualTo(11); // Ban đầu 10 -> lên 11
+        verify(couponRepository).save(percentCoupon);
+    }
+
+    // ==========================================
+    // ADMIN CRUD UNIT TESTS
+    // ==========================================
+
+    @Test
+    @DisplayName("Admin: Lấy danh sách toàn bộ voucher thành công")
+    void getAllCouponsForAdmin_Success() {
+        when(couponRepository.findAllByOrderByCreatedAtDesc()).thenReturn(java.util.List.of(percentCoupon, fixedCoupon));
+
+        java.util.List<CouponResponse> results = couponService.getAllCouponsForAdmin();
+
+        assertThat(results).hasSize(2);
+        assertThat(results.get(0).getCode()).isEqualTo("SALE10");
+        assertThat(results.get(1).getCode()).isEqualTo("GIAM50K");
+    }
+
+    @Test
+    @DisplayName("Admin: Lấy chi tiết voucher theo ID thành công")
+    void getCouponById_Success() {
+        when(couponRepository.findById(1L)).thenReturn(Optional.of(percentCoupon));
+
+        CouponResponse response = couponService.getCouponById(1L);
+
+        assertThat(response.getId()).isEqualTo(1L);
+        assertThat(response.getCode()).isEqualTo("SALE10");
+    }
+
+    @Test
+    @DisplayName("Admin: Lấy chi tiết voucher theo ID ném ResourceNotFoundException khi không tồn tại")
+    void getCouponById_NotFound_ThrowsException() {
+        when(couponRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> couponService.getCouponById(999L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Không tìm thấy");
+    }
+
+    @Test
+    @DisplayName("Admin: Tạo mới voucher thành công")
+    void createCoupon_Success() {
+        CreateCouponRequest request = CreateCouponRequest.builder()
+                .code("TET2026")
+                .discountType(DiscountType.PERCENT)
+                .discountValue(BigDecimal.valueOf(25))
+                .minOrderValue(BigDecimal.valueOf(500000))
+                .maxDiscount(BigDecimal.valueOf(100000))
+                .usageLimit(50)
+                .expireAt(LocalDateTime.now().plusDays(20))
+                .active(true)
+                .build();
+
+        when(couponRepository.existsByCodeIgnoreCase("TET2026")).thenReturn(false);
+        when(couponRepository.save(any(Coupon.class))).thenAnswer(inv -> {
+            Coupon c = inv.getArgument(0);
+            c.setId(10L);
+            return c;
+        });
+
+        CouponResponse response = couponService.createCoupon(request);
+
+        assertThat(response.getCode()).isEqualTo("TET2026");
+        assertThat(response.getDiscountValue()).isEqualByComparingTo(BigDecimal.valueOf(25));
+        verify(couponRepository).save(any(Coupon.class));
+    }
+
+    @Test
+    @DisplayName("Admin: Tạo mới voucher thất bại khi trùng mã code")
+    void createCoupon_DuplicateCode_ThrowsException() {
+        CreateCouponRequest request = CreateCouponRequest.builder()
+                .code("SALE10")
+                .discountType(DiscountType.PERCENT)
+                .discountValue(BigDecimal.valueOf(15))
+                .build();
+
+        when(couponRepository.existsByCodeIgnoreCase("SALE10")).thenReturn(true);
+
+        assertThatThrownBy(() -> couponService.createCoupon(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("đã tồn tại");
+    }
+
+    @Test
+    @DisplayName("Admin: Tạo mới voucher thất bại khi giảm giá % vượt quá 100")
+    void createCoupon_PercentOver100_ThrowsException() {
+        CreateCouponRequest request = CreateCouponRequest.builder()
+                .code("OVER100")
+                .discountType(DiscountType.PERCENT)
+                .discountValue(BigDecimal.valueOf(150))
+                .build();
+
+        when(couponRepository.existsByCodeIgnoreCase("OVER100")).thenReturn(false);
+
+        assertThatThrownBy(() -> couponService.createCoupon(request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("không được vượt quá 100%");
+    }
+
+    @Test
+    @DisplayName("Admin: Cập nhật voucher thành công")
+    void updateCoupon_Success() {
+        UpdateCouponRequest request = UpdateCouponRequest.builder()
+                .code("SALE20")
+                .discountValue(BigDecimal.valueOf(20))
+                .build();
+
+        when(couponRepository.findById(1L)).thenReturn(Optional.of(percentCoupon));
+        when(couponRepository.existsByCodeIgnoreCaseAndIdNot("SALE20", 1L)).thenReturn(false);
+        when(couponRepository.save(any(Coupon.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CouponResponse response = couponService.updateCoupon(1L, request);
+
+        assertThat(response.getCode()).isEqualTo("SALE20");
+        assertThat(response.getDiscountValue()).isEqualByComparingTo(BigDecimal.valueOf(20));
+        verify(couponRepository).save(percentCoupon);
+    }
+
+    @Test
+    @DisplayName("Admin: Xóa voucher thành công")
+    void deleteCoupon_Success() {
+        when(couponRepository.findById(1L)).thenReturn(Optional.of(percentCoupon));
+        doNothing().when(couponRepository).delete(percentCoupon);
+
+        couponService.deleteCoupon(1L);
+
+        verify(couponRepository).delete(percentCoupon);
+    }
+
+    @Test
+    @DisplayName("Admin: Bật/tắt trạng thái kích hoạt voucher thành công")
+    void toggleCouponStatus_Success() {
+        percentCoupon.setActive(true);
+        when(couponRepository.findById(1L)).thenReturn(Optional.of(percentCoupon));
+        when(couponRepository.save(any(Coupon.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CouponResponse response = couponService.toggleCouponStatus(1L);
+
+        assertThat(response.getActive()).isFalse();
         verify(couponRepository).save(percentCoupon);
     }
 }
