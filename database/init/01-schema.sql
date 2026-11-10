@@ -150,6 +150,35 @@ CREATE TABLE IF NOT EXISTS payments (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
+-- Bảng payment_transactions — Lịch sử các lần thử thanh toán (Payment Attempts)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS payment_transactions (
+    id                    BIGINT AUTO_INCREMENT PRIMARY KEY,
+    payment_id            BIGINT NOT NULL,
+    order_id              BIGINT NOT NULL,
+    txn_ref               VARCHAR(64) NOT NULL UNIQUE,
+    vnp_transaction_no    VARCHAR(64),
+    amount                DECIMAL(15, 2) NOT NULL,
+    bank_code             VARCHAR(20),
+    payment_method        ENUM('COD', 'SIMULATED', 'VNPAY') NOT NULL DEFAULT 'VNPAY',
+    status                ENUM('UNPAID', 'PAID', 'FAILED', 'REFUNDED') NOT NULL DEFAULT 'UNPAID',
+    reconciliation_status VARCHAR(30) NOT NULL DEFAULT 'NONE',
+    response_code         VARCHAR(10),
+    transaction_status    VARCHAR(10),
+    transaction_note      VARCHAR(255),
+    pay_date              DATETIME,
+    created_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at            DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_payment_tx_payment FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE CASCADE,
+    CONSTRAINT fk_payment_tx_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+    INDEX idx_payment_tx_payment_id (payment_id),
+    INDEX idx_payment_tx_order_id (order_id),
+    INDEX idx_payment_tx_reconciliation_status (reconciliation_status),
+    UNIQUE INDEX idx_payment_tx_txn_ref (txn_ref)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================================
 -- Bảng inventory_transactions — Lịch sử thay đổi tồn kho
 -- change_quantity: dương = nhập kho, âm = xuất kho
 -- =============================================================================

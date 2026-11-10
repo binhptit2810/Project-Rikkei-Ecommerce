@@ -4,6 +4,7 @@ import com.example.ecommerce.dto.request.CreateVNPayPaymentRequest;
 import com.example.ecommerce.dto.request.ProcessPaymentRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.PaymentResponse;
+import com.example.ecommerce.dto.response.VNPayIpnResponse;
 import com.example.ecommerce.dto.response.VNPayPaymentResponse;
 import com.example.ecommerce.service.PaymentService;
 import com.example.ecommerce.util.VNPayUtil;
@@ -54,7 +55,7 @@ public class PaymentController {
     }
 
     /**
-     * Xử lý phản hồi (callback/IPN) trả về từ Cổng thanh toán VNPay.
+     * Xử lý phản hồi (callback/IPN) trả về từ Cổng thanh toán VNPay (Return URL của trình duyệt).
      * GET /api/v1/payments/vnpay-callback
      * GET /payments/vnpay-callback
      */
@@ -63,6 +64,19 @@ public class PaymentController {
             @RequestParam Map<String, String> queryParams) {
         PaymentResponse response = paymentService.processVNPayCallback(queryParams);
         return ResponseEntity.ok(ApiResponse.success("Xử lý phản hồi thanh toán VNPay thành công", response));
+    }
+
+    /**
+     * Tiếp nhận và xử lý webhook IPN (Instant Payment Notification) từ máy chủ VNPay.
+     * GET /api/v1/payments/vnpay-ipn
+     * GET /payments/vnpay-ipn
+     */
+    @GetMapping("/vnpay-ipn")
+    public ResponseEntity<VNPayIpnResponse> handleVNPayIpn(
+            @RequestParam Map<String, String> queryParams,
+            HttpServletRequest request) {
+        VNPayIpnResponse response = paymentService.processVNPayIpn(queryParams, request);
+        return ResponseEntity.ok(response);
     }
 
     /**

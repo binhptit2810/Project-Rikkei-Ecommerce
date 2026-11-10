@@ -119,8 +119,9 @@ public class SecurityConfig {
                 // API Xác thực email đăng ký và Gửi lại mã OTP
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/verify-email").permitAll()
                 .requestMatchers(HttpMethod.POST, "/api/v1/auth/resend-verification").permitAll()
-                // VNPay callback / IPN endpoint (không yêu cầu JWT đăng nhập)
+                // VNPay callback (Return URL) & IPN webhook endpoint (không yêu cầu JWT đăng nhập)
                 .requestMatchers(HttpMethod.GET, "/api/v1/payments/vnpay-callback", "/payments/vnpay-callback").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/payments/vnpay-ipn", "/payments/vnpay-ipn").permitAll()
                 // GET sản phẩm và danh mục: khách vãng lai được xem
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()

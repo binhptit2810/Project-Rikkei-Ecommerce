@@ -3,6 +3,7 @@ package com.example.ecommerce.controller;
 import com.example.ecommerce.dto.request.CreateVNPayPaymentRequest;
 import com.example.ecommerce.dto.request.ProcessPaymentRequest;
 import com.example.ecommerce.dto.response.PaymentResponse;
+import com.example.ecommerce.dto.response.VNPayIpnResponse;
 import com.example.ecommerce.dto.response.VNPayPaymentResponse;
 import com.example.ecommerce.entity.PaymentMethod;
 import com.example.ecommerce.entity.PaymentStatus;
@@ -268,6 +269,94 @@ class PaymentControllerTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.transactionCode").value("PAY-20261109-12345678"))
                 .andExpect(jsonPath("$.data.status").value("PAID"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/payments/vnpay-ipn: Webhook công khai không cần JWT, trả JSON phẳng chuẩn đặc tả VNPay")
+    void handleVNPayIpn_Success_ReturnsFlatJson() throws Exception {
+        when(paymentService.processVNPayIpn(any(), any()))
+                .thenReturn(VNPayIpnResponse.success());
+
+        mockMvc.perform(get("/api/v1/payments/vnpay-ipn")
+                        .param("vnp_TxnRef", "PAY-20261110-12345678")
+                        .param("vnp_Amount", "150000000")
+                        .param("vnp_ResponseCode", "00")
+                        .param("vnp_TransactionStatus", "00")
+                        .param("vnp_SecureHash", "validmockhash"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.RspCode").value("00"))
+                .andExpect(jsonPath("$.Message").value("Confirm Success"));
+    }
+
+    @Test
+    @DisplayName("GET /payments/vnpay-ipn: Route alias không có /api/v1 cũng hoạt động chuẩn xác")
+    void handleVNPayIpn_AliasRoute_Success() throws Exception {
+        when(paymentService.processVNPayIpn(any(), any()))
+                .thenReturn(VNPayIpnResponse.success());
+
+        mockMvc.perform(get("/payments/vnpay-ipn")
+                        .param("vnp_TxnRef", "PAY-20261110-12345678")
+                        .param("vnp_SecureHash", "validmockhash"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.RspCode").value("00"))
+                .andExpect(jsonPath("$.Message").value("Confirm Success"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/payments/vnpay-ipn: Sai chữ ký trả về HTTP 200 kèm RspCode 97")
+    void handleVNPayIpn_InvalidChecksum_Returns97() throws Exception {
+        when(paymentService.processVNPayIpn(any(), any()))
+                .thenReturn(VNPayIpnResponse.invalidChecksum());
+
+        mockMvc.perform(get("/api/v1/payments/vnpay-ipn")
+                        .param("vnp_TxnRef", "PAY-TEST")
+                        .param("vnp_SecureHash", "badhash"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.RspCode").value("97"))
+                .andExpect(jsonPath("$.Message").value("Invalid Checksum"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/payments/vnpay-ipn: Không tìm thấy giao dịch trả về HTTP 200 kèm RspCode 01")
+    void handleVNPayIpn_OrderNotFound_Returns01() throws Exception {
+        when(paymentService.processVNPayIpn(any(), any()))
+                .thenReturn(VNPayIpnResponse.orderNotFound());
+
+        mockMvc.perform(get("/api/v1/payments/vnpay-ipn")
+                        .param("vnp_TxnRef", "PAY-UNKNOWN")
+                        .param("vnp_SecureHash", "validhash"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.RspCode").value("01"))
+                .andExpect(jsonPath("$.Message").value("Order not Found"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/payments/vnpay-ipn: Sai số tiền trả về HTTP 200 kèm RspCode 04")
+    void handleVNPayIpn_InvalidAmount_Returns04() throws Exception {
+        when(paymentService.processVNPayIpn(any(), any()))
+                .thenReturn(VNPayIpnResponse.invalidAmount());
+
+        mockMvc.perform(get("/api/v1/payments/vnpay-ipn")
+                        .param("vnp_TxnRef", "PAY-TEST")
+                        .param("vnp_Amount", "999999")
+                        .param("vnp_SecureHash", "validhash"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.RspCode").value("04"))
+                .andExpect(jsonPath("$.Message").value("Invalid Amount"));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/payments/vnpay-ipn: Giao dịch đã xác nhận trước đó trả về HTTP 200 kèm RspCode 02")
+    void handleVNPayIpn_AlreadyConfirmed_Returns02() throws Exception {
+        when(paymentService.processVNPayIpn(any(), any()))
+                .thenReturn(VNPayIpnResponse.alreadyConfirmed());
+
+        mockMvc.perform(get("/api/v1/payments/vnpay-ipn")
+                        .param("vnp_TxnRef", "PAY-TEST")
+                        .param("vnp_SecureHash", "validhash"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.RspCode").value("02"))
+                .andExpect(jsonPath("$.Message").value("Order already confirmed"));
     }
 }
 

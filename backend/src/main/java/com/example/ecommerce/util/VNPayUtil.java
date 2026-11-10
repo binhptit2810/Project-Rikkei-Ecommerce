@@ -7,6 +7,7 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -175,18 +176,26 @@ public final class VNPayUtil {
 
     /**
      * Xác thực chữ ký dữ liệu trả về từ VNPay (Return URL hoặc IPN Callback).
+     * Áp dụng so sánh thời gian cố định (constant-time) qua MessageDigest.isEqual để chống tấn công Timing Attack.
      *
      * @param queryParams Toàn bộ tham số nhận được từ VNPay
      * @param secretKey   Khóa bí mật hashSecret
      * @return true nếu chữ ký hợp lệ và nguyên vẹn
      */
     public static boolean verifyCallback(Map<String, String> queryParams, String secretKey) {
-        if (queryParams == null || queryParams.isEmpty() || secretKey == null) {
+        if (queryParams == null || queryParams.isEmpty() || secretKey == null || secretKey.trim().isEmpty()) {
             return false;
         }
 
         String vnpSecureHash = queryParams.get("vnp_SecureHash");
         if (vnpSecureHash == null || vnpSecureHash.trim().isEmpty()) {
+            return false;
+        }
+
+        String cleanHash = vnpSecureHash.trim();
+        // Chữ ký HMAC-SHA512 phải là chuỗi hex 128 ký tự
+        if (!cleanHash.matches("^[a-fA-F0-9]{128}$")) {
+            log.warn("Chữ ký vnp_SecureHash không đúng định dạng hex 128 ký tự");
             return false;
         }
 
@@ -196,7 +205,39 @@ public final class VNPayUtil {
         fieldsToHash.remove("vnp_SecureHashType");
 
         String calculatedHash = hashAllFields(fieldsToHash, secretKey);
-        return calculatedHash.equalsIgnoreCase(vnpSecureHash);
+        if (calculatedHash == null || calculatedHash.isEmpty()) {
+            return false;
+        }
+
+        // So sánh an toàn hằng số thời gian (Constant-time comparison) chống Timing Attack
+        byte[] calculatedBytes = calculatedHash.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8);
+        byte[] expectedBytes = cleanHash.toLowerCase(Locale.ROOT).getBytes(StandardCharsets.UTF_8);
+
+        return MessageDigest.isEqual(calculatedBytes, expectedBytes);
+    }
+
+    /**
+     * Kiểm tra xem HttpServletRequest có chứa tham số trùng lặp (HTTP Parameter Pollution - HPP)
+     * đối với các tham số bắt đầu bằng "vnp_" hay không.
+     *
+     * @param request HttpServletRequest
+     * @return true nếu phát hiện có ít nhất một tham số vnp_* bị gửi nhiều lần
+     */
+    public static boolean hasDuplicateVnpParams(HttpServletRequest request) {
+        if (request == null) {
+            return false;
+        }
+        Map<String, String[]> paramMap = request.getParameterMap();
+        if (paramMap == null || paramMap.isEmpty()) {
+            return false;
+        }
+        for (Map.Entry<String, String[]> entry : paramMap.entrySet()) {
+            if (entry.getKey() != null && entry.getKey().startsWith("vnp_") && entry.getValue() != null && entry.getValue().length > 1) {
+                log.warn("Phát hiện HTTP Parameter Pollution (HPP): tham số '{}' có {} giá trị", entry.getKey(), entry.getValue().length);
+                return true;
+            }
+        }
+        return false;
     }
 }
 

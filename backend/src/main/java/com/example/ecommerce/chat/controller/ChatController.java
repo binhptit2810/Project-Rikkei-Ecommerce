@@ -2,6 +2,7 @@ package com.example.ecommerce.chat.controller;
 
 import com.example.ecommerce.chat.model.ChatSessionMetadata;
 import com.example.ecommerce.chat.model.GuestSessionCreationResult;
+import com.example.ecommerce.chat.security.ClientIpResolver;
 import com.example.ecommerce.chat.service.ChatService;
 import com.example.ecommerce.chat.service.RateLimiterService;
 import com.example.ecommerce.dto.request.ChatRequest;
@@ -48,6 +49,7 @@ public class ChatController {
 
     private final ChatService chatService;
     private final RateLimiterService rateLimiterService;
+    private final ClientIpResolver clientIpResolver;
 
     /**
      * Khởi tạo phiên chat mới cho khách vãng lai (Guest).
@@ -175,9 +177,12 @@ public class ChatController {
     }
 
     /**
-     * Trích xuất địa chỉ IP remote của client mà server nhận được trực tiếp (không tin tưởng spoofed headers).
+     * Trích xuất địa chỉ Client IP an toàn thông qua ClientIpResolver (hỗ trợ Nginx Trusted Proxy, chống IP Spoofing).
      */
     private String resolveClientIp(HttpServletRequest request) {
+        if (clientIpResolver != null) {
+            return clientIpResolver.resolveClientIp(request);
+        }
         if (request == null) {
             return "unknown";
         }

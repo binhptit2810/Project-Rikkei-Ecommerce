@@ -1,20 +1,23 @@
 package com.example.ecommerce.chat.service;
 
+import com.example.ecommerce.chat.security.ClientIpResolver;
 import com.example.ecommerce.chat.service.impl.RedisRateLimiterServiceImpl;
 import com.example.ecommerce.exception.ChatRateLimitExceededException;
+import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.ConsumptionProbe;
+import io.github.bucket4j.distributed.BucketProxy;
+import io.github.bucket4j.distributed.proxy.ProxyManager;
+import io.github.bucket4j.distributed.proxy.RemoteBucketBuilder;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.RedisSystemException;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 
-import java.util.Collections;
-import java.util.List;
+import java.util.function.Supplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -22,137 +25,124 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit Test cho RedisRateLimiterServiceImpl.
- * Phụ trách: Cao Chí Thiện
- * Task ID: [TSK-D11-CCT] Tích hợp Google Gemini Client & Xây dựng API Chatbot Tư Vấn Bán Hàng.
+ * Unit Test cho RedisRateLimiterServiceImpl sử dụng Bucket4j + Redis.
+ * Phụ trách: Cao Chí Thiện (TSK-D12-CCT)
  */
 @ExtendWith(MockitoExtension.class)
 class RedisRateLimiterServiceImplTest {
 
     @Mock
-    private StringRedisTemplate redisTemplate;
+    private ProxyManager<String> proxyManager;
 
-    @InjectMocks
+    @Mock
+    private RemoteBucketBuilder<String> bucketBuilder;
+
+    @Mock
+    private BucketProxy bucket;
+
+    private ClientIpResolver clientIpResolver;
     private RedisRateLimiterServiceImpl rateLimiterService;
 
     private static final String TEST_IP = "192.168.1.100";
     private static final String TEST_USER_ID = "1001";
 
+    @BeforeEach
+    void setUp() {
+        clientIpResolver = new ClientIpResolver("127.0.0.1,::1");
+        rateLimiterService = new RedisRateLimiterServiceImpl(proxyManager, clientIpResolver);
+    }
+
     @Nested
-    @DisplayName("1. Guest Rate Limiter Tests (Hạn mức 10 req/phút)")
-    class GuestRateLimiterTests {
+    @DisplayName("1. Token Bucket Rate Limiting (10 requests / 60s / IP)")
+    class TokenBucketPolicyTests {
 
         @Test
-        @DisplayName("RL-01: Yêu cầu của khách vãng lai nằm trong hạn mức (counter <= 10) được cho phép")
-        void testCheckRateLimit_GuestUnderLimit() {
-            // Redis script trả về {allowed=1, ttlMillis=50000, currentCount=5}
-            when(redisTemplate.execute(any(DefaultRedisScript.class), eq(Collections.singletonList("chat:rate-limit:guest:{" + TEST_IP + "}")), any(), any()))
-                    .thenReturn(List.of(1L, 50000L, 5L));
+        @DisplayName("RL-01: Yêu cầu của khách vãng lai nằm trong hạn mức (consumed=true) được chấp thuận")
+        void testCheckRateLimit_GuestUnderLimit_Success() {
+            ConsumptionProbe probe = ConsumptionProbe.consumed(9, 10);
+            when(proxyManager.builder()).thenReturn(bucketBuilder);
+            when(bucketBuilder.build(eq("chat:rate-limit:ip:{" + TEST_IP + "}"), any(Supplier.class)))
+                    .thenReturn(bucket);
+            when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(probe);
 
             // Không ném ngoại lệ
             rateLimiterService.checkRateLimit(TEST_IP, null);
 
-            verify(redisTemplate).execute(
-                    any(DefaultRedisScript.class),
-                    eq(Collections.singletonList("chat:rate-limit:guest:{" + TEST_IP + "}")),
-                    eq("60"),
-                    eq("10")
-            );
+            verify(bucket).tryConsumeAndReturnRemaining(1);
         }
 
         @Test
-        @DisplayName("RL-02: Yêu cầu của khách vãng lai vượt quá hạn mức (> 10) bị từ chối với ChatRateLimitExceededException")
-        void testCheckRateLimit_GuestOverLimit() {
-            // Redis script trả về {allowed=0, ttlMillis=45200, currentCount=11}
-            when(redisTemplate.execute(any(DefaultRedisScript.class), eq(Collections.singletonList("chat:rate-limit:guest:{" + TEST_IP + "}")), any(), any()))
-                    .thenReturn(List.of(0L, 45200L, 11L));
+        @DisplayName("RL-02: Yêu cầu của khách vãng lai vượt quá hạn mức (consumed=false) bị chặn với 429 và Retry-After")
+        void testCheckRateLimit_GuestOverLimit_RejectsWith429() {
+            // Giả lập còn 5.2 giây để hồi phục 1 token
+            ConsumptionProbe probe = ConsumptionProbe.rejected(0, 5_200_000_000L, 0);
+            when(proxyManager.builder()).thenReturn(bucketBuilder);
+            when(bucketBuilder.build(eq("chat:rate-limit:ip:{" + TEST_IP + "}"), any(Supplier.class)))
+                    .thenReturn(bucket);
+            when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(probe);
 
             assertThatThrownBy(() -> rateLimiterService.checkRateLimit(TEST_IP, null))
                     .isInstanceOf(ChatRateLimitExceededException.class)
                     .hasMessageContaining("tối đa 10 câu hỏi/phút")
                     .satisfies(ex -> {
                         ChatRateLimitExceededException rle = (ChatRateLimitExceededException) ex;
-                        assertThat(rle.getRetryAfterSeconds()).isEqualTo(46L); // (45200 + 999) / 1000 = 46
+                        assertThat(rle.getRetryAfterSeconds()).isEqualTo(6L); // ceil(5.2) = 6s
                     });
         }
 
         @Test
-        @DisplayName("RL-03: Client IP null hoặc blank được chuẩn hóa thành 'unknown' an toàn")
-        void testCheckRateLimit_GuestBlankIpSanitized() {
-            when(redisTemplate.execute(any(DefaultRedisScript.class), eq(Collections.singletonList("chat:rate-limit:guest:{unknown}")), any(), any()))
-                    .thenReturn(List.of(1L, 60000L, 1L));
+        @DisplayName("RL-03: Người dùng đã đăng nhập dùng chung bucket IP với Guest (10 req/phút/IP), không còn hạn mức 30")
+        void testCheckRateLimit_UserSharesSameIpBucket() {
+            ConsumptionProbe probe = ConsumptionProbe.consumed(5, 10);
+            when(proxyManager.builder()).thenReturn(bucketBuilder);
+            when(bucketBuilder.build(eq("chat:rate-limit:ip:{" + TEST_IP + "}"), any(Supplier.class)))
+                    .thenReturn(bucket);
+            when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(probe);
+
+            // Truyền userId nhưng key vẫn là IP
+            rateLimiterService.checkRateLimit(TEST_IP, TEST_USER_ID);
+
+            verify(bucketBuilder).build(eq("chat:rate-limit:ip:{" + TEST_IP + "}"), any(Supplier.class));
+        }
+
+        @Test
+        @DisplayName("RL-04: Hai IP khác nhau sử dụng hai Bucket Key độc lập")
+        void testCheckRateLimit_DifferentIpsIndependentBuckets() {
+            ConsumptionProbe probe = ConsumptionProbe.consumed(8, 10);
+            when(proxyManager.builder()).thenReturn(bucketBuilder);
+            when(bucketBuilder.build(anyString(), any(Supplier.class))).thenReturn(bucket);
+            when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(probe);
+
+            rateLimiterService.checkRateLimit("10.0.0.1", null);
+            rateLimiterService.checkRateLimit("10.0.0.2", null);
+
+            verify(bucketBuilder).build(eq("chat:rate-limit:ip:{10.0.0.1}"), any(Supplier.class));
+            verify(bucketBuilder).build(eq("chat:rate-limit:ip:{10.0.0.2}"), any(Supplier.class));
+        }
+
+        @Test
+        @DisplayName("RL-05: Client IP null hoặc rỗng được sanitize an toàn thành 'unknown'")
+        void testCheckRateLimit_NullOrBlankIpSanitized() {
+            ConsumptionProbe probe = ConsumptionProbe.consumed(9, 10);
+            when(proxyManager.builder()).thenReturn(bucketBuilder);
+            when(bucketBuilder.build(eq("chat:rate-limit:ip:{unknown}"), any(Supplier.class)))
+                    .thenReturn(bucket);
+            when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(probe);
 
             rateLimiterService.checkRateLimit("   ", null);
 
-            verify(redisTemplate).execute(
-                    any(DefaultRedisScript.class),
-                    eq(Collections.singletonList("chat:rate-limit:guest:{unknown}")),
-                    eq("60"),
-                    eq("10")
-            );
+            verify(bucketBuilder).build(eq("chat:rate-limit:ip:{unknown}"), any(Supplier.class));
         }
     }
 
     @Nested
-    @DisplayName("2. Authenticated User Rate Limiter Tests (Hạn mức 30 req/phút)")
-    class UserRateLimiterTests {
+    @DisplayName("2. Fail-Closed & Error Handling (HTTP 503)")
+    class FailClosedTests {
 
         @Test
-        @DisplayName("RL-04: Yêu cầu của người dùng đã xác thực nằm trong hạn mức (counter <= 30) được cho phép")
-        void testCheckRateLimit_UserUnderLimit() {
-            when(redisTemplate.execute(any(DefaultRedisScript.class), eq(Collections.singletonList("chat:rate-limit:user:{" + TEST_USER_ID + "}")), any(), any()))
-                    .thenReturn(List.of(1L, 40000L, 25L));
-
-            rateLimiterService.checkRateLimit(TEST_IP, TEST_USER_ID);
-
-            verify(redisTemplate).execute(
-                    any(DefaultRedisScript.class),
-                    eq(Collections.singletonList("chat:rate-limit:user:{" + TEST_USER_ID + "}")),
-                    eq("60"),
-                    eq("30")
-            );
-        }
-
-        @Test
-        @DisplayName("RL-05: Yêu cầu của người dùng đã xác thực vượt quá hạn mức (> 30) bị từ chối")
-        void testCheckRateLimit_UserOverLimit() {
-            when(redisTemplate.execute(any(DefaultRedisScript.class), eq(Collections.singletonList("chat:rate-limit:user:{" + TEST_USER_ID + "}")), any(), any()))
-                    .thenReturn(List.of(0L, 30100L, 31L));
-
-            assertThatThrownBy(() -> rateLimiterService.checkRateLimit(TEST_IP, TEST_USER_ID))
-                    .isInstanceOf(ChatRateLimitExceededException.class)
-                    .hasMessageContaining("tối đa 30 câu hỏi/phút")
-                    .satisfies(ex -> {
-                        ChatRateLimitExceededException rle = (ChatRateLimitExceededException) ex;
-                        assertThat(rle.getRetryAfterSeconds()).isEqualTo(31L); // (30100 + 999) / 1000 = 31
-                    });
-        }
-    }
-
-    @Nested
-    @DisplayName("3. Error & Fallback Tests")
-    class ErrorAndFallbackTests {
-
-        @Test
-        @DisplayName("RL-06: Redis script trả về null hoặc rỗng, cho phép request đi tiếp dưới dạng fallback")
-        void testCheckRateLimit_RedisNullResponseFallback() {
-            when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(), any()))
-                    .thenReturn(null);
-
-            // Fallback: không ném ngoại lệ làm gián đoạn người dùng
-            rateLimiterService.checkRateLimit(TEST_IP, null);
-
-            when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(), any()))
-                    .thenReturn(Collections.emptyList());
-
-            rateLimiterService.checkRateLimit(TEST_IP, null);
-        }
-
-        @Test
-        @DisplayName("RL-07: Lỗi kết nối Redis hạ tầng được bọc thành RedisSystemException")
-        void testCheckRateLimit_RedisInfrastructureException() {
-            when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(), any()))
-                    .thenThrow(new RuntimeException("Redis connection timeout"));
+        @DisplayName("RL-06: Khi Redis gặp sự cố kết nối, ném RedisSystemException (Fail-Closed)")
+        void testCheckRateLimit_RedisConnectionFailure_Throws503() {
+            when(proxyManager.builder()).thenThrow(new RuntimeException("Unable to connect to Redis: connection refused"));
 
             assertThatThrownBy(() -> rateLimiterService.checkRateLimit(TEST_IP, null))
                     .isInstanceOf(RedisSystemException.class)
@@ -160,10 +150,33 @@ class RedisRateLimiterServiceImplTest {
         }
 
         @Test
-        @DisplayName("RL-08: Retry-After tối thiểu là 1 giây ngay cả khi TTL millisecond rất nhỏ")
+        @DisplayName("RL-07: Khi Redis trả về null bucket, ném RedisSystemException, không cho qua")
+        void testCheckRateLimit_NullBucket_Throws503() {
+            when(proxyManager.builder()).thenReturn(bucketBuilder);
+            when(bucketBuilder.build(anyString(), any(Supplier.class))).thenReturn(null);
+
+            assertThatThrownBy(() -> rateLimiterService.checkRateLimit(TEST_IP, null))
+                    .isInstanceOf(RedisSystemException.class);
+        }
+
+        @Test
+        @DisplayName("RL-08: Khi Redis trả về null probe, ném RedisSystemException, không cho qua")
+        void testCheckRateLimit_NullProbe_Throws503() {
+            when(proxyManager.builder()).thenReturn(bucketBuilder);
+            when(bucketBuilder.build(anyString(), any(Supplier.class))).thenReturn(bucket);
+            when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(null);
+
+            assertThatThrownBy(() -> rateLimiterService.checkRateLimit(TEST_IP, null))
+                    .isInstanceOf(RedisSystemException.class);
+        }
+
+        @Test
+        @DisplayName("RL-09: Retry-After tối thiểu là 1 giây ngay cả khi thời gian chờ nanosecond rất nhỏ")
         void testCheckRateLimit_MinimumOneSecondRetryAfter() {
-            when(redisTemplate.execute(any(DefaultRedisScript.class), anyList(), any(), any()))
-                    .thenReturn(List.of(0L, 50L, 11L)); // 50ms remaining
+            ConsumptionProbe probe = ConsumptionProbe.rejected(0, 10_000_000L, 0); // 10ms
+            when(proxyManager.builder()).thenReturn(bucketBuilder);
+            when(bucketBuilder.build(anyString(), any(Supplier.class))).thenReturn(bucket);
+            when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(probe);
 
             assertThatThrownBy(() -> rateLimiterService.checkRateLimit(TEST_IP, null))
                     .isInstanceOf(ChatRateLimitExceededException.class)
@@ -174,11 +187,12 @@ class RedisRateLimiterServiceImplTest {
         }
 
         @Test
-        @DisplayName("RL-09: Kiểm tra hằng số cấu hình chuẩn")
+        @DisplayName("RL-10: Kiểm tra hằng số cấu hình chuẩn Token Bucket")
         void testConfigurationConstants() {
-            assertThat(RedisRateLimiterServiceImpl.GUEST_LIMIT).isEqualTo(10);
-            assertThat(RedisRateLimiterServiceImpl.USER_LIMIT).isEqualTo(30);
+            assertThat(RedisRateLimiterServiceImpl.LIMIT_CAPACITY).isEqualTo(10);
             assertThat(RedisRateLimiterServiceImpl.WINDOW_SECONDS).isEqualTo(60);
+            assertThat(RedisRateLimiterServiceImpl.GUEST_LIMIT).isEqualTo(10);
+            assertThat(RedisRateLimiterServiceImpl.USER_LIMIT).isEqualTo(10);
         }
     }
 }

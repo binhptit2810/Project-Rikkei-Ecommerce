@@ -50,6 +50,9 @@ class ChatControllerTest {
     @Mock
     private RateLimiterService rateLimiterService;
 
+    @Mock
+    private com.example.ecommerce.chat.security.ClientIpResolver clientIpResolver;
+
     @InjectMocks
     private ChatController chatController;
 
@@ -68,6 +71,7 @@ class ChatControllerTest {
         objectMapper = new ObjectMapper()
                 .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule());
         SecurityContextHolder.clearContext();
+        lenient().when(clientIpResolver.resolveClientIp(any())).thenReturn("127.0.0.1");
     }
 
     @Nested
@@ -395,6 +399,46 @@ class ChatControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isGatewayTimeout());
+        }
+
+        @Test
+        @DisplayName("CTRL-11c: Khi vượt quá Rate Limit trả HTTP 429 kèm header Retry-After")
+        void testSendMessage_RateLimitExceeded_Returns429WithRetryAfter() throws Exception {
+            ChatRequest request = ChatRequest.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .message("Hỏi giá")
+                    .build();
+
+            doThrow(new ChatRateLimitExceededException("Bạn đã gửi quá nhiều tin nhắn (tối đa 10 câu hỏi/phút).", 45L))
+                    .when(rateLimiterService).checkRateLimit(any(), any());
+
+            mockMvc.perform(post("/api/v1/chat/messages")
+                            .header("X-Guest-Token", TEST_GUEST_TOKEN)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isTooManyRequests())
+                    .andExpect(header().string("Retry-After", "45"))
+                    .andExpect(jsonPath("$.success").value(false))
+                    .andExpect(jsonPath("$.message").value("Bạn đã gửi quá nhiều tin nhắn (tối đa 10 câu hỏi/phút)."));
+        }
+
+        @Test
+        @DisplayName("CTRL-11d: Khi Redis sập trả HTTP 503 Service Unavailable (Fail-Closed)")
+        void testSendMessage_RedisOutage_Returns503() throws Exception {
+            ChatRequest request = ChatRequest.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .message("Hỏi giá")
+                    .build();
+
+            doThrow(new org.springframework.data.redis.RedisSystemException("Redis down", new RuntimeException("connection refused")))
+                    .when(rateLimiterService).checkRateLimit(any(), any());
+
+            mockMvc.perform(post("/api/v1/chat/messages")
+                            .header("X-Guest-Token", TEST_GUEST_TOKEN)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isServiceUnavailable())
+                    .andExpect(jsonPath("$.success").value(false));
         }
     }
 

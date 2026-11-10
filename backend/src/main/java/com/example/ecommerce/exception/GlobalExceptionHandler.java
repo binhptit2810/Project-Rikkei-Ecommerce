@@ -239,7 +239,8 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({
             org.springframework.data.redis.RedisConnectionFailureException.class,
             org.springframework.dao.QueryTimeoutException.class,
-            org.springframework.data.redis.RedisSystemException.class
+            org.springframework.data.redis.RedisSystemException.class,
+            io.lettuce.core.RedisException.class
     })
     public ResponseEntity<ApiResponse<Void>> handleRedisUnavailable(Exception ex) {
         log.error("Redis service unavailable or query timeout: {}", ex.getMessage());
