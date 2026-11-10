@@ -93,7 +93,7 @@ export const RegisterPage = () => {
       })
       setIsOtpSent(true)
       setOtpCountdown(60)
-      setOtpSuccessNotice('Mã xác thực OTP đã được gửi đến email của bạn! Vui lòng kiểm tra hộp thư.')
+      setOtpSuccessNotice('Mã xác thực OTP đã được gửi đến email của bạn! (Nếu kiểm thử cục bộ hoặc email gặp giới hạn gửi, bạn có thể xem mã trong terminal / Docker logs).')
       setFormErrors((prev) => ({ ...prev, otp: '' }))
     } catch (err) {
       const errMsg = err.message || 'Không thể gửi mã xác thực lúc này. Vui lòng kiểm tra email hoặc thử lại sau.'

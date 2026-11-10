@@ -124,6 +124,7 @@ app:
   mail:
     from: ${MAIL_FROM:binhbadboy2810@gmail.com}
     from-name: ${MAIL_FROM_NAME:Rikkei Store}
+    dev-fallback-enabled: ${MAIL_DEV_FALLBACK_ENABLED:true}
   otp:
     hmac-secret: ${OTP_HMAC_SECRET:ecommerce-default-otp-hmac-secret-change-in-production-2024}
     expiration-seconds: 300

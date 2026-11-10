@@ -37,6 +37,9 @@ public class EmailServiceImpl implements EmailService {
     @Value("${app.mail.from-name:}")
     private String fromName;
 
+    @Value("${app.mail.dev-fallback-enabled:true}")
+    private boolean devFallbackEnabled = false;
+
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss dd/MM/yyyy");
 
     private void configureSender(MimeMessageHelper helper) throws MessagingException, UnsupportedEncodingException {
@@ -48,6 +51,10 @@ public class EmailServiceImpl implements EmailService {
     }
 
     private void sendHtmlEmail(String toEmail, String subject, String htmlContent) {
+        sendHtmlEmail(toEmail, subject, htmlContent, null);
+    }
+
+    private void sendHtmlEmail(String toEmail, String subject, String htmlContent, String otpForFallback) {
         try {
             MimeMessage mimeMessage = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(
@@ -65,9 +72,61 @@ public class EmailServiceImpl implements EmailService {
             log.info("Gửi email thành công tới: {} | Tiêu đề: {}", toEmail, subject);
         } catch (MessagingException | org.springframework.mail.MailException e) {
             log.error("Lỗi khi gửi email tới {}: {}", toEmail, e.getMessage());
+            if (devFallbackEnabled) {
+                if (StringUtils.hasText(otpForFallback)) {
+                    log.warn("""
+                            
+                            ====================================================================================================
+                            [DEV/STAGING EMAIL OTP FALLBACK] GỬI EMAIL QUA SMTP GẶP SỰ CỐ / GIỚI HẠN GMAIL (550 / NETWORK):
+                            >> Chi tiết lỗi SMTP: {}
+                            >> Địa chỉ nhận: {}
+                            >> Tiêu đề: {}
+                            >> MÃ XÁC THỰC OTP: [ {} ] (Hiệu lực: 5 phút)
+                            Hệ thống đã giữ nguyên mã xác thực OTP trong Redis để bạn và các thành viên kiểm thử bình thường!
+                            ====================================================================================================""",
+                            e.getMessage(), toEmail, subject, otpForFallback);
+                } else {
+                    log.warn("""
+                            
+                            ====================================================================================================
+                            [DEV/STAGING EMAIL NOTIFICATION FALLBACK] KHÔNG THỂ GỬI EMAIL THÔNG BÁO TỚI {}:
+                            >> Chi tiết lỗi SMTP: {}
+                            >> Tiêu đề: {}
+                            Bỏ qua lỗi gửi email thông báo để không làm gián đoạn nghiệp vụ chính của hệ thống.
+                            ====================================================================================================""",
+                            toEmail, e.getMessage(), subject);
+                }
+                return;
+            }
             throw new BusinessException("Không thể gửi email xác thực lúc này, vui lòng thử lại sau ít phút");
         } catch (Exception e) {
             log.error("Lỗi không xác định khi gửi email tới {}: {}", toEmail, e.getMessage());
+            if (devFallbackEnabled) {
+                if (StringUtils.hasText(otpForFallback)) {
+                    log.warn("""
+                            
+                            ====================================================================================================
+                            [DEV/STAGING EMAIL OTP FALLBACK] LỖI HỆ THỐNG GỬI EMAIL:
+                            >> Chi tiết lỗi: {}
+                            >> Địa chỉ nhận: {}
+                            >> Tiêu đề: {}
+                            >> MÃ XÁC THỰC OTP: [ {} ]
+                            Hệ thống đã giữ nguyên mã xác thực OTP trong Redis để bạn và các thành viên kiểm thử bình thường!
+                            ====================================================================================================""",
+                            e.getMessage(), toEmail, subject, otpForFallback);
+                } else {
+                    log.warn("""
+                            
+                            ====================================================================================================
+                            [DEV/STAGING EMAIL NOTIFICATION FALLBACK] LỖI HỆ THỐNG GỬI EMAIL TỚI {}:
+                            >> Chi tiết lỗi: {}
+                            >> Tiêu đề: {}
+                            Bỏ qua lỗi để không làm gián đoạn nghiệp vụ.
+                            ====================================================================================================""",
+                            toEmail, e.getMessage(), subject);
+                }
+                return;
+            }
             throw new BusinessException("Lỗi hệ thống khi gửi email xác thực, vui lòng thử lại sau");
         }
     }
@@ -77,7 +136,10 @@ public class EmailServiceImpl implements EmailService {
         log.info("Bắt đầu chuẩn bị gửi email OTP đặt lại mật khẩu tới: {}", toEmail);
         String subject = "Yêu cầu đặt lại mật khẩu Rikkei Ecommerce";
         String htmlContent = buildOtpEmailTemplate(otp);
-        sendHtmlEmail(toEmail, subject, htmlContent);
+        sendHtmlEmail(toEmail, subject, htmlContent, otp);
+        if (devFallbackEnabled) {
+            log.info("[DEV INFO] Mã OTP đặt lại mật khẩu gửi tới {}: [{}]", toEmail, otp);
+        }
     }
 
     @Override
@@ -85,7 +147,10 @@ public class EmailServiceImpl implements EmailService {
         log.info("Bắt đầu chuẩn bị gửi email OTP xác thực tài khoản tới: {}", toEmail);
         String subject = "Xác thực địa chỉ email - Rikkei Store";
         String htmlContent = buildVerificationEmailTemplate(otp, fullName);
-        sendHtmlEmail(toEmail, subject, htmlContent);
+        sendHtmlEmail(toEmail, subject, htmlContent, otp);
+        if (devFallbackEnabled) {
+            log.info("[DEV INFO] Mã OTP xác thực email gửi tới {}: [{}]", toEmail, otp);
+        }
     }
 
     @Override
