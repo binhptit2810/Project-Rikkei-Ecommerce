@@ -1,6 +1,9 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.dto.request.CreateCouponRequest;
+import com.example.ecommerce.dto.request.UpdateCouponRequest;
 import com.example.ecommerce.dto.request.ValidateCouponRequest;
+import com.example.ecommerce.dto.response.CouponResponse;
 import com.example.ecommerce.dto.response.CouponValidationResponse;
 import com.example.ecommerce.entity.Coupon;
 import com.example.ecommerce.entity.DiscountType;
@@ -15,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.text.NumberFormat;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Locale;
@@ -238,6 +242,149 @@ public class CouponService {
         }
         return couponRepository.findByCodeIgnoreCase(code.trim())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy mã giảm giá: " + code));
+    }
+
+    /**
+     * Lấy toàn bộ danh sách mã giảm giá cho Admin quản lý (bao gồm cả active, inactive, expired).
+     */
+    @Transactional(readOnly = true)
+    public List<CouponResponse> getAllCouponsForAdmin() {
+        return couponRepository.findAllByOrderByCreatedAtDesc().stream()
+                .map(CouponResponse::fromEntity)
+                .toList();
+    }
+
+    /**
+     * Lấy thông tin chi tiết coupon theo ID dành cho Admin.
+     */
+    @Transactional(readOnly = true)
+    public CouponResponse getCouponById(Long id) {
+        Coupon coupon = couponRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy mã giảm giá với ID: " + id));
+        return CouponResponse.fromEntity(coupon);
+    }
+
+    /**
+     * Tạo mới mã giảm giá (Admin Create Voucher).
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public CouponResponse createCoupon(CreateCouponRequest request) {
+        String cleanCode = request.getCode() != null ? request.getCode().trim().toUpperCase() : "";
+
+        if (cleanCode.isEmpty()) {
+            throw new BusinessException("Mã giảm giá không được để trống");
+        }
+
+        if (couponRepository.existsByCodeIgnoreCase(cleanCode)) {
+            throw new BusinessException(String.format("Mã giảm giá '%s' đã tồn tại trong hệ thống", cleanCode));
+        }
+
+        if (request.getDiscountType() == DiscountType.PERCENT) {
+            if (request.getDiscountValue() != null && request.getDiscountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
+                throw new BusinessException("Tỷ lệ phần trăm giảm giá không được vượt quá 100%");
+            }
+        }
+
+        if (request.getExpireAt() != null && request.getExpireAt().isBefore(LocalDateTime.now())) {
+            throw new BusinessException("Thời hạn sử dụng không thể là thời gian trong quá khứ");
+        }
+
+        Coupon coupon = Coupon.builder()
+                .code(cleanCode)
+                .discountType(request.getDiscountType())
+                .discountValue(request.getDiscountValue())
+                .minOrderValue(request.getMinOrderValue() != null ? request.getMinOrderValue() : BigDecimal.ZERO)
+                .maxDiscount(request.getMaxDiscount())
+                .usageLimit(request.getUsageLimit())
+                .usedCount(0)
+                .expireAt(request.getExpireAt())
+                .active(request.getActive() != null ? request.getActive() : true)
+                .build();
+
+        Coupon saved = couponRepository.save(coupon);
+        log.info("Admin đã tạo thành công mã giảm giá: {} (ID: {})", saved.getCode(), saved.getId());
+        return CouponResponse.fromEntity(saved);
+    }
+
+    /**
+     * Cập nhật thông tin mã giảm giá (Admin Update Voucher).
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public CouponResponse updateCoupon(Long id, UpdateCouponRequest request) {
+        Coupon coupon = couponRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy mã giảm giá với ID: " + id));
+
+        if (request.getCode() != null && !request.getCode().trim().isEmpty()) {
+            String newCode = request.getCode().trim().toUpperCase();
+            if (couponRepository.existsByCodeIgnoreCaseAndIdNot(newCode, id)) {
+                throw new BusinessException(String.format("Mã giảm giá '%s' đã được sử dụng bởi voucher khác", newCode));
+            }
+            coupon.setCode(newCode);
+        }
+
+        if (request.getDiscountType() != null) {
+            coupon.setDiscountType(request.getDiscountType());
+        }
+
+        if (request.getDiscountValue() != null) {
+            if (coupon.getDiscountType() == DiscountType.PERCENT && request.getDiscountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
+                throw new BusinessException("Tỷ lệ phần trăm giảm giá không được vượt quá 100%");
+            }
+            coupon.setDiscountValue(request.getDiscountValue());
+        } else if (coupon.getDiscountType() == DiscountType.PERCENT && coupon.getDiscountValue().compareTo(BigDecimal.valueOf(100)) > 0) {
+            throw new BusinessException("Tỷ lệ phần trăm giảm giá không được vượt quá 100%");
+        }
+
+        if (request.getMinOrderValue() != null) {
+            coupon.setMinOrderValue(request.getMinOrderValue());
+        }
+
+        if (request.getMaxDiscount() != null) {
+            coupon.setMaxDiscount(request.getMaxDiscount());
+        }
+
+        if (request.getUsageLimit() != null) {
+            coupon.setUsageLimit(request.getUsageLimit());
+        }
+
+        if (request.getExpireAt() != null) {
+            coupon.setExpireAt(request.getExpireAt());
+        }
+
+        if (request.getActive() != null) {
+            coupon.setActive(request.getActive());
+        }
+
+        Coupon updated = couponRepository.save(coupon);
+        log.info("Admin đã cập nhật mã giảm giá ID {}: {}", id, updated.getCode());
+        return CouponResponse.fromEntity(updated);
+    }
+
+    /**
+     * Xóa mã giảm giá (Admin Delete Voucher).
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteCoupon(Long id) {
+        Coupon coupon = couponRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy mã giảm giá với ID: " + id));
+
+        couponRepository.delete(coupon);
+        log.info("Admin đã xóa mã giảm giá ID {}: {}", id, coupon.getCode());
+    }
+
+    /**
+     * Bật / tắt nhanh trạng thái kích hoạt (Toggle Active/Inactive).
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public CouponResponse toggleCouponStatus(Long id) {
+        Coupon coupon = couponRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy mã giảm giá với ID: " + id));
+
+        boolean newStatus = !Boolean.TRUE.equals(coupon.getActive());
+        coupon.setActive(newStatus);
+        Coupon updated = couponRepository.save(coupon);
+        log.info("Admin đã đổi trạng thái mã giảm giá ID {} thành: {}", id, newStatus ? "ACTIVE" : "INACTIVE");
+        return CouponResponse.fromEntity(updated);
     }
 
     private String buildSuccessMessage(Coupon coupon, BigDecimal discountAmount) {

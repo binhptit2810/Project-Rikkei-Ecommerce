@@ -20,7 +20,11 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
 
     boolean existsByCodeIgnoreCase(String code);
 
+    boolean existsByCodeIgnoreCaseAndIdNot(String code, Long id);
+
     List<Coupon> findByActiveTrueOrderByCreatedAtDesc();
+
+    List<Coupon> findAllByOrderByCreatedAtDesc();
 
     /**
      * Khóa bi quan (PESSIMISTIC_WRITE) khi cập nhật lượt sử dụng mã giảm giá.

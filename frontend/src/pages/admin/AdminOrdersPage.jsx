@@ -627,6 +627,7 @@ export const AdminOrdersPage = () => {
                         <div className="flex flex-col items-center gap-1">
                           <PaymentStatusBadge
                             status={order.paymentStatus}
+                            paymentMethod={order.paymentMethod}
                             description={order.paymentStatusDescription}
                           />
                           <span className="text-[10px] font-semibold text-slate-400">
@@ -905,6 +906,7 @@ export const AdminOrdersPage = () => {
                   <span className="text-slate-500">Trạng thái thanh toán</span>
                   <PaymentStatusBadge
                     status={selectedOrder.paymentStatus}
+                    paymentMethod={selectedOrder.paymentMethod}
                     description={selectedOrder.paymentStatusDescription}
                   />
                 </div>
