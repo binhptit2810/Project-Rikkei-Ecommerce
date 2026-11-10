@@ -38,8 +38,8 @@ import static org.mockito.Mockito.when;
 
 /**
  * Unit Test cho OrderTools (Spring AI Tool Calling).
- * Phụ trách: Cao Chí Thiện
- * Task ID: [TSK-D11-CCT]
+ * Phụ trách: Cao Chí Thiện & Đỗ Hoàng Anh [TSK-D12-DHA]
+ * Task ID: [TSK-D11-CCT] [TSK-D12-DHA]
  */
 @ExtendWith(MockitoExtension.class)
 class OrderToolsTest {
@@ -239,5 +239,59 @@ class OrderToolsTest {
         String result = orderTools.getOrderDetail(new OrderDetailRequest(), authenticatedToolContext);
 
         assertThat(result).contains("Vui lòng cung cấp mã đơn hàng");
+    }
+
+    @Test
+    @DisplayName("OT-10: getOrderDetail khi orderCode dạng ORD-001 hoặc ORD-123 fallback sang tìm theo numeric ID thành công")
+    void testGetOrderDetail_NumericFallback_Success() {
+        when(userRepository.findById(100L)).thenReturn(Optional.of(testUser));
+
+        when(orderService.getOrderByOrderCode("ORD-001", "customer@example.com"))
+                .thenThrow(new ResourceNotFoundException("Not found"));
+
+        OrderResponse order = OrderResponse.builder()
+                .id(1L)
+                .orderCode("ORD-20241108-001")
+                .orderStatus(OrderStatus.PROCESSING)
+                .recipientName("Nguyễn Văn A")
+                .recipientPhone("0901234567")
+                .shippingAddress("123 Cầu Giấy, Hà Nội")
+                .paymentMethod(PaymentMethod.COD)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .totalAmount(new BigDecimal("700000"))
+                .createdAt(LocalDateTime.of(2024, 11, 8, 10, 0))
+                .build();
+
+        when(orderService.getOrderDetail(1L, "customer@example.com"))
+                .thenReturn(order);
+
+        OrderDetailRequest request = OrderDetailRequest.builder()
+                .orderCode("ORD-001")
+                .build();
+
+        String result = orderTools.getOrderDetail(request, authenticatedToolContext);
+
+        assertThat(result).contains("ORD-20241108-001");
+        assertThat(result).contains("Đang đóng gói xử lý");
+    }
+
+    @Test
+    @DisplayName("OT-11: getOrderDetail khi orderCode dạng ORD-001 fallback theo numeric ID nhưng ID cũng không tồn tại")
+    void testGetOrderDetail_NumericFallback_NotFound() {
+        when(userRepository.findById(100L)).thenReturn(Optional.of(testUser));
+
+        when(orderService.getOrderByOrderCode("ORD-999", "customer@example.com"))
+                .thenThrow(new ResourceNotFoundException("Not found"));
+
+        when(orderService.getOrderDetail(999L, "customer@example.com"))
+                .thenThrow(new ResourceNotFoundException("Not found by ID"));
+
+        OrderDetailRequest request = OrderDetailRequest.builder()
+                .orderCode("ORD-999")
+                .build();
+
+        String result = orderTools.getOrderDetail(request, authenticatedToolContext);
+
+        assertThat(result).contains("Không tìm thấy đơn hàng");
     }
 }

@@ -20,8 +20,8 @@ import java.util.Optional;
 
 /**
  * Tool tra cứu đơn hàng cá nhân dành riêng cho người dùng đã đăng nhập.
- * Phụ trách: Cao Chí Thiện
- * Task ID: [TSK-D11-CCT] Spring AI Tool Calling
+ * Phụ trách: Cao Chí Thiện & Đỗ Hoàng Anh [TSK-D12-DHA]
+ * Task ID: [TSK-D11-CCT] [TSK-D12-DHA] Spring AI Tool Calling
  *
  * Ràng buộc an toàn:
  * 1. Tuyệt đối không nhận userId từ tham số do LLM truyền vào.
@@ -107,10 +107,25 @@ public class OrderTools {
         }
 
         try {
-            OrderResponse order;
+            OrderResponse order = null;
             if (request.getOrderCode() != null && !request.getOrderCode().isBlank()) {
-                order = orderService.getOrderByOrderCode(request.getOrderCode().trim(), currentUser.getEmail());
-            } else {
+                String rawCode = request.getOrderCode().trim();
+                try {
+                    order = orderService.getOrderByOrderCode(rawCode, currentUser.getEmail());
+                } catch (ResourceNotFoundException e) {
+                    // Trích xuất mã số nếu orderCode có định dạng 'ORD-xxx' hoặc '#xxx' (ví dụ: ORD-001 -> 1, ORD-123 -> 123)
+                    String numericPart = rawCode.replaceAll("(?i)^(#|ORD[-_]?)", "").trim();
+                    if (!numericPart.isEmpty() && numericPart.matches("\\d+")) {
+                        try {
+                            order = orderService.getOrderDetail(Long.parseLong(numericPart), currentUser.getEmail());
+                        } catch (Exception ex) {
+                            throw e;
+                        }
+                    } else {
+                        throw e;
+                    }
+                }
+            } else if (request.getOrderId() != null) {
                 order = orderService.getOrderDetail(request.getOrderId(), currentUser.getEmail());
             }
 
