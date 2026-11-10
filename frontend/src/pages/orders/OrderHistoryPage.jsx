@@ -449,6 +449,7 @@ export const OrderHistoryPage = () => {
                     <div className="flex items-center gap-2">
                       <PaymentStatusBadge
                         status={order.paymentStatus}
+                        paymentMethod={order.paymentMethod}
                         description={order.paymentStatusDescription}
                       />
                       <OrderStatusBadge

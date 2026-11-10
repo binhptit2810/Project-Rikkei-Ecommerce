@@ -20,6 +20,7 @@ import {
   Package,
   X,
   QrCode,
+  Banknote,
 } from 'lucide-react'
 import orderService from '../../services/orderService'
 import paymentService from '../../services/paymentService'
@@ -147,19 +148,21 @@ export const OrderDetailPage = () => {
     }
   }
 
-  // Tự động mở modal mã QR VNPAY nếu được điều hướng từ CheckoutPage với cờ openVNPayQR
+  // Tự động mở modal mã QR VNPAY nếu được điều hướng từ CheckoutPage với cờ openVNPayQR (chỉ cho đơn thanh toán online)
   useEffect(() => {
-    if (location.state?.openVNPayQR) {
+    if (location.state?.openVNPayQR && order?.paymentMethod !== 'COD') {
       if (location.state?.vnpayPaymentData) {
         setVnpayQRData(location.state.vnpayPaymentData)
       }
       setVnpayQRModalOpen(true)
     }
-  }, [location.state])
+  }, [location.state, order?.paymentMethod])
 
-  // Khởi tạo dữ liệu mã QR hiển thị sẵn trên trang nếu đơn chưa thanh toán
+  // Khởi tạo dữ liệu mã QR hiển thị sẵn trên trang nếu đơn chưa thanh toán VÀ là phương thức thanh toán trực tuyến
   useEffect(() => {
-    if (order?.id && order?.paymentStatus === 'UNPAID' && !vnpayQRData) {
+    const isOnline =
+      order?.paymentMethod === 'VNPAY' || order?.paymentMethod === 'SIMULATED'
+    if (order?.id && order?.paymentStatus === 'UNPAID' && isOnline && !vnpayQRData) {
       const defaultQR = {
         orderId: order.id,
         orderCode: order.orderCode,
@@ -175,7 +178,7 @@ export const OrderDetailPage = () => {
       }
       setVnpayQRData(defaultQR)
     }
-  }, [order?.id, order?.paymentStatus, vnpayQRData])
+  }, [order?.id, order?.paymentStatus, order?.paymentMethod, vnpayQRData])
 
   // Reorder loading
   const [reordering, setReordering] = useState(false)
@@ -736,8 +739,55 @@ export const OrderDetailPage = () => {
               )}
             </div>
 
-            {/* Banner/Card hiển thị Mã QR thanh toán VNPAY trực tiếp trên trang */}
-            {order.paymentStatus === 'UNPAID' && order.orderStatus !== 'CANCELLED' && (
+            {/* 1. Nếu là đơn hàng COD: Hiển thị Card thông tin thanh toán tiền mặt khi nhận hàng */}
+            {order.paymentMethod === 'COD' && order.orderStatus !== 'CANCELLED' && (
+              <div className="bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/90 rounded-3xl border-2 border-emerald-200 shadow-md p-6 sm:p-7 flex flex-col md:flex-row items-center gap-6 animate-in fade-in duration-300">
+                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-emerald-100 text-emerald-700 flex flex-col items-center justify-center shrink-0 shadow-inner text-center p-2">
+                  <Banknote className="w-10 h-10 mb-1" />
+                  <span className="text-[10px] font-black uppercase tracking-wider">Tiền mặt</span>
+                </div>
+
+                <div className="flex-1 space-y-3 w-full">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-600 text-white tracking-wider shadow-xs">
+                      Thanh toán khi nhận hàng (COD)
+                    </span>
+                    <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
+                      Đơn hàng #{order.orderCode} sẽ thanh toán bằng tiền mặt
+                    </h3>
+                  </div>
+
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Quý khách <span className="font-bold text-emerald-700">không cần chuyển khoản trước</span>. Nhân viên giao hàng (Shipper) sẽ liên hệ qua số điện thoại <span className="font-bold text-slate-900">{order.recipientPhone || 'của bạn'}</span> và thu tiền mặt trực tiếp khi bạn nhận hàng.
+                  </p>
+
+                  <div className="bg-white/95 rounded-2xl p-4 border border-emerald-200/90 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs shadow-2xs">
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Số tiền cần thanh toán cho shipper:</span>
+                      <span className="font-black text-base text-emerald-600">
+                        {formatPrice(order.totalAmount)}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px]">Địa chỉ giao hàng:</span>
+                      <span className="font-semibold text-slate-800 line-clamp-1">
+                        {order.shippingAddress || 'Theo thông tin đơn hàng'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 text-[11px] text-slate-500 pt-1">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>Được kiểm tra hàng trước khi thanh toán • Vui lòng chuẩn bị sẵn tiền mặt khi shipper giao tới</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. Banner/Card hiển thị Mã QR thanh toán VNPAY (Chỉ hiển thị khi chọn thanh toán online VNPAY / SIMULATED) */}
+            {(order.paymentMethod === 'VNPAY' || order.paymentMethod === 'SIMULATED') &&
+              order.paymentStatus === 'UNPAID' &&
+              order.orderStatus !== 'CANCELLED' && (
               <div className="bg-gradient-to-br from-blue-50/90 via-white to-indigo-50/90 rounded-3xl border-2 border-blue-200 shadow-md p-6 sm:p-7 flex flex-col md:flex-row items-center gap-6 animate-in fade-in duration-300">
                 <div className="bg-white p-3 rounded-2xl border border-blue-200 shadow-sm shrink-0 text-center">
                   <img
@@ -971,6 +1021,7 @@ export const OrderDetailPage = () => {
                       <span className="text-slate-500">Trạng thái</span>
                       <PaymentStatusBadge
                         status={order.paymentStatus}
+                        paymentMethod={order.paymentMethod}
                         description={order.paymentStatusDescription}
                       />
                     </div>
@@ -993,8 +1044,10 @@ export const OrderDetailPage = () => {
                       </div>
                     )}
 
-                    {/* Nút hành động thanh toán mô phỏng khi chưa hoàn tất */}
-                    {order.paymentStatus !== 'PAID' && order.orderStatus !== 'CANCELLED' && (
+                    {/* Nút hành động thanh toán mô phỏng (Chỉ áp dụng khi chọn thanh toán online VNPAY / SIMULATED) */}
+                    {(order.paymentMethod === 'VNPAY' || order.paymentMethod === 'SIMULATED') &&
+                      order.paymentStatus !== 'PAID' &&
+                      order.orderStatus !== 'CANCELLED' && (
                       <div className="pt-3 border-t border-slate-100 space-y-2">
                         <button
                           type="button"
@@ -1013,6 +1066,21 @@ export const OrderDetailPage = () => {
                           <CreditCard className="w-3.5 h-3.5" />
                           <span>Mô phỏng tức thì</span>
                         </button>
+                      </div>
+                    )}
+
+                    {/* Thông báo hướng dẫn thanh toán cho đơn COD */}
+                    {order.paymentMethod === 'COD' && (
+                      <div className="pt-3 border-t border-slate-100">
+                        <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-xl p-3 text-xs text-emerald-800 space-y-1">
+                          <div className="flex items-center gap-1.5 font-bold">
+                            <Banknote className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>Thu tiền mặt khi nhận hàng</span>
+                          </div>
+                          <p className="text-[11px] text-emerald-700 leading-relaxed">
+                            Quý khách vui lòng chuẩn bị <strong>{formatPrice(order.totalAmount)}</strong> để gửi nhân viên giao hàng khi nhận kiện hàng.
+                          </p>
+                        </div>
                       </div>
                     )}
                   </div>

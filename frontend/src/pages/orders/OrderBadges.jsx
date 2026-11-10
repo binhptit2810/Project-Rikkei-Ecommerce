@@ -114,9 +114,18 @@ export const OrderStatusBadge = ({ status }) => {
   )
 }
 
-export const PaymentStatusBadge = ({ status }) => {
+export const PaymentStatusBadge = ({ status, paymentMethod, description }) => {
+  if (paymentMethod === 'COD' && status === 'UNPAID') {
+    return (
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs bg-emerald-50 text-emerald-700 border-emerald-200">
+        <Truck className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
+        <span>Thu tiền khi nhận hàng (COD)</span>
+      </span>
+    )
+  }
+
   const config = PAYMENT_STATUS_CONFIG[status] || {
-    label: status || 'Chưa rõ',
+    label: description || status || 'Chưa rõ',
     badgeClass: 'bg-slate-100 text-slate-700 border-slate-200',
     icon: Clock,
   }
@@ -127,7 +136,7 @@ export const PaymentStatusBadge = ({ status }) => {
       className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold border shadow-2xs ${config.badgeClass}`}
     >
       <Icon className="w-3.5 h-3.5 shrink-0" />
-      <span>{config.label}</span>
+      <span>{description || config.label}</span>
     </span>
   )
 }
