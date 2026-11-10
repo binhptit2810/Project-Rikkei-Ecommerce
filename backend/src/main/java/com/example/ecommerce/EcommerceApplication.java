@@ -25,13 +25,24 @@ public class EcommerceApplication {
      * Giúp ứng dụng nhận GEMINI_API_KEY và các cấu hình khi chạy qua IntelliJ IDEA, Eclipse, hoặc dòng lệnh.
      */
     public static void loadDotEnvIfPresent() {
-        File[] candidates = new File[] {
+        loadDotEnvIfPresent(
                 new File(".env"),
                 new File("../.env")
-        };
+        );
+    }
+
+    /**
+     * Nạp file .env từ danh sách file ứng viên (hỗ trợ truyền file tạm trong Unit Test).
+     *
+     * @param candidates Mảng các file .env ứng viên cần kiểm tra
+     */
+    public static void loadDotEnvIfPresent(File... candidates) {
+        if (candidates == null || candidates.length == 0) {
+            return;
+        }
 
         for (File envFile : candidates) {
-            if (envFile.exists() && envFile.isFile()) {
+            if (envFile != null && envFile.exists() && envFile.isFile()) {
                 try (BufferedReader reader = new BufferedReader(new FileReader(envFile, StandardCharsets.UTF_8))) {
                     String line;
                     while ((line = reader.readLine()) != null) {
@@ -44,9 +55,13 @@ public class EcommerceApplication {
                         String key = trimmed.substring(0, equalsIndex).trim();
                         String value = trimmed.substring(equalsIndex + 1).trim();
 
+                        if (key.isEmpty()) {
+                            continue;
+                        }
+
                         // Loại bỏ dấu nháy kép hoặc đơn bao quanh nếu có
-                        if ((value.startsWith("\"") && value.endsWith("\"")) ||
-                            (value.startsWith("'") && value.endsWith("'"))) {
+                        if ((value.startsWith("\"") && value.endsWith("\"") && value.length() >= 2) ||
+                            (value.startsWith("'") && value.endsWith("'") && value.length() >= 2)) {
                             value = value.substring(1, value.length() - 1);
                         }
 
