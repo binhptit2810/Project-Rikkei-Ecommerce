@@ -26,5 +26,7 @@ logging:
 
 # Trong Docker/Production: bắt buộc phải truyền biến môi trường OTP_HMAC_SECRET, không dùng fallback mặc định
 app:
+  security:
+    trusted-proxies: ${TRUSTED_PROXIES:127.0.0.1,::1,172.16.0.0/12,10.0.0.0/8}
   otp:
     hmac-secret: ${OTP_HMAC_SECRET:}

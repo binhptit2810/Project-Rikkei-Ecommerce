@@ -117,6 +117,8 @@ jwt:
 
 # Cấu hình ứng dụng
 app:
+  security:
+    trusted-proxies: ${TRUSTED_PROXIES:127.0.0.1,::1,0:0:0:0:0:0:0:1}
   upload:
     dir: ${UPLOAD_DIR:uploads}
   mail:

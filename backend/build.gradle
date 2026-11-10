@@ -45,6 +45,11 @@ dependencies {
     // Spring Data Redis (tương thích Spring Boot 3.3.5 / Java 21)
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 
+    // Bucket4j Distributed Rate Limiting via Lettuce (Java 21 / Spring Boot 3.3.5)
+    implementation 'com.bucket4j:bucket4j_jdk17-core:8.14.0'
+    implementation 'com.bucket4j:bucket4j_jdk17-redis-common:8.14.0'
+    implementation 'com.bucket4j:bucket4j_jdk17-lettuce:8.14.0'
+
     // Spring Boot Starter Mail (cho gửi email OTP qua SMTP)
     implementation 'org.springframework.boot:spring-boot-starter-mail'
 

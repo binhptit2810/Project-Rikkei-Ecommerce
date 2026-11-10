@@ -89,6 +89,93 @@ class VNPayUtilTest {
     }
 
     @Test
+    @DisplayName("verifyCallback: Thiếu vnp_SecureHash trả về false")
+    void verifyCallback_missingHash_returnsFalse() {
+        Map<String, String> queryParams = new HashMap<>();
+        queryParams.put("vnp_Amount", "10000000");
+        queryParams.put("vnp_ResponseCode", "00");
+
+        assertThat(VNPayUtil.verifyCallback(queryParams, TEST_SECRET)).isFalse();
+
+        queryParams.put("vnp_SecureHash", "   ");
+        assertThat(VNPayUtil.verifyCallback(queryParams, TEST_SECRET)).isFalse();
+    }
+
+    @Test
+    @DisplayName("verifyCallback: Chữ ký sai định dạng hex 128 ký tự trả về false")
+    void verifyCallback_malformedHash_returnsFalse() {
+        Map<String, String> queryParams = new HashMap<>();
+        queryParams.put("vnp_Amount", "10000000");
+        queryParams.put("vnp_ResponseCode", "00");
+        queryParams.put("vnp_SecureHash", "short-invalid-hash");
+
+        assertThat(VNPayUtil.verifyCallback(queryParams, TEST_SECRET)).isFalse();
+    }
+
+    @Test
+    @DisplayName("verifyCallback: Chữ ký viết hoa vẫn được xác thực hợp lệ qua MessageDigest.isEqual")
+    void verifyCallback_uppercaseHash_returnsTrue() {
+        Map<String, String> queryParams = new HashMap<>();
+        queryParams.put("vnp_Amount", "10000000");
+        queryParams.put("vnp_BankCode", "NCB");
+        queryParams.put("vnp_ResponseCode", "00");
+        queryParams.put("vnp_TxnRef", "PAY-20261109-TEST0001");
+
+        String validHash = VNPayUtil.hashAllFields(queryParams, TEST_SECRET);
+        queryParams.put("vnp_SecureHash", validHash.toUpperCase());
+
+        assertThat(VNPayUtil.verifyCallback(queryParams, TEST_SECRET)).isTrue();
+    }
+
+    @Test
+    @DisplayName("verifyCallback: Bỏ qua tham số rỗng và null trong canonicalization")
+    void verifyCallback_ignoresEmptyParams() {
+        Map<String, String> queryParamsWithEmpty = new HashMap<>();
+        queryParamsWithEmpty.put("vnp_Amount", "10000000");
+        queryParamsWithEmpty.put("vnp_BankCode", "");
+        queryParamsWithEmpty.put("vnp_BankTranNo", "   ");
+        queryParamsWithEmpty.put("vnp_ResponseCode", "00");
+
+        Map<String, String> queryParamsClean = new HashMap<>();
+        queryParamsClean.put("vnp_Amount", "10000000");
+        queryParamsClean.put("vnp_ResponseCode", "00");
+
+        String hash1 = VNPayUtil.hashAllFields(queryParamsWithEmpty, TEST_SECRET);
+        String hash2 = VNPayUtil.hashAllFields(queryParamsClean, TEST_SECRET);
+
+        assertThat(hash1).isEqualTo(hash2);
+    }
+
+    @Test
+    @DisplayName("hasDuplicateVnpParams: Phát hiện tham số trùng tên (Parameter Pollution - HPP)")
+    void hasDuplicateVnpParams_detection() {
+        HttpServletRequest request = Mockito.mock(HttpServletRequest.class);
+
+        // Trường hợp không có tham số trùng
+        Map<String, String[]> normalParams = new HashMap<>();
+        normalParams.put("vnp_Amount", new String[]{"10000000"});
+        normalParams.put("vnp_TxnRef", new String[]{"PAY-001"});
+        when(request.getParameterMap()).thenReturn(normalParams);
+        assertThat(VNPayUtil.hasDuplicateVnpParams(request)).isFalse();
+
+        // Trường hợp có 2 tham số vnp_Amount
+        Map<String, String[]> pollutedParams = new HashMap<>();
+        pollutedParams.put("vnp_Amount", new String[]{"10000000", "20000000"});
+        pollutedParams.put("vnp_TxnRef", new String[]{"PAY-001"});
+        when(request.getParameterMap()).thenReturn(pollutedParams);
+        assertThat(VNPayUtil.hasDuplicateVnpParams(request)).isTrue();
+    }
+
+    @Test
+    @DisplayName("verifyCallback: Khóa bí mật null hoặc queryParams rỗng trả về false")
+    void verifyCallback_nullSafety() {
+        assertThat(VNPayUtil.verifyCallback(null, TEST_SECRET)).isFalse();
+        assertThat(VNPayUtil.verifyCallback(Map.of(), TEST_SECRET)).isFalse();
+        assertThat(VNPayUtil.verifyCallback(Map.of("vnp_SecureHash", "abc"), null)).isFalse();
+        assertThat(VNPayUtil.verifyCallback(Map.of("vnp_SecureHash", "abc"), "  ")).isFalse();
+    }
+
+    @Test
     @DisplayName("getIpAddress xử lý đúng localhost và X-Forwarded-For")
     void getIpAddress_handling() {
         HttpServletRequest request = Mockito.mock(HttpServletRequest.class);

@@ -2,22 +2,22 @@ package com.example.ecommerce.chat.service;
 
 /**
  * Interface kiểm soát tần suất gửi yêu cầu (Rate Limiter) phân tán cho Chatbot.
- * Phụ trách: Cao Chí Thiện
- * Task ID: [TSK-D11-CCT] Tích hợp Google Gemini Client & Xây dựng API Chatbot Tư Vấn Bán Hàng.
+ * Phụ trách: Cao Chí Thiện (TSK-D12-CCT)
  *
  * Nguyên tắc & Hạn mức:
- * 1. Khách vãng lai (Guest): 10 requests / phút / IP.
- * 2. Người dùng đã đăng nhập (User): 30 requests / phút / userId.
- * 3. Kiểm tra và đếm nguyên tử qua Redis Lua Script, chống race condition.
+ * 1. Cả Khách vãng lai (Guest) và Người dùng đăng nhập (User) đều áp dụng chung: 10 requests / 60 giây / IP.
+ * 2. Thuật toán Token Bucket Greedy Refill thông qua Bucket4j và Redis Lettuce CAS.
+ * 3. Khi Redis gặp sự cố hoặc timeout: Fail-Closed (HTTP 503).
  */
 public interface RateLimiterService {
 
     /**
-     * Kiểm tra và tăng số lượng request của client trong cửa sổ trượt 60 giây.
-     * Ném ChatRateLimitExceededException nếu vượt quá giới hạn cho phép.
+     * Kiểm tra hạn mức yêu cầu của client theo Token Bucket (10 requests / 60s / IP).
+     * Ném ChatRateLimitExceededException (HTTP 429) nếu vượt quá giới hạn cho phép.
+     * Ném RedisSystemException (HTTP 503) nếu Redis không khả dụng (Fail-Closed).
      *
-     * @param clientIp            Địa chỉ IP thực của client (áp dụng khi khách là Guest)
-     * @param authenticatedUserId ID của người dùng đã xác thực (null nếu là Guest)
+     * @param clientIp            Địa chỉ IP của client (được xác định an toàn qua ClientIpResolver)
+     * @param authenticatedUserId ID của người dùng đã xác thực (dùng chung bucket IP)
      */
     void checkRateLimit(String clientIp, String authenticatedUserId);
 }
