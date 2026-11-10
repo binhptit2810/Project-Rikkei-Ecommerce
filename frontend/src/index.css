@@ -120,3 +120,34 @@
 .glow-purple {
   background: radial-gradient(circle at center, rgba(168, 85, 247, 0.22) 0%, rgba(255, 255, 255, 0) 72%);
 }
+
+/* TechNova Infinite Brand Marquee */
+@keyframes marquee-slide {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-marquee-smooth {
+  display: flex;
+  width: max-content;
+  animation: marquee-slide 28s linear infinite;
+  will-change: transform;
+}
+
+.animate-marquee-smooth:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-marquee-smooth {
+    animation: none;
+    transform: none;
+    width: 100%;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}

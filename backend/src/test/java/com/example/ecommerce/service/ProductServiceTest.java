@@ -47,6 +47,9 @@ class ProductServiceTest {
     @Mock
     private CategoryRepository categoryRepository;
 
+    @Mock
+    private com.example.ecommerce.repository.CouponRepository couponRepository;
+
     @InjectMocks
     private ProductService productService;
 
@@ -407,5 +410,44 @@ class ProductServiceTest {
 
         verify(productRepository, never()).save(any());
         verify(productRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("getDealOfTheDay: Trả về deal sản phẩm kèm tính giá gốc và % giảm chính xác")
+    void getDealOfTheDay_success() {
+        Category electronics = Category.builder().id(2L).name("Điện tử").build();
+        Product dealItem = Product.builder()
+                .id(10L)
+                .name("Tai nghe Hi-Fi Không Dây")
+                .description("Chống ồn ANC")
+                .price(new BigDecimal("1200000"))
+                .category(electronics)
+                .stockQuantity(15)
+                .ratingAverage(4.8)
+                .totalReviews(120)
+                .active(true)
+                .build();
+
+        when(productRepository.findDealCandidates(any(Pageable.class))).thenReturn(List.of(dealItem));
+        when(couponRepository.findByActiveTrueOrderByCreatedAtDesc()).thenReturn(List.of());
+
+        var deal = productService.getDealOfTheDay();
+
+        assertThat(deal).isNotNull();
+        assertThat(deal.getId()).isEqualTo(10L);
+        assertThat(deal.getName()).isEqualTo("Tai nghe Hi-Fi Không Dây");
+        assertThat(deal.getSalePrice()).isEqualByComparingTo("1200000");
+        assertThat(deal.getOriginalPrice()).isGreaterThan(deal.getSalePrice());
+        assertThat(deal.getDiscountPercentage()).isEqualTo(25);
+    }
+
+    @Test
+    @DisplayName("getDealOfTheDay: Trả về null khi không có sản phẩm nào khả dụng")
+    void getDealOfTheDay_empty_returnsNull() {
+        when(productRepository.findDealCandidates(any(Pageable.class))).thenReturn(List.of());
+
+        var deal = productService.getDealOfTheDay();
+
+        assertThat(deal).isNull();
     }
 }

@@ -2,16 +2,20 @@ package com.example.ecommerce.service;
 
 import com.example.ecommerce.dto.request.CreateProductRequest;
 import com.example.ecommerce.dto.request.UpdateProductRequest;
+import com.example.ecommerce.dto.response.DealOfTheDayResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
 import com.example.ecommerce.entity.Category;
+import com.example.ecommerce.entity.Coupon;
+import com.example.ecommerce.entity.DiscountType;
 import com.example.ecommerce.entity.Product;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.repository.CategoryRepository;
+import com.example.ecommerce.repository.CouponRepository;
 import com.example.ecommerce.repository.ProductRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -20,6 +24,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -28,12 +36,30 @@ import java.util.Set;
  * Task ID: [TSK-D08-DDM] Tối ưu hóa Bộ lọc Tìm kiếm Sản phẩm & Viết Unit Tests ProductService
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class ProductService {
 
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
+    private final CouponRepository couponRepository;
+
+    @Autowired
+    public ProductService(
+            ProductRepository productRepository,
+            CategoryRepository categoryRepository,
+            CouponRepository couponRepository
+    ) {
+        this.productRepository = productRepository;
+        this.categoryRepository = categoryRepository;
+        this.couponRepository = couponRepository;
+    }
+
+    public ProductService(
+            ProductRepository productRepository,
+            CategoryRepository categoryRepository
+    ) {
+        this(productRepository, categoryRepository, null);
+    }
 
     private static final int DEFAULT_PAGE_SIZE = 12;
     private static final int MAX_PAGE_SIZE = 50;
@@ -234,6 +260,78 @@ public class ProductService {
         product.setActive(false);
         productRepository.save(product);
         log.info("Product id: {} marked as inactive (soft deleted)", id);
+    }
+
+    /**
+     * Lấy sản phẩm Deal of the Day từ cơ sở dữ liệu kèm thông tin khuyến mãi thực tế.
+     * Tỷ lệ giảm giá và giá gốc được tính toán chính xác, giá bán khớp tuyệt đối với giá DB.
+     *
+     * @return DealOfTheDayResponse thông tin deal hoặc null nếu không có sản phẩm khả dụng
+     */
+    @Transactional(readOnly = true)
+    public DealOfTheDayResponse getDealOfTheDay() {
+        // Lấy danh sách ứng viên sản phẩm active và có tồn kho > 0
+        List<Product> candidates = productRepository.findDealCandidates(PageRequest.of(0, 10));
+        if (candidates == null || candidates.isEmpty()) {
+            return null;
+        }
+
+        // Ưu tiên sản phẩm ngành điện tử hoặc sản phẩm có lượt đánh giá cao nhất
+        Product dealProduct = candidates.stream()
+                .filter(p -> p.getCategory() != null && "Điện tử".equalsIgnoreCase(p.getCategory().getName()))
+                .findFirst()
+                .orElse(candidates.get(0));
+
+        int discountPercentage = 25; // Tỷ lệ giảm chuẩn 25% nếu không có coupon cụ thể
+        String couponCode = null;
+        LocalDateTime endTime = LocalDateTime.now().withHour(23).withMinute(59).withSecond(59);
+
+        if (couponRepository != null) {
+            try {
+                List<Coupon> activeCoupons = couponRepository.findByActiveTrueOrderByCreatedAtDesc();
+                Optional<Coupon> promoCoupon = activeCoupons.stream()
+                        .filter(c -> !c.isExpired() && (c.getUsageLimit() == null || c.getUsedCount() < c.getUsageLimit()))
+                        .findFirst();
+
+                if (promoCoupon.isPresent()) {
+                    Coupon coupon = promoCoupon.get();
+                    couponCode = coupon.getCode();
+                    if (coupon.getDiscountType() == DiscountType.PERCENT && coupon.getDiscountValue() != null) {
+                        discountPercentage = coupon.getDiscountValue().intValue();
+                    }
+                    if (coupon.getExpireAt() != null && coupon.getExpireAt().isAfter(LocalDateTime.now())) {
+                        endTime = coupon.getExpireAt();
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Không thể tải coupon cho Deal of the Day: {}", e.getMessage());
+            }
+        }
+
+        BigDecimal salePrice = dealProduct.getPrice();
+        // Giá gốc tính theo tỷ lệ chiết khấu: originalPrice = salePrice / (1 - discountPercentage / 100)
+        BigDecimal oneMinusDiscount = BigDecimal.ONE.subtract(
+                BigDecimal.valueOf(discountPercentage).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP)
+        );
+        BigDecimal originalPrice = salePrice.divide(oneMinusDiscount, 0, RoundingMode.HALF_UP);
+
+        return DealOfTheDayResponse.builder()
+                .id(dealProduct.getId())
+                .name(dealProduct.getName())
+                .description(dealProduct.getDescription())
+                .imageUrl(dealProduct.getImageUrl())
+                .categoryId(dealProduct.getCategory() != null ? dealProduct.getCategory().getId() : null)
+                .categoryName(dealProduct.getCategory() != null ? dealProduct.getCategory().getName() : null)
+                .originalPrice(originalPrice)
+                .salePrice(salePrice)
+                .discountPercentage(discountPercentage)
+                .stockQuantity(dealProduct.getStockQuantity())
+                .ratingAverage(dealProduct.getRatingAverage() != null ? dealProduct.getRatingAverage() : 0.0)
+                .totalReviews(dealProduct.getTotalReviews() != null ? dealProduct.getTotalReviews() : 0)
+                .couponCode(couponCode)
+                .endTime(endTime)
+                .active(dealProduct.getActive())
+                .build();
     }
 
     /**

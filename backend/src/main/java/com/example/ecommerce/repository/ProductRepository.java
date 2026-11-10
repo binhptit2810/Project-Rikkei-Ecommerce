@@ -75,4 +75,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     @Query("SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE p.stockQuantity <= :threshold ORDER BY p.stockQuantity ASC")
     List<Product> findByStockQuantityLessThanEqualOrderByStockQuantityAsc(@Param("threshold") Integer threshold);
+
+    @Query("SELECT p FROM Product p LEFT JOIN FETCH p.category " +
+           "WHERE p.active = true AND p.stockQuantity > 0 " +
+           "ORDER BY p.ratingAverage DESC, p.totalReviews DESC, p.price DESC")
+    List<Product> findDealCandidates(Pageable pageable);
 }

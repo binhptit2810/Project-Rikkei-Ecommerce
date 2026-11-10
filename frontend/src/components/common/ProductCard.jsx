@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ShoppingBag, ShoppingCart, Star, Heart, Eye } from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
 import { useAuthStore } from '../../store/useAuthStore'
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=80'
@@ -15,17 +16,18 @@ const GLOW_CLASSES = [
 
 /**
  * Component hiển thị thẻ sản phẩm (ProductCard)
- * Thiết kế chuẩn phong cách TechNova Electronics:
- * - Khung thẻ bo góc 2xl viền mảnh tinh tế
- * - Nền ảnh với hiệu ứng radial glow đa sắc
+ * Thiết kế chuẩn phong cách TechNova Electronics với Motion for React:
+ * - Khung thẻ bo góc 2xl viền mảnh tinh tế, hover nâng nhẹ & đổ bóng sâu
+ * - Nền ảnh với hiệu ứng radial glow đa sắc, ảnh zoom nhẹ mượt mà
  * - Badge "BEST SELLER" cam và discount xanh lá
  * - Tên thương hiệu in hoa, đánh giá sao vàng
- * - Nút "Thêm vào giỏ" viên thuốc màu xanh hoàng gia (Royal Blue)
+ * - Nút "Thêm vào giỏ" viên thuốc màu xanh hoàng gia (Royal Blue) với micro-interaction
  */
-export const ProductCard = ({ product, onAddToCart }) => {
+export const ProductCard = ({ product, onAddToCart, variants }) => {
   const [imgError, setImgError] = useState(false)
   const { isAuthenticated, user } = useAuthStore()
   const navigate = useNavigate()
+  const shouldReduceMotion = useReducedMotion()
 
   if (!product) return null
 
@@ -87,7 +89,11 @@ export const ProductCard = ({ product, onAddToCart }) => {
   const glowClass = GLOW_CLASSES[(Number(product.id) || 0) % GLOW_CLASSES.length]
 
   return (
-    <div className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white hover:border-slate-300 hover:shadow-xl transition-all duration-300 overflow-hidden">
+    <motion.div
+      variants={variants}
+      whileHover={shouldReduceMotion ? {} : { y: -6, transition: { duration: 0.25, ease: 'easeOut' } }}
+      className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white hover:border-slate-300 shadow-sm hover:shadow-xl transition-shadow duration-300 overflow-hidden"
+    >
       <Link to={`/products/${product.id}`} className="block">
         {/* Khung ảnh sản phẩm & các Badge TechNova */}
         <div className={`aspect-square w-full relative overflow-hidden flex items-center justify-center p-6 ${glowClass}`}>
@@ -131,29 +137,33 @@ export const ProductCard = ({ product, onAddToCart }) => {
 
           {/* Hover Action Buttons (TechNova Image 5) */}
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
-            <button
+            <motion.button
+              whileHover={shouldReduceMotion ? {} : { scale: 1.15 }}
+              whileTap={shouldReduceMotion ? {} : { scale: 0.9 }}
               type="button"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
               }}
-              className="w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-md flex items-center justify-center transition-transform hover:scale-110 cursor-pointer"
+              className="w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 shadow-md flex items-center justify-center cursor-pointer"
               title="Yêu thích"
             >
-              <Heart className="w-4 h-4 text-slate-600 hover:text-red-500" />
-            </button>
-            <button
+              <Heart className="w-4 h-4 text-slate-600 hover:text-red-500 transition-colors" />
+            </motion.button>
+            <motion.button
+              whileHover={shouldReduceMotion ? {} : { scale: 1.15 }}
+              whileTap={shouldReduceMotion ? {} : { scale: 0.9 }}
               type="button"
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
                 navigate(`/products/${product.id}`)
               }}
-              className="w-8 h-8 rounded-full bg-white/90 hover:bg-white text-slate-700 shadow-md flex items-center justify-center transition-transform hover:scale-110 cursor-pointer"
+              className="w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 shadow-md flex items-center justify-center cursor-pointer"
               title="Xem chi tiết"
             >
-              <Eye className="w-4 h-4 text-slate-600 hover:text-blue-600" />
-            </button>
+              <Eye className="w-4 h-4 text-slate-600 hover:text-blue-600 transition-colors" />
+            </motion.button>
           </div>
         </div>
 
@@ -177,7 +187,7 @@ export const ProductCard = ({ product, onAddToCart }) => {
               ))}
             </div>
             <span className="text-slate-500 font-semibold text-[11px]">
-              4.8 <span className="text-slate-400 font-normal">({(product.id * 17) % 300 + 120})</span>
+              4.8 <span className="text-slate-400 font-normal">({(Number(product.id) * 17) % 300 + 120})</span>
             </span>
           </div>
 
@@ -198,11 +208,13 @@ export const ProductCard = ({ product, onAddToCart }) => {
 
       {/* Nút Thêm vào giỏ hàng: Royal Blue Pill (TechNova Image 5) */}
       <div className="p-4 pt-0 sm:p-5 sm:pt-0 mt-auto">
-        <button
+        <motion.button
+          whileHover={shouldReduceMotion || isOutOfStock ? {} : { scale: 1.02 }}
+          whileTap={shouldReduceMotion || isOutOfStock ? {} : { scale: 0.96 }}
           type="button"
           onClick={handleAddToCartClick}
           disabled={isOutOfStock}
-          className={`w-full py-2.5 px-4 rounded-full text-xs font-semibold flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] cursor-pointer shadow-xs ${
+          className={`w-full py-2.5 px-4 rounded-full text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs ${
             isOutOfStock
               ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
               : 'bg-blue-600 hover:bg-blue-700 hover:shadow-md text-white'
@@ -211,9 +223,9 @@ export const ProductCard = ({ product, onAddToCart }) => {
         >
           <ShoppingCart className="w-4 h-4" />
           <span>{isOutOfStock ? 'Tạm hết hàng' : 'Thêm vào giỏ'}</span>
-        </button>
+        </motion.button>
       </div>
-    </div>
+    </motion.div>
   )
 }
 
