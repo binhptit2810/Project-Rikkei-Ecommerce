@@ -130,7 +130,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/v1/coupons/validate").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/coupons/**").permitAll()
                 // [TSK-D11-CCT] Chatbot AI tư vấn bán hàng: cho phép khách vãng lai và người dùng truy cập
-                .requestMatchers("/api/v1/chat/**").permitAll()
+                .requestMatchers("/api/v1/chat", "/api/v1/chat/**").permitAll()
 
                 // --- Admin only ---
                 .requestMatchers("/api/v1/admin/**", "/admin/**").hasRole("ADMIN")

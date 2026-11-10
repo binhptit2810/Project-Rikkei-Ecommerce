@@ -13,7 +13,7 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.authentication.BadCredentialsException;
+import com.example.ecommerce.exception.ChatAuthenticationException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -171,7 +171,7 @@ class RedisChatMemoryIntegrationTest {
         sessionIdsToClean.add(sessionId);
 
         assertThatThrownBy(() -> service.getChatMemory(sessionId, "invalid-token", null))
-                .isInstanceOf(BadCredentialsException.class)
+                .isInstanceOf(ChatAuthenticationException.class)
                 .hasMessageContaining("Guest token không hợp lệ");
     }
 

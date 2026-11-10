@@ -9,6 +9,7 @@ import com.example.ecommerce.dto.request.ClaimSessionRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.ChatResponse;
 import com.example.ecommerce.dto.response.GuestSessionResponse;
+import com.example.ecommerce.exception.ChatAuthenticationException;
 import com.example.ecommerce.security.CustomUserDetails;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -74,14 +75,16 @@ public class ChatController {
 
     /**
      * Gửi tin nhắn tới chatbot và nhận phản hồi tư vấn bán hàng từ Gemini AI.
-     * POST /api/v1/chat/messages
+     * Hỗ trợ đồng thời:
+     * - POST /api/v1/chat           (Chuẩn theo Definition of Done)
+     * - POST /api/v1/chat/messages  (Tương thích frontend hiện tại)
      *
      * @param guestTokenHeader Header "X-Guest-Token" chứa token của khách (bắt buộc nếu là Guest)
      * @param chatRequest      Payload chứa sessionId và message
      * @param request          HTTP request để trích xuất IP và Authorization header
      * @return 200 OK cùng câu trả lời của trợ lý ảo và version OCC mới
      */
-    @PostMapping("/messages")
+    @PostMapping({"", "/messages"})
     public ResponseEntity<ApiResponse<ChatResponse>> sendMessage(
             @RequestHeader(value = "X-Guest-Token", required = false) String guestTokenHeader,
             @Valid @RequestBody ChatRequest chatRequest,
@@ -95,7 +98,7 @@ public class ChatController {
 
         // Khách vãng lai bắt buộc phải có guest token
         if (authenticatedUserId == null && (guestTokenHeader == null || guestTokenHeader.isBlank())) {
-            throw new BadCredentialsException("Guest token bắt buộc đối với khách vãng lai (truyền qua header X-Guest-Token)");
+            throw new ChatAuthenticationException("Guest token bắt buộc đối với khách vãng lai (truyền qua header X-Guest-Token)");
         }
 
         if (chatRequest.getSessionId() == null || chatRequest.getSessionId().isBlank()) {
@@ -106,7 +109,8 @@ public class ChatController {
                 chatRequest.getSessionId(),
                 chatRequest.getMessage(),
                 guestTokenHeader,
-                authenticatedUserId
+                authenticatedUserId,
+                chatRequest.getClientMessageId()
         );
 
         return ResponseEntity.ok(ApiResponse.success("Gửi tin nhắn thành công", response));

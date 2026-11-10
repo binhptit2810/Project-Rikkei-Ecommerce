@@ -4,7 +4,10 @@ import com.example.ecommerce.chat.model.ChatMessage;
 import com.example.ecommerce.chat.model.ChatMemoryData;
 import com.example.ecommerce.chat.model.ChatSessionMetadata;
 import com.example.ecommerce.chat.model.GuestSessionCreationResult;
+import com.example.ecommerce.chat.model.IdempotencyCheckResult;
 import com.example.ecommerce.chat.service.ChatMemoryService;
+import com.example.ecommerce.dto.response.ChatResponse;
+import com.example.ecommerce.exception.ChatAuthenticationException;
 import com.example.ecommerce.exception.ChatLockContentionException;
 import com.example.ecommerce.exception.ChatVersionConflictException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
@@ -50,7 +53,9 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
     public static final String OWNER_GUEST = "GUEST";
     public static final long GUEST_TTL_SECONDS = 86400L;    // 24 giờ
     public static final long USER_TTL_SECONDS = 604800L;    // 7 ngày
-    public static final long LOCK_TTL_MILLIS = 45000L;      // 45 giây
+    public static final long LOCK_TTL_MILLIS = 60000L;      // 60 giây (tạo 28s đệm an toàn so với Backend Deadline 32s)
+    public static final long IDEMPOTENCY_IN_PROGRESS_TTL_SECONDS = 60L;   // 60 giây
+    public static final long IDEMPOTENCY_COMPLETED_TTL_SECONDS = 300L;    // 300 giây (5 phút)
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -118,6 +123,15 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
      * ARGV[1]: lockToken
      */
     private static final DefaultRedisScript<Long> RELEASE_LOCK_SCRIPT;
+
+    /**
+     * Script 6: Kiểm tra và claim Idempotency Key nguyên tử
+     * KEYS[1]: chat:idempotency:{sessionId}:{clientMessageId}
+     * ARGV[1]: incomingHash
+     * ARGV[2]: inProgressPayloadJson
+     * ARGV[3]: inProgressTtlSeconds (60)
+     */
+    private static final DefaultRedisScript<List> CHECK_AND_CLAIM_IDEMPOTENCY_SCRIPT;
 
     static {
         // 1. CREATE_GUEST_SESSION
@@ -322,6 +336,32 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
                 return 0
             end
             """);
+
+        // 6. CHECK_AND_CLAIM_IDEMPOTENCY
+        CHECK_AND_CLAIM_IDEMPOTENCY_SCRIPT = new DefaultRedisScript<>();
+        CHECK_AND_CLAIM_IDEMPOTENCY_SCRIPT.setResultType(List.class);
+        CHECK_AND_CLAIM_IDEMPOTENCY_SCRIPT.setScriptText("""
+            local val = redis.call('GET', KEYS[1])
+            if not val then
+                redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
+                return {1, ''}
+            end
+            local ok, data = pcall(cjson.decode, val)
+            if not ok or type(data) ~= 'table' then
+                redis.call('SET', KEYS[1], ARGV[2], 'EX', tonumber(ARGV[3]))
+                return {1, ''}
+            end
+            if data.messageHash and data.messageHash ~= ARGV[1] then
+                return {-2, ''}
+            end
+            if data.status == 'COMPLETED' then
+                return {2, val}
+            end
+            if data.status == 'IN_PROGRESS' then
+                return {0, ''}
+            end
+            return {1, ''}
+            """);
     }
 
     // =========================================================================
@@ -440,7 +480,7 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
         String guestTokenHash = "";
         if (OWNER_GUEST.equals(expectedOwnerId)) {
             if (guestToken == null || guestToken.isBlank()) {
-                throw new BadCredentialsException("Guest token bắt buộc đối với phiên khách vãng lai");
+                throw new ChatAuthenticationException("Guest token bắt buộc đối với phiên khách vãng lai");
             }
             guestTokenHash = sha256Hex(guestToken.trim());
         }
@@ -529,7 +569,7 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
 
         if (OWNER_GUEST.equals(expectedOwnerId)) {
             if (guestToken == null || guestToken.isBlank()) {
-                throw new BadCredentialsException("Guest token bắt buộc đối với phiên khách vãng lai");
+                throw new ChatAuthenticationException("Guest token bắt buộc đối với phiên khách vãng lai");
             }
             guestTokenHash = sha256Hex(guestToken.trim());
             ttlSeconds = GUEST_TTL_SECONDS;
@@ -591,7 +631,7 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
             throw new IllegalArgumentException("Session ID không được để trống khi claim");
         }
         if (guestToken == null || guestToken.isBlank()) {
-            throw new BadCredentialsException("Guest token không được để trống khi claim");
+            throw new ChatAuthenticationException("Guest token không được để trống khi claim");
         }
         if (authenticatedUserId == null || authenticatedUserId.isBlank()) {
             throw new AccessDeniedException("Yêu cầu thông tin người dùng đã xác thực để claim phiên");
@@ -682,7 +722,7 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
             throw new IllegalStateException("Metadata phiên trò chuyện trong Redis bị hỏng hoặc sai định dạng JSON");
         }
         if (status == -11L) {
-            throw new BadCredentialsException("Guest token không hợp lệ hoặc không khớp với phiên trò chuyện");
+            throw new ChatAuthenticationException("Guest token không hợp lệ hoặc không khớp với phiên trò chuyện");
         }
         throw new IllegalStateException("Mã lỗi không xác định từ Redis Lua Script: " + status);
     }
@@ -719,7 +759,7 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
             throw new IllegalStateException("Phiên bản hội thoại đã đạt giới hạn an toàn tối đa");
         }
         if (status == -11L) {
-            throw new BadCredentialsException("Guest token không hợp lệ hoặc không khớp với phiên trò chuyện");
+            throw new ChatAuthenticationException("Guest token không hợp lệ hoặc không khớp với phiên trò chuyện");
         }
         throw new IllegalStateException("Mã lỗi không xác định từ Redis Lua Script: " + status);
     }
@@ -744,7 +784,7 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
             throw new AccessDeniedException("Phiên trò chuyện đã được chuyển giao cho người dùng khác hoặc không phải phiên khách");
         }
         if (status == -11L) {
-            throw new BadCredentialsException("Guest token không hợp lệ hoặc không khớp với phiên trò chuyện");
+            throw new ChatAuthenticationException("Guest token không hợp lệ hoặc không khớp với phiên trò chuyện");
         }
         throw new IllegalStateException("Mã lỗi không xác định từ Redis Lua Script: " + status);
     }
@@ -781,6 +821,110 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
 
     public static String buildGuestTokenKey(String sessionId) {
         return "chat:guest-token:{" + sessionId + "}";
+    }
+
+    public static String buildIdempotencyKey(String sessionId, String clientMessageId) {
+        return "chat:idempotency:{" + sessionId + "}:" + clientMessageId.trim();
+    }
+
+    @Override
+    public IdempotencyCheckResult checkAndClaimIdempotency(String sessionId, String clientMessageId, String message) {
+        if (sessionId == null || sessionId.isBlank() || clientMessageId == null || clientMessageId.isBlank()) {
+            return IdempotencyCheckResult.newRequest();
+        }
+
+        String idempotencyKey = buildIdempotencyKey(sessionId, clientMessageId);
+        String msgHash = sha256Hex(message != null ? message.trim() : "");
+        Map<String, Object> inProgressMap = Map.of(
+                "status", "IN_PROGRESS",
+                "messageHash", msgHash,
+                "createdAt", LocalDateTime.now().toString()
+        );
+        String inProgressJson;
+        try {
+            inProgressJson = objectMapper.writeValueAsString(inProgressMap);
+        } catch (JsonProcessingException e) {
+            inProgressJson = "{\"status\":\"IN_PROGRESS\"}";
+        }
+
+        try {
+            List<?> result = redisTemplate.execute(
+                    CHECK_AND_CLAIM_IDEMPOTENCY_SCRIPT,
+                    Collections.singletonList(idempotencyKey),
+                    msgHash,
+                    inProgressJson,
+                    String.valueOf(IDEMPOTENCY_IN_PROGRESS_TTL_SECONDS)
+            );
+
+            if (result == null || result.isEmpty()) {
+                return IdempotencyCheckResult.newRequest();
+            }
+
+            long code = ((Number) result.get(0)).longValue();
+            if (code == 1L) {
+                return IdempotencyCheckResult.newRequest();
+            } else if (code == 0L) {
+                return IdempotencyCheckResult.inProgress();
+            } else if (code == 2L) {
+                String cachedJson = (result.size() > 1 && result.get(1) != null) ? result.get(1).toString() : "";
+                if (!cachedJson.isBlank()) {
+                    try {
+                        var node = objectMapper.readTree(cachedJson);
+                        var respNode = node.get("response");
+                        if (respNode != null) {
+                            ChatResponse cachedResp = objectMapper.treeToValue(respNode, ChatResponse.class);
+                            return IdempotencyCheckResult.completed(cachedResp);
+                        }
+                    } catch (Exception ex) {
+                        log.warn("Failed to parse cached ChatResponse from idempotency key: {}", ex.getMessage());
+                    }
+                }
+                return IdempotencyCheckResult.newRequest();
+            } else if (code == -2L) {
+                return IdempotencyCheckResult.mismatch();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to check idempotency key for sessionId={}, clientMessageId={}: {}",
+                    sessionId, clientMessageId, e.getMessage());
+        }
+
+        return IdempotencyCheckResult.newRequest();
+    }
+
+    @Override
+    public void saveIdempotencyResult(String sessionId, String clientMessageId, ChatResponse response) {
+        if (sessionId == null || sessionId.isBlank() || clientMessageId == null || clientMessageId.isBlank() || response == null) {
+            return;
+        }
+
+        String idempotencyKey = buildIdempotencyKey(sessionId, clientMessageId);
+        try {
+            Map<String, Object> completedMap = Map.of(
+                    "status", "COMPLETED",
+                    "response", response,
+                    "completedAt", LocalDateTime.now().toString()
+            );
+            String completedJson = objectMapper.writeValueAsString(completedMap);
+            redisTemplate.opsForValue().set(idempotencyKey, completedJson, IDEMPOTENCY_COMPLETED_TTL_SECONDS, TimeUnit.SECONDS);
+            log.info("Saved idempotency COMPLETED result for sessionId={}, clientMessageId={}", sessionId, clientMessageId);
+        } catch (Exception e) {
+            log.warn("Failed to save idempotency result for sessionId={}, clientMessageId={}: {}",
+                    sessionId, clientMessageId, e.getMessage());
+        }
+    }
+
+    @Override
+    public void clearIdempotency(String sessionId, String clientMessageId) {
+        if (sessionId == null || sessionId.isBlank() || clientMessageId == null || clientMessageId.isBlank()) {
+            return;
+        }
+        String idempotencyKey = buildIdempotencyKey(sessionId, clientMessageId);
+        try {
+            redisTemplate.delete(idempotencyKey);
+            log.info("Cleared idempotency key for sessionId={}, clientMessageId={}", sessionId, clientMessageId);
+        } catch (Exception e) {
+            log.warn("Failed to clear idempotency key: {}", e.getMessage());
+        }
     }
 }
 

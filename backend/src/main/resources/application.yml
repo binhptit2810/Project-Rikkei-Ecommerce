@@ -65,6 +65,31 @@ spring:
           timeout: 10000
           writetimeout: 10000
 
+  # =============================================================================
+  # Cấu hình Spring AI 1.0.0-M4 OpenAI-compatible Client cho Google Gemini (TSK-D11-CCT)
+  # =============================================================================
+  ai:
+    openai:
+      api-key: ${GEMINI_API_KEY:mock-gemini-key-placeholder}
+      base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta/openai}
+      embedding:
+        enabled: false
+      image:
+        enabled: false
+      audio:
+        speech:
+          enabled: false
+        transcription:
+          enabled: false
+      moderation:
+        enabled: false
+      chat:
+        enabled: true
+        completions-path: /chat/completions
+        options:
+          model: ${GEMINI_MODEL:gemini-2.5-flash}
+          temperature: 0.7
+
 # =============================================================================
 # CORS Configuration
 # =============================================================================
@@ -135,10 +160,4 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
 
-# =============================================================================
-# Cấu hình Google Gemini AI Chatbot Client (OpenAI-compatible) (TSK-D11-CCT)
-# =============================================================================
-gemini:
-  api-key: ${GEMINI_API_KEY:}
-  base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta/openai/chat/completions}
-  model: ${GEMINI_MODEL:gemini-2.5-flash}
+

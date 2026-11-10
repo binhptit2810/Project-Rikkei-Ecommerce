@@ -35,6 +35,20 @@ public interface ChatService {
     ChatResponse sendMessage(String sessionId, String message, String guestToken, String authenticatedUserId);
 
     /**
+     * Xử lý lượt chat tư vấn bán hàng kèm Idempotency key chống trùng lặp và hỗ trợ Retry.
+     *
+     * @param sessionId           Mã định danh phiên chat (UUID v4)
+     * @param message             Nội dung câu hỏi của khách hàng
+     * @param guestToken          Token xác thực của khách vãng lai (bắt buộc nếu là Guest)
+     * @param authenticatedUserId ID của người dùng đã xác thực (null nếu là Guest)
+     * @param clientMessageId     Idempotency Key từ client
+     * @return ChatResponse chứa câu trả lời từ trợ lý ảo AI và phiên bản OCC mới
+     */
+    default ChatResponse sendMessage(String sessionId, String message, String guestToken, String authenticatedUserId, String clientMessageId) {
+        return sendMessage(sessionId, message, guestToken, authenticatedUserId);
+    }
+
+    /**
      * Chuyển quyền sở hữu phiên chat từ khách vãng lai sang người dùng đã đăng nhập.
      *
      * @param sessionId           Mã định danh phiên chat của khách (UUID v4)

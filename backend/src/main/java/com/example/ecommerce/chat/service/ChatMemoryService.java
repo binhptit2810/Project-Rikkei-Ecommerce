@@ -4,6 +4,8 @@ import com.example.ecommerce.chat.model.ChatMessage;
 import com.example.ecommerce.chat.model.ChatMemoryData;
 import com.example.ecommerce.chat.model.ChatSessionMetadata;
 import com.example.ecommerce.chat.model.GuestSessionCreationResult;
+import com.example.ecommerce.chat.model.IdempotencyCheckResult;
+import com.example.ecommerce.dto.response.ChatResponse;
 
 /**
  * Service quản lý phiên trò chuyện và bộ nhớ hội thoại Redis cho Chatbot tư vấn bán hàng.
@@ -86,5 +88,32 @@ public interface ChatMemoryService {
      * @return ChatSessionMetadata Metadata sau khi đã chuyển giao quyền sở hữu.
      */
     ChatSessionMetadata claimGuestSession(String sessionId, String guestToken, String authenticatedUserId);
+
+    /**
+     * Kiểm tra và claim trạng thái Idempotency key (IN_PROGRESS) cho một clientMessageId.
+     *
+     * @param sessionId Mã định danh phiên.
+     * @param clientMessageId Mã định danh tin nhắn từ client.
+     * @param message Nội dung tin nhắn gửi lên để kiểm tra hash khớp.
+     * @return IdempotencyCheckResult trạng thái NEW, IN_PROGRESS, COMPLETED (kèm cached response) hoặc MISMATCH.
+     */
+    IdempotencyCheckResult checkAndClaimIdempotency(String sessionId, String clientMessageId, String message);
+
+    /**
+     * Lưu trữ kết quả ChatResponse vào Idempotency Cache với trạng thái COMPLETED (TTL 300s).
+     *
+     * @param sessionId Mã định danh phiên.
+     * @param clientMessageId Mã định danh tin nhắn từ client.
+     * @param response Kết quả ChatResponse hoàn chỉnh.
+     */
+    void saveIdempotencyResult(String sessionId, String clientMessageId, ChatResponse response);
+
+    /**
+     * Xóa Idempotency key để cho phép thử lại ngay khi gặp lỗi tạm thời.
+     *
+     * @param sessionId Mã định danh phiên.
+     * @param clientMessageId Mã định danh tin nhắn từ client.
+     */
+    void clearIdempotency(String sessionId, String clientMessageId);
 }
 

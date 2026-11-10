@@ -5,14 +5,19 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
 /**
- * Response payload trả về câu trả lời của Chatbot tư vấn bán hàng.
+ * Response payload trả về câu trả lời của Chatbot tư vấn bán hàng kèm danh sách sản phẩm có cấu trúc.
  * Phụ trách: Cao Chí Thiện
- * Task ID: [TSK-D11-CCT] Tích hợp Google Gemini Client & Xây dựng API Chatbot Tư Vấn Bán Hàng.
+ * Task ID: [TASK-CHAT-PRODUCT-CARDS]
  *
- * Nguyên tắc bảo mật:
+ * Nguyên tắc bảo mật & tương thích:
  * 1. Không trả về guestToken trong response thông thường.
  * 2. Không để lộ thông tin xác thực hoặc chi tiết kết nối hạ tầng nội bộ.
+ * 3. products luôn khởi tạo dạng danh sách rỗng nếu không có sản phẩm để tránh null pointer tại client.
  */
 @Data
 @Builder
@@ -34,5 +39,15 @@ public class ChatResponse {
      * Phiên bản dữ liệu phiên sau khi ghi nhận tin nhắn (Optimistic Concurrency Control).
      */
     private Long version;
+
+    /**
+     * Danh sách sản phẩm có cấu trúc được gợi ý/truy xuất bởi Chatbot (Product Cards).
+     */
+    @Builder.Default
+    private List<ProductResponse> products = new ArrayList<>();
+
+    public List<ProductResponse> getProducts() {
+        return products != null ? products : Collections.emptyList();
+    }
 }
 

@@ -779,6 +779,164 @@ Mở khóa tài khoản người dùng đã bị khóa trước đó. **Yêu c�
 
 ---
 
+## 🤖 Chatbot AI Tư Vấn Bán Hàng (TSK-D11-CCT)
+
+Dịch vụ Chatbot AI tư vấn bán hàng thông minh dựa trên **Spring AI**, mô hình ngôn ngữ **Google Gemini**, **Redis Chat Memory** phân tán và cơ chế **RAG Function Calling (Product / Inventory / Order Tools)**.
+
+### Cơ Chế Xác Thực & Phân Quyền Chatbot
+
+| Đối tượng | Header Xác thực | Cơ chế & Quyền hạn |
+|-----------|-----------------|-------------------|
+| **Khách vãng lai (Guest)** | `X-Guest-Token: <guestToken>` | Tạo phiên bằng `POST /chat/sessions`. Nhận `sessionId` (UUIDv4) và `guestToken`. Chatbot chỉ truy cập thông tin sản phẩm và tồn kho công khai. TTL lịch sử: 24h. |
+| **Người dùng (Customer)** | `Authorization: Bearer <JWT>` | Không cần truyền `X-Guest-Token`. Chatbot nhận diện `userId` từ SecurityContext, có quyền tra cứu đơn hàng cá nhân. TTL lịch sử: 7 ngày. |
+| **Khách chuyển sang Đăng nhập** | `Authorization: Bearer <JWT>` | Sau khi đăng nhập, gọi `POST /chat/claim` gửi kèm `sessionId` và `guestToken` để chuyển giao quyền sở hữu phiên chat khách vào tài khoản người dùng mà không mất lịch sử. |
+
+---
+
+### `POST /api/v1/chat/sessions`
+Khởi tạo phiên trò chuyện mới cho khách vãng lai (Guest).
+
+**Không yêu cầu xác thực.** Rate limit: 10 lần tạo phiên/phút theo IP.
+
+**Request Body:** Trống
+
+**Response 201 Created:**
+```json
+{
+  "success": true,
+  "message": "Tạo phiên trò chuyện khách thành công",
+  "data": {
+    "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+    "guestToken": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "expiresAt": "2026-11-11T09:30:00"
+  },
+  "timestamp": "2026-11-10T09:30:00"
+}
+```
+
+> [!IMPORTANT]
+> Client cần lưu trữ `sessionId` và `guestToken` (LocalStorage/Cookie). `guestToken` chỉ được trả về **duy nhất 1 lần** tại endpoint này (trong Redis chỉ lưu hash SHA-256).
+
+---
+
+### `POST /api/v1/chat/messages` hoặc `POST /api/v1/chat`
+Gửi tin nhắn tới chatbot AI tư vấn bán hàng. Hệ thống hỗ trợ song song cả hai đường dẫn:
+- `POST /api/v1/chat/messages`: Endpoint chuẩn frontend React.
+- `POST /api/v1/chat`: Endpoint tương thích chuẩn RESTful theo tài liệu đặc tả ban đầu.
+
+**Headers:**
+- Khách vãng lai: `X-Guest-Token: <guestToken>`
+- Người dùng đã đăng nhập: `Authorization: Bearer <jwtAccessToken>`
+
+**Request Body:**
+```json
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "message": "Tư vấn cho mình đôi giày thể thao nam chạy bộ màu đen giá dưới 2 triệu",
+  "clientMessageId": "msg-uuid-client-001"
+}
+```
+
+**Tham số:**
+- `sessionId` (String, Bắt buộc): UUID phiên trò chuyện.
+- `message` (String, Bắt buộc): Nội dung tin nhắn (1 - 1000 ký tự).
+- `clientMessageId` (String, Tùy chọn): ID chống gửi trùng (Idempotency Key).
+
+**Response 200 OK:**
+```json
+{
+  "success": true,
+  "message": "Gửi tin nhắn thành công",
+  "data": {
+    "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+    "message": "Dạ chào bạn! Shop xin gợi ý mẫu giày Nike Pegasus 40 màu đen rất phù hợp chạy bộ với đệm êm ái, hiện đang có sẵn size 40 đến 43 với giá 1.850.000 VNĐ ạ.",
+    "products": [
+      {
+        "id": 12,
+        "name": "Giày Chạy Bộ Nam Nike Air Zoom Pegasus 40 - Đen",
+        "slug": "giay-chay-bo-nam-nike-air-zoom-pegasus-40-den",
+        "price": 1850000,
+        "salePrice": 1690000,
+        "thumbnail": "https://example.com/images/pegasus-40-black.jpg",
+        "inStock": true,
+        "rating": 4.8,
+        "reviewCount": 124
+      }
+    ],
+    "version": 2,
+    "clientMessageId": "msg-uuid-client-001"
+  },
+  "timestamp": "2026-11-10T09:30:15"
+}
+```
+
+**Thành phần Product Cards trong response:**
+Khi AI thực hiện Tool Calling truy vấn sản phẩm trong cơ sở dữ liệu, danh sách các sản phẩm liên quan sẽ được tự động đóng gói trong mảng `products` để frontend render thẻ sản phẩm (Product Card) tương tác trực quan (hình ảnh, giá bán, nút xem chi tiết / thêm giỏ hàng).
+
+---
+
+### `POST /api/v1/chat/claim`
+Chuyển quyền sở hữu phiên trò chuyện từ khách vãng lai sang người dùng vừa đăng nhập.
+
+**Yêu cầu xác thực:** `Authorization: Bearer <jwtAccessToken>`
+
+**Request Body:**
+```json
+{
+  "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+  "guestToken": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}
+```
+
+**Response 200 OK:**
+```json
+{
+  "success": true,
+  "message": "Nhận quyền sở hữu phiên trò chuyện thành công",
+  "data": {
+    "sessionId": "550e8400-e29b-41d4-a716-446655440000",
+    "ownerId": "1001",
+    "version": 3,
+    "expiresAt": "2026-11-17T09:30:00"
+  },
+  "timestamp": "2026-11-10T09:35:00"
+}
+```
+
+> [!NOTE]
+> Sau khi claim thành công, session chuyển từ `owner: GUEST` sang `owner: <userId>`, TTL phiên được tự động nâng từ **24 giờ** lên **7 ngày**.
+
+---
+
+### Giới Hạn & Độ Tin Cậy (Rate Limiting & Memory)
+
+1. **Rate Limiting Phân Tán (Redis Sliding Window Counter):**
+   - Giới hạn: **10 requests / 60 giây** cho mỗi Client IP (khách vãng lai) hoặc User ID (người dùng).
+   - Khi vượt ngưỡng: Trả mã HTTP `429 Too Many Requests` kèm header chuẩn `Retry-After: <số giây cần đợi>`.
+2. **Quản lý Bộ Nhớ Hội Thoại (Redis Chat Memory):**
+   - Giữ tối đa **20 tin nhắn** (10 cặp User - Assistant) gần nhất theo cơ chế Sliding Window FIFO.
+   - Cơ chế khóa phân tán Redis Distributed Lock (TTL 10s) chống race condition khi client gửi đồng thời.
+   - Kiểm soát đồng thời lạc quan (Optimistic Concurrency Control - OCC) qua trường `version` ngăn chặn ghi đè dữ liệu.
+3. **Idempotency (Chống gửi trùng):**
+   - Hỗ trợ trường `clientMessageId`. Trong vòng 60 giây, nếu gửi lại cùng messageId trên phiên đó, hệ thống lập tức trả lại response trước đó mà không gọi lại LLM.
+
+---
+
+### Bảng Mã Lỗi Chatbot API
+
+| Mã HTTP | Tình huống | Response mẫu |
+|---------|-----------|--------------|
+| **400 Bad Request** | Message trống, vượt quá 1000 ký tự, hoặc Session ID sai UUID | `{"success": false, "message": "Nội dung tin nhắn không được để trống"}` |
+| **401 Unauthorized** | Khách vãng lai thiếu hoặc sai `X-Guest-Token`, hoặc Bearer JWT không hợp lệ | `{"success": false, "message": "Guest token bắt buộc đối với khách vãng lai (truyền qua header X-Guest-Token)"}` |
+| **403 Forbidden** | Gọi `POST /chat/claim` khi chưa đăng nhập, hoặc cố truy cập phiên của người khác | `{"success": false, "message": "Yêu cầu đăng nhập để nhận quyền sở hữu phiên trò chuyện"}` |
+| **404 Not Found** | Session ID không tồn tại hoặc đã hết hạn trong Redis | `{"success": false, "message": "Phiên trò chuyện không tồn tại hoặc đã hết hạn"}` |
+| **409 Conflict** | Xung đột gửi đồng thời (Lock Contention) hoặc xung đột version OCC | `{"success": false, "message": "Phiên trò chuyện đang xử lý tin nhắn trước, vui lòng chờ giây lát"}` |
+| **429 Too Many Requests** | Gửi quá 10 tin nhắn/phút (kèm header `Retry-After`) | `{"success": false, "message": "Bạn đã gửi quá nhiều tin nhắn, vui lòng chờ 45 giây"}` |
+| **503 Service Unavailable** | Lỗi dịch vụ Gemini AI upstream (5xx hoặc quota) | `{"success": false, "message": "Dịch vụ tư vấn AI tạm thời không khả dụng, vui lòng thử lại sau"}` |
+| **504 Gateway Timeout** | Dịch vụ Gemini AI phản hồi quá thời gian cho phép | `{"success": false, "message": "Dịch vụ tư vấn AI phản hồi quá thời gian, vui lòng thử lại sau"}` |
+
+---
+
 ## Mã lỗi thường gặp
 
 | HTTP Status | Ý nghĩa |
@@ -787,7 +945,11 @@ Mở khóa tài khoản người dùng đã bị khóa trước đó. **Yêu c�
 | 401 | Chưa đăng nhập hoặc token hết hạn |
 | 403 | Không đủ quyền truy cập |
 | 404 | Không tìm thấy resource |
-| 500 | Lỗi server |
+| 409 | Xung đột tài nguyên hoặc phiên bản dữ liệu (Conflict / OCC) |
+| 429 | Vượt quá giới hạn tần suất yêu cầu (Too Many Requests) |
+| 500 | Lỗi server nội bộ |
+| 503 | Dịch vụ bên thứ ba tạm thời không khả dụng (Service Unavailable) |
+| 504 | Hết thời gian chờ phản hồi từ dịch vụ bên thứ ba (Gateway Timeout) |
 
 **Validation error 400:**
 ```json

@@ -1,7 +1,8 @@
 package com.example.ecommerce.chat.controller;
 
-import com.example.ecommerce.chat.client.GeminiRestClient.GeminiServiceException;
-import com.example.ecommerce.chat.client.GeminiRestClient.GeminiTimeoutException;
+import com.example.ecommerce.exception.ChatAuthenticationException;
+import com.example.ecommerce.exception.GeminiServiceException;
+import com.example.ecommerce.exception.GeminiTimeoutException;
 import com.example.ecommerce.chat.model.ChatSessionMetadata;
 import com.example.ecommerce.chat.model.GuestSessionCreationResult;
 import com.example.ecommerce.chat.service.ChatService;
@@ -135,7 +136,7 @@ class ChatControllerTest {
                     .version(2L)
                     .build();
 
-            when(chatService.sendMessage(eq(TEST_SESSION_ID), eq("Sản phẩm này có size XL không?"), eq(TEST_GUEST_TOKEN), isNull()))
+            when(chatService.sendMessage(eq(TEST_SESSION_ID), eq("Sản phẩm này có size XL không?"), eq(TEST_GUEST_TOKEN), isNull(), any()))
                     .thenReturn(response);
 
             mockMvc.perform(post("/api/v1/chat/messages")
@@ -162,7 +163,71 @@ class ChatControllerTest {
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false))
-                    .andExpect(jsonPath("$.message").value("Email hoặc mật khẩu không đúng"));
+                    .andExpect(jsonPath("$.message").value("Guest token bắt buộc đối với khách vãng lai (truyền qua header X-Guest-Token)"));
+        }
+
+        @Test
+        @DisplayName("CTRL-04b: Khách vãng lai gửi tin nhắn qua endpoint tương thích POST /api/v1/chat thành công")
+        void testSendMessage_ViaBaseChatEndpoint_GuestSuccess() throws Exception {
+            ChatRequest request = ChatRequest.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .message("Sản phẩm này có size M không?")
+                    .build();
+
+            ChatResponse response = ChatResponse.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .message("Dạ sản phẩm còn size M ạ!")
+                    .version(2L)
+                    .build();
+
+            when(chatService.sendMessage(eq(TEST_SESSION_ID), eq("Sản phẩm này có size M không?"), eq(TEST_GUEST_TOKEN), isNull(), any()))
+                    .thenReturn(response);
+
+            mockMvc.perform(post("/api/v1/chat")
+                            .header("X-Guest-Token", TEST_GUEST_TOKEN)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.success").value(true))
+                    .andExpect(jsonPath("$.data.sessionId").value(TEST_SESSION_ID))
+                    .andExpect(jsonPath("$.data.message").value("Dạ sản phẩm còn size M ạ!"))
+                    .andExpect(jsonPath("$.data.version").value(2));
+        }
+
+        @Test
+        @DisplayName("CTRL-04c: Gửi tin nhắn qua POST /api/v1/chat thiếu header X-Guest-Token bị từ chối HTTP 401")
+        void testSendMessage_ViaBaseChatEndpoint_GuestMissingToken() throws Exception {
+            ChatRequest request = ChatRequest.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .message("Hỏi giá")
+                    .build();
+
+            mockMvc.perform(post("/api/v1/chat")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.success").value(false))
+                    .andExpect(jsonPath("$.message").value("Guest token bắt buộc đối với khách vãng lai (truyền qua header X-Guest-Token)"));
+        }
+
+        @Test
+        @DisplayName("CTRL-04d: Guest token sai hoặc không hợp lệ bị từ chối HTTP 401 với thông điệp rõ ràng")
+        void testSendMessage_InvalidGuestToken_Returns401() throws Exception {
+            ChatRequest request = ChatRequest.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .message("Hỏi giá")
+                    .build();
+
+            when(chatService.sendMessage(eq(TEST_SESSION_ID), eq("Hỏi giá"), eq("invalid-token"), isNull(), any()))
+                    .thenThrow(new ChatAuthenticationException("Guest token không hợp lệ hoặc phiên đã được claim"));
+
+            mockMvc.perform(post("/api/v1/chat/messages")
+                            .header("X-Guest-Token", "invalid-token")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.success").value(false))
+                    .andExpect(jsonPath("$.message").value("Guest token không hợp lệ hoặc phiên đã được claim"));
         }
 
         @Test
@@ -184,7 +249,7 @@ class ChatControllerTest {
                     .version(4L)
                     .build();
 
-            when(chatService.sendMessage(eq(TEST_SESSION_ID), eq("Kiểm tra đơn hàng của tôi"), isNull(), eq(String.valueOf(TEST_USER_ID))))
+            when(chatService.sendMessage(eq(TEST_SESSION_ID), eq("Kiểm tra đơn hàng của tôi"), isNull(), eq(String.valueOf(TEST_USER_ID)), any()))
                     .thenReturn(response);
 
             mockMvc.perform(post("/api/v1/chat/messages")
@@ -259,21 +324,21 @@ class ChatControllerTest {
         }
 
         @Test
-        @DisplayName("CTRL-09: Khi Lock Contention xảy ra trả HTTP 429 Too Many Requests")
-        void testSendMessage_LockContention_Returns429() throws Exception {
+        @DisplayName("CTRL-09: Khi Lock Contention xảy ra trả HTTP 409 Conflict")
+        void testSendMessage_LockContention_Returns409() throws Exception {
             ChatRequest request = ChatRequest.builder()
                     .sessionId(TEST_SESSION_ID)
                     .message("Hỏi giá")
                     .build();
 
-            when(chatService.sendMessage(any(), any(), any(), any()))
+            when(chatService.sendMessage(any(), any(), any(), any(), any()))
                     .thenThrow(new ChatLockContentionException("Phiên đang xử lý yêu cầu trước"));
 
             mockMvc.perform(post("/api/v1/chat/messages")
                             .header("X-Guest-Token", TEST_GUEST_TOKEN)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isTooManyRequests())
+                    .andExpect(status().isConflict())
                     .andExpect(jsonPath("$.message").value("Phiên đang xử lý yêu cầu trước"));
         }
 
@@ -285,7 +350,7 @@ class ChatControllerTest {
                     .message("Hỏi giá")
                     .build();
 
-            when(chatService.sendMessage(any(), any(), any(), any()))
+            when(chatService.sendMessage(any(), any(), any(), any(), any()))
                     .thenThrow(new ChatVersionConflictException("Dữ liệu đã bị thay đổi bởi request khác"));
 
             mockMvc.perform(post("/api/v1/chat/messages")
@@ -304,7 +369,7 @@ class ChatControllerTest {
                     .message("Hỏi giá")
                     .build();
 
-            when(chatService.sendMessage(any(), any(), any(), any()))
+            when(chatService.sendMessage(any(), any(), any(), any(), any()))
                     .thenThrow(new GeminiServiceException("Upstream 500 error"));
 
             mockMvc.perform(post("/api/v1/chat/messages")
@@ -322,7 +387,7 @@ class ChatControllerTest {
                     .message("Hỏi giá")
                     .build();
 
-            when(chatService.sendMessage(any(), any(), any(), any()))
+            when(chatService.sendMessage(any(), any(), any(), any(), any()))
                     .thenThrow(new GeminiTimeoutException("Timeout"));
 
             mockMvc.perform(post("/api/v1/chat/messages")
