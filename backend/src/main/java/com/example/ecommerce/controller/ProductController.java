@@ -1,6 +1,7 @@
 package com.example.ecommerce.controller;
 
 import com.example.ecommerce.dto.response.ApiResponse;
+import com.example.ecommerce.dto.response.DealOfTheDayResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
 import com.example.ecommerce.service.ProductService;
@@ -42,6 +43,16 @@ public class ProductController {
                 keyword, categoryId, minPrice, maxPrice, page, size, sortBy, sortDir
         );
         return ResponseEntity.ok(ApiResponse.success(products));
+    }
+
+    /**
+     * Lấy sản phẩm Deal of the Day với chương trình khuyến mãi thực tế từ CSDL.
+     * GET /api/v1/products/deal-of-the-day
+     */
+    @GetMapping("/deal-of-the-day")
+    public ResponseEntity<ApiResponse<DealOfTheDayResponse>> getDealOfTheDay() {
+        DealOfTheDayResponse deal = productService.getDealOfTheDay();
+        return ResponseEntity.ok(ApiResponse.success(deal));
     }
 
     /**

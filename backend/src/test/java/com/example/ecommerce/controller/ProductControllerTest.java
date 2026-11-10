@@ -134,4 +134,29 @@ class ProductControllerTest {
                                 .andExpect(jsonPath("$.data.id").value(1))
                                 .andExpect(jsonPath("$.data.name").value("Áo thun nam basic"));
         }
+
+        @Test
+        @DisplayName("GET /api/v1/products/deal-of-the-day: Lấy sản phẩm Deal of the Day thành công")
+        void getDealOfTheDay_returns200() throws Exception {
+                com.example.ecommerce.dto.response.DealOfTheDayResponse deal = com.example.ecommerce.dto.response.DealOfTheDayResponse.builder()
+                                .id(5L)
+                                .name("Tai nghe Bluetooth không dây")
+                                .description("Tai nghe chống ồn chủ động ANC")
+                                .salePrice(new BigDecimal("1200000"))
+                                .originalPrice(new BigDecimal("1600000"))
+                                .discountPercentage(25)
+                                .stockQuantity(15)
+                                .active(true)
+                                .build();
+
+                when(productService.getDealOfTheDay()).thenReturn(deal);
+
+                mockMvc.perform(get("/api/v1/products/deal-of-the-day")
+                                .contentType(MediaType.APPLICATION_JSON))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.success").value(true))
+                                .andExpect(jsonPath("$.data.id").value(5))
+                                .andExpect(jsonPath("$.data.discountPercentage").value(25))
+                                .andExpect(jsonPath("$.data.name").value("Tai nghe Bluetooth không dây"));
+        }
 }

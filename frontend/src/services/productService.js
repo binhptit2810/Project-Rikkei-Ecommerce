@@ -32,6 +32,15 @@ export const productService = {
   },
 
   /**
+   * Lấy sản phẩm ưu đãi trong ngày (Deal of the Day) từ MySQL DB kèm thông tin khuyến mãi.
+   * @returns {Promise<Object>} ApiResponse<DealOfTheDayResponse>
+   */
+  async getDealOfTheDay() {
+    const response = await apiClient.get('/products/deal-of-the-day')
+    return response.data
+  },
+
+  /**
    * Lấy danh sách sản phẩm dành cho Admin (bao gồm cả active và inactive).
    * @param {Object} params - { keyword, categoryId, active, page, size, sortBy, sortDir }
    * @returns {Promise<Object>} ApiResponse chứa PageResponse<ProductResponse>

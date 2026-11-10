@@ -11,6 +11,7 @@ import {
   AlertCircle,
   ArrowRight,
 } from 'lucide-react'
+import { motion, useReducedMotion } from 'framer-motion'
 import productService from '../../services/productService'
 import categoryService from '../../services/categoryService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -71,6 +72,26 @@ export const ProductListPage = () => {
   const [selectedCategory, setSelectedCategory] = useState(searchParams.get('categoryId') || '')
   const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'createdAt')
   const [sortDir, setSortDir] = useState(searchParams.get('sortDir') || 'desc')
+  const shouldReduceMotion = useReducedMotion()
+
+  const listContainerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: shouldReduceMotion ? 0 : 0.05,
+      },
+    },
+  }
+
+  const listItemVariants = {
+    hidden: { opacity: 0, y: shouldReduceMotion ? 0 : 16 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.35, ease: 'easeOut' },
+    },
+  }
 
   // Hiển thị Toast Notification và tự động ẩn sau 3 giây
   const showToast = (message, type = 'success') => {
@@ -483,15 +504,21 @@ export const ProductListPage = () => {
       ) : (
         /* Data Grid & Pagination */
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <motion.div
+            variants={listContainerVariants}
+            initial="hidden"
+            animate="visible"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+          >
             {products.map((item) => (
               <ProductCard
                 key={item.id}
                 product={item}
                 onAddToCart={handleAddToCart}
+                variants={listItemVariants}
               />
             ))}
-          </div>
+          </motion.div>
 
           {/* Phân trang chuẩn với component Pagination */}
           <div className="mt-10 pt-6 border-t border-slate-200">
