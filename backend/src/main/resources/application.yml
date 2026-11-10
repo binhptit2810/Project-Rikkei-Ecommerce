@@ -46,11 +46,11 @@ spring:
       # Khi cần xác thực, Spring Boot tự động map biến môi trường SPRING_DATA_REDIS_PASSWORD hoặc khai báo spring.data.redis.password.
       timeout: 2000ms
 
-  # Cấu hình gửi Mail qua SMTP (hỗ trợ Gmail, Brevo, Resend,... qua Port 587 STARTTLS hoặc Port 465 SSL)
+  # Cấu hình gửi Mail qua SMTP (hỗ trợ Brevo, Gmail, Resend,... qua Port 587 STARTTLS hoặc Port 465 SSL)
   mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
+    host: ${MAIL_HOST:smtp-relay.brevo.com}
     port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:binhbadboy2810@gmail.com}
+    username: ${MAIL_USERNAME:af39f5001@smtp-brevo.com}
     password: ${MAIL_PASSWORD:}
     properties:
       mail:
@@ -122,7 +122,7 @@ app:
   upload:
     dir: ${UPLOAD_DIR:uploads}
   mail:
-    from: ${MAIL_FROM:binhbadboy2810@gmail.com}
+    from: ${MAIL_FROM:noreply@rikkei-shop.me}
     from-name: ${MAIL_FROM_NAME:Rikkei Store}
     dev-fallback-enabled: ${MAIL_DEV_FALLBACK_ENABLED:true}
   otp:
