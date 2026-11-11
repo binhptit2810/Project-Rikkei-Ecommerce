@@ -48,6 +48,7 @@ jobs:
           SPRING_PROFILES_ACTIVE: test
           REDIS_HOST: 127.0.0.1
           REDIS_PORT: 6379
+          RUN_REDIS_TESTS: "true"
 
       - name: Upload test results
         if: always()
