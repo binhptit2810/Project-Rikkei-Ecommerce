@@ -41,6 +41,10 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     boolean existsByOrderCode(String orderCode);
 
+    List<Order> findByCouponCode(String couponCode);
+
+    long countByCouponCode(String couponCode);
+
     long countByOrderStatus(OrderStatus orderStatus);
 
     long countByPaymentStatus(com.example.ecommerce.entity.PaymentStatus paymentStatus);

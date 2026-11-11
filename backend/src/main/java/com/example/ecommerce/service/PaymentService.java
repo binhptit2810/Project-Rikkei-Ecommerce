@@ -171,6 +171,7 @@ public class PaymentService {
         // Mỗi lần tạo payment URL PHẢI có một mã tham chiếu giao dịch riêng (vnp_TxnRef mới)
         String newTxnRef = Payment.generateTransactionCode();
         payment.setTransactionCode(newTxnRef);
+        payment.setVnpTxnRef(newTxnRef);
         payment.setPaymentMethod(PaymentMethod.VNPAY);
         payment.setStatus(PaymentStatus.UNPAID);
         payment.setAmount(order.getTotalAmount() != null ? order.getTotalAmount().setScale(2, RoundingMode.HALF_UP) : BigDecimal.ZERO);
@@ -589,6 +590,7 @@ public class PaymentService {
 
                 payment.setStatus(PaymentStatus.PAID);
                 payment.setTransactionCode(vnpTxnRef);
+                payment.setVnpTxnRef(vnpTxnRef);
                 payment.setPaidAt(LocalDateTime.now());
                 payment.setTransactionNote("Đơn hàng đã hủy trước khi thanh toán. Cần hoàn tiền cho khách (REFUND_PENDING). Mã GD VNPay: " + vnpTransactionNo);
                 paymentRepository.save(payment);
@@ -638,6 +640,7 @@ public class PaymentService {
             payment.setStatus(PaymentStatus.PAID);
             payment.setPaidAt(LocalDateTime.now());
             payment.setTransactionCode(vnpTxnRef);
+            payment.setVnpTxnRef(vnpTxnRef);
             payment.setTransactionNote("Thanh toán thành công qua VNPay Sandbox. Mã GD VNPay: " + vnpTransactionNo);
             paymentRepository.save(payment);
 
@@ -684,6 +687,7 @@ public class PaymentService {
                 } else {
                     payment.setStatus(PaymentStatus.FAILED);
                     payment.setTransactionCode(vnpTxnRef);
+                    payment.setVnpTxnRef(vnpTxnRef);
                     payment.setTransactionNote("Giao dịch thanh toán VNPay thất bại. Mã phản hồi: " + vnpResponseCode);
                     paymentRepository.save(payment);
 

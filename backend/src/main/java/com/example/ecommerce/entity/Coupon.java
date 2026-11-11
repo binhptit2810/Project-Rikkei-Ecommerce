@@ -14,7 +14,13 @@ import java.time.LocalDateTime;
  * Phối hợp: Đặng Thanh Bình (Thành viên 4 - DTB)
  */
 @Entity
-@Table(name = "coupons")
+@Table(
+    name = "coupons",
+    indexes = {
+        @Index(name = "idx_coupons_code", columnList = "code"),
+        @Index(name = "idx_coupons_active", columnList = "active")
+    }
+)
 @Getter
 @Setter
 @NoArgsConstructor

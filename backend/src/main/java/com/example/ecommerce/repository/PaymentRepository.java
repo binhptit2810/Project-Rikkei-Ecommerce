@@ -17,6 +17,10 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     Optional<Payment> findByTransactionCode(String transactionCode);
 
+    Optional<Payment> findByVnpTxnRef(String vnpTxnRef);
+
+    boolean existsByVnpTxnRef(String vnpTxnRef);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT p FROM Payment p WHERE p.transactionCode = :transactionCode")
     Optional<Payment> findByTransactionCodeForUpdate(@Param("transactionCode") String transactionCode);
