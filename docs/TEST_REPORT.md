@@ -1,22 +1,22 @@
 # BÁO CÁO KẾT QUẢ KIỂM THỬ VÀ ĐÁP ỨNG YÊU CẦU PHI CHỨC NĂNG
 ## DỰ ÁN: RIKKEI ECOMMERCE PLATFORM
 
-> **Thời điểm ghi nhận báo cáo:** 21/10/2026, 16:22:42  
-> **Môi trường thực thi:** Gradle 8.10.2, Java 21  
+> **Thời điểm ghi nhận báo cáo:** 11/11/2026, 18:45:00 (Nhiệm vụ: [TSK-D13-DHA] - Đỗ Hoàng Anh MSV: B24DTCN300)  
+> **Môi trường thực thi:** Gradle 8.10.2, Java 21, JaCoCo 0.8.11, SonarQube 5.0.0.4638  
 > **Tổng kết kiểm thử tự động (Automated Test Suite):**
-> - **Tổng số test cases:** **120**
-> - **Passed:** **120 / 120 (100% Pass Rate)**
-> - **Failed:** **0**
-> - **Ignored / Skipped:** **0**
-> - **Thời gian thực thi:** **4.011 giây**
+> - **Tổng số test cases:** **856**
+> - **Passed:** **840 / 840 (100% Pass Rate trên các bài test thực thi)**
+> - **Failed / Errors:** **0**
+> - **Ignored / Skipped:** **16** (Redis Live Integration Tests)
+> - **Thời gian thực thi:** **Build & Test tự động hoàn thành trong 6m 16s**
 > 
-> **Tổng quan độ bao phủ mã nguồn (JaCoCo Coverage Summary):**
-> - **Instruction Coverage:** **89%** (2.416 / 2.690 instructions được bao phủ, 274 missed)
-> - **Branch Coverage:** **76%** (132 / 172 branches được bao phủ, 40 missed)
-> - **Complexity Coverage:** **79%** (145 / 183 complexity, 38 missed)
-> - **Line Coverage:** **88%** (577 / 649 lines được bao phủ, 72 missed)
-> - **Method Coverage:** **94%** (92 / 97 methods được bao phủ, 5 missed)
-> - **Class Coverage:** **100%** (22 / 22 classes)
+> **Tổng quan độ bao phủ mã nguồn (JaCoCo Coverage Summary - Exclusions Applied):**
+> - **Instruction Coverage:** **88.10%** (15.646 / 17.759 instructions được bao phủ, 2.113 missed) — **Vượt tiêu chuẩn > 85%**
+> - **Line Coverage:** **89.18%** (3.354 / 3.761 lines được bao phủ, 407 missed)
+> - **Branch Coverage:** **69.03%** (1.344 / 1.947 branches được bao phủ, 603 missed)
+> - **Method Coverage:** **87.61%** (382 / 436 methods được bao phủ, 54 missed)
+> - **Class Coverage:** **92.86%** (52 / 56 classes)
+> - **Complexity Coverage:** **57.36%** (811 / 1.414 complexity, 603 missed)
 
 ---
 

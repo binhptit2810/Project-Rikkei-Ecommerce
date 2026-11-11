@@ -506,6 +506,55 @@ class PaymentServiceTest {
         }
 
         @Test
+        @DisplayName("processVNPayCallback: Tham số null hoặc rỗng ném BusinessException")
+        void processVNPayCallback_NullOrEmpty_ThrowsException() {
+            assertThatThrownBy(() -> paymentService.processVNPayCallback(null))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("không hợp lệ hoặc rỗng");
+
+            assertThatThrownBy(() -> paymentService.processVNPayCallback(Map.of()))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("không hợp lệ hoặc rỗng");
+        }
+
+        @Test
+        @DisplayName("processVNPayCallback: vnp_TxnRef để trống ném BusinessException")
+        void processVNPayCallback_BlankTxnRef_ThrowsException() {
+            when(vnPayConfig.getHashSecret()).thenReturn(secretKey);
+
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("vnp_Amount", "150000000");
+            queryParams.put("vnp_ResponseCode", "00");
+            queryParams.put("vnp_TxnRef", "   ");
+
+            String secureHash = VNPayUtil.hashAllFields(queryParams, secretKey);
+            queryParams.put("vnp_SecureHash", secureHash);
+
+            assertThatThrownBy(() -> paymentService.processVNPayCallback(queryParams))
+                    .isInstanceOf(BusinessException.class)
+                    .hasMessageContaining("vnp_TxnRef không được để trống");
+        }
+
+        @Test
+        @DisplayName("processVNPayCallback: Không tìm thấy giao dịch thanh toán ném ResourceNotFoundException")
+        void processVNPayCallback_PaymentNotFound_ThrowsException() {
+            when(vnPayConfig.getHashSecret()).thenReturn(secretKey);
+
+            Map<String, String> queryParams = new HashMap<>();
+            queryParams.put("vnp_Amount", "150000000");
+            queryParams.put("vnp_ResponseCode", "00");
+            queryParams.put("vnp_TxnRef", "PAY-NOTFOUND");
+
+            String secureHash = VNPayUtil.hashAllFields(queryParams, secretKey);
+            queryParams.put("vnp_SecureHash", secureHash);
+
+            when(paymentRepository.findByTransactionCode("PAY-NOTFOUND")).thenReturn(Optional.empty());
+
+            assertThatThrownBy(() -> paymentService.processVNPayCallback(queryParams))
+                    .isInstanceOf(ResourceNotFoundException.class);
+        }
+
+        @Test
         @DisplayName("createVNPayPayment: Mỗi lần gọi retry sinh ra vnp_TxnRef mới và lưu PaymentTransaction")
         void createVNPayPayment_GeneratesNewTxnRefOnRetry() {
             when(orderRepository.findById(10L)).thenReturn(Optional.of(testOrder));

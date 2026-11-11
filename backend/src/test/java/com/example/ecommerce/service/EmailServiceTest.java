@@ -172,5 +172,44 @@ class EmailServiceTest {
 
         verify(mailSender).send(mimeMessage);
     }
+
+    @Test
+    @DisplayName("EmailService: Gửi email cảnh báo bảo mật thành công")
+    void sendSecurityAlertEmail_Success() throws Exception {
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+        doNothing().when(mailSender).send(any(MimeMessage.class));
+
+        emailService.sendSecurityAlertEmail("user@example.com", "Nguyễn Văn A", "Phát hiện đăng nhập lạ", "IP 1.2.3.4");
+
+        verify(mailSender).createMimeMessage();
+        verify(mailSender).send(mimeMessage);
+        assertThat(mimeMessage.getSubject()).contains("Cảnh báo bảo mật");
+    }
+
+    @Test
+    @DisplayName("EmailService: Gửi email thông báo trạng thái tài khoản thành công")
+    void sendAccountStatusEmail_Success() throws Exception {
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+        doNothing().when(mailSender).send(any(MimeMessage.class));
+
+        emailService.sendAccountStatusEmail("user@example.com", "Nguyễn Văn A", "Khóa tạm thời", "Vi phạm điều khoản", "Spam");
+
+        verify(mailSender).createMimeMessage();
+        verify(mailSender).send(mimeMessage);
+        assertThat(mimeMessage.getSubject()).contains("Thông báo tài khoản");
+    }
+
+    @Test
+    @DisplayName("EmailService: Khi devFallbackEnabled=true và lỗi gửi thông báo thì log warn và không ném Exception")
+    void sendHtmlEmail_DevFallbackEnabled_NotificationDoesNotThrow() {
+        ReflectionTestUtils.setField(emailService, "devFallbackEnabled", true);
+        when(mailSender.createMimeMessage()).thenReturn(mimeMessage);
+        doThrow(new MailSendException("SMTP error")).when(mailSender).send(any(MimeMessage.class));
+
+        // Không ném ngoại lệ khi gửi thông báo (otpForFallback == null)
+        org.junit.jupiter.api.Assertions.assertDoesNotThrow(() ->
+                emailService.sendSecurityAlertEmail("user@example.com", "Nguyễn Văn A", "Cảnh báo", "Chi tiết")
+        );
+    }
 }
 
