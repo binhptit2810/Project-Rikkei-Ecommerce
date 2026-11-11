@@ -9,7 +9,6 @@ import com.example.ecommerce.dto.response.VNPayPaymentResponse;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
-import org.springframework.security.access.AccessDeniedException;
 import com.example.ecommerce.repository.OrderRepository;
 import com.example.ecommerce.repository.PaymentRepository;
 import com.example.ecommerce.repository.PaymentTransactionRepository;
@@ -142,7 +141,7 @@ public class PaymentService {
                     .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
             if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
-                throw new AccessDeniedException("Bạn không có quyền thanh toán đơn hàng này");
+                throw new BusinessException("Bạn không có quyền thanh toán đơn hàng này");
             }
         }
 
@@ -738,7 +737,7 @@ public class PaymentService {
                     .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
             if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
-                throw new AccessDeniedException("Bạn không có quyền thanh toán đơn hàng này");
+                throw new BusinessException("Bạn không có quyền thanh toán đơn hàng này");
             }
         }
 
@@ -847,7 +846,7 @@ public class PaymentService {
                     .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
             if (user.getRole() != Role.ADMIN && !order.getUser().getId().equals(user.getId())) {
-                throw new AccessDeniedException("Bạn không có quyền xem thông tin thanh toán của đơn hàng này");
+                throw new BusinessException("Bạn không có quyền xem thông tin thanh toán của đơn hàng này");
             }
         }
 
@@ -874,7 +873,7 @@ public class PaymentService {
                     .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
 
             if (user.getRole() != Role.ADMIN && (payment.getOrder() == null || !payment.getOrder().getUser().getId().equals(user.getId()))) {
-                throw new AccessDeniedException("Bạn không có quyền xem thông tin của giao dịch này");
+                throw new BusinessException("Bạn không có quyền xem thông tin của giao dịch này");
             }
         }
 

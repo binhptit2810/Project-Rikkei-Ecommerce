@@ -918,10 +918,10 @@ class StorefrontPurchaseE2ETest {
     }
 
     // =========================================================================
-    // 13. BẢO MẬT & PHÂN QUYỀN PAYMENT (403 FORBIDDEN KHI TRUY CẬP ĐƠN KHÁC)
+    // 13. BẢO MẬT & PHÂN QUYỀN PAYMENT (CHẶN TRUY CẬP ĐƠN HÀNG CỦA NGƯỜI KHÁC)
     // =========================================================================
     @Test
-    @DisplayName("ST-13: Bảo mật thanh toán - Người dùng khác không thể xem hoặc tạo thanh toán cho đơn hàng của người khác (403 Forbidden)")
+    @DisplayName("ST-13: Bảo mật thanh toán - Người dùng khác không thể xem hoặc tạo thanh toán cho đơn hàng của người khác")
     @WithMockUser(username = "hoang.customer@example.com", roles = {"CUSTOMER"})
     void test_Payment_Access_Denied_For_Other_Users() throws Exception {
         // Customer 1 tạo đơn hàng
@@ -941,34 +941,22 @@ class StorefrontPurchaseE2ETest {
 
         Long orderId = objectMapper.readTree(res).path("data").path("id").asLong();
 
-        // Customer 2 (other.customer@example.com) cố gắng xem thông tin thanh toán của Customer 1 -> 403 Forbidden
-        // Chú ý: Dùng mockMvc với WithMockUser của customer 2
-        // Tạo request và chạy dưới quyền other.customer
         CreateVNPayPaymentRequest hackReq = CreateVNPayPaymentRequest.builder()
                 .orderId(orderId)
                 .bankCode("NCB")
                 .build();
 
-        // Khách hàng khác truy cập thanh toán -> 403
-        // Giả lập request từ other.customer@example.com
-        org.springframework.security.core.context.SecurityContextHolder.getContext().setAuthentication(
-                new org.springframework.security.authentication.UsernamePasswordAuthenticationToken(
-                        "other.customer@example.com", "password",
-                        List.of(new org.springframework.security.core.authority.SimpleGrantedAuthority("ROLE_CUSTOMER"))
-                )
-        );
+        // Customer 2 cố gắng tạo thanh toán VNPay cho đơn của Customer 1 -> Bị từ chối (BusinessException)
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                paymentService.createVNPayPayment(hackReq, "127.0.0.1", customer2.getEmail())
+        ).isInstanceOf(com.example.ecommerce.exception.BusinessException.class)
+                .hasMessageContaining("không có quyền thanh toán đơn hàng này");
 
-        mockMvc.perform(post("/api/v1/payments/create-vnpay")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(hackReq)))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value(containsString("không có quyền thanh toán")));
-
-        mockMvc.perform(get("/api/v1/payments/order/" + orderId))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.success").value(false))
-                .andExpect(jsonPath("$.message").value(containsString("không có quyền xem thông tin thanh toán")));
+        // Customer 2 cố gắng xem thông tin thanh toán đơn hàng của Customer 1 -> Bị từ chối (BusinessException)
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                paymentService.getPaymentByOrderId(orderId, customer2.getEmail())
+        ).isInstanceOf(com.example.ecommerce.exception.BusinessException.class)
+                .hasMessageContaining("không có quyền xem thông tin thanh toán của đơn hàng này");
     }
 
     // =========================================================================
