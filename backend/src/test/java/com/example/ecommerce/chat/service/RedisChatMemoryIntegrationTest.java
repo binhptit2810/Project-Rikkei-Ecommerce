@@ -45,7 +45,13 @@ class RedisChatMemoryIntegrationTest {
 
     @BeforeAll
     static void beforeAll() {
-        connectionFactory = new LettuceConnectionFactory("localhost", 6379);
+        String redisHost = System.getenv().getOrDefault("REDIS_HOST", "localhost");
+        int redisPort = 6379;
+        try {
+            redisPort = Integer.parseInt(System.getenv().getOrDefault("REDIS_PORT", "6379"));
+        } catch (NumberFormatException ignored) {
+        }
+        connectionFactory = new LettuceConnectionFactory(redisHost, redisPort);
         connectionFactory.afterPropertiesSet();
         redisTemplate = new StringRedisTemplate(connectionFactory);
         objectMapper = new ObjectMapper()
