@@ -22,10 +22,16 @@ public class CreateVNPayPaymentRequest {
     @NotNull(message = "ID đơn hàng không được để trống")
     private Long orderId;
 
+    /**
+     * @deprecated CẢNH BÁO BẢO MẬT (TSK-D13-CCT): Trường amount gửi từ client bị BỎ QUA hoàn toàn
+     * ở tầng PaymentService để chống gian lận sửa giá (Money Tampering).
+     * Số tiền thanh toán VNPay LUÔN được truy vấn trực tiếp từ order.getTotalAmount() trong database.
+     * Giữ lại trường này để tương thích ngược API payload cũ nếu có.
+     */
+    @Deprecated
     private BigDecimal amount;
 
     private String bankCode;
 
     private String orderInfo;
 }
-

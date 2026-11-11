@@ -47,14 +47,21 @@ class RedisRateLimiterIntegrationTest {
 
     @BeforeAll
     static void initRedis() {
-        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration("localhost", 6379);
+        String redisHost = System.getenv().getOrDefault("REDIS_HOST", "localhost");
+        int redisPort = 6379;
+        try {
+            redisPort = Integer.parseInt(System.getenv().getOrDefault("REDIS_PORT", "6379"));
+        } catch (NumberFormatException ignored) {
+        }
+
+        RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(redisHost, redisPort);
         connectionFactory = new LettuceConnectionFactory(config);
         connectionFactory.afterPropertiesSet();
 
         redisTemplate = new StringRedisTemplate(connectionFactory);
         redisTemplate.afterPropertiesSet();
 
-        redisClient = RedisClient.create("redis://localhost:6379");
+        redisClient = RedisClient.create("redis://" + redisHost + ":" + redisPort);
         redisConnection = redisClient.connect(RedisCodec.of(StringCodec.UTF8, ByteArrayCodec.INSTANCE));
 
         ProxyManager<String> proxyManager = Bucket4jLettuce.casBasedBuilder(redisConnection)
@@ -80,14 +87,16 @@ class RedisRateLimiterIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        testIp = "it-ip-" + UUID.randomUUID();
+        int r1 = ThreadLocalRandom.current().nextInt(1, 255);
+        int r2 = ThreadLocalRandom.current().nextInt(1, 255);
+        testIp = "198.51." + r1 + "." + r2;
         testUserId = "it-user-" + UUID.randomUUID();
     }
 
     @AfterEach
     void cleanUp() {
         if (testIp != null) {
-            redisTemplate.delete("chat:rate-limit:ip:{" + testIp + "}");
+            redisTemplate.delete(rateLimiterService.buildKey(testIp));
         }
     }
 
@@ -133,8 +142,10 @@ class RedisRateLimiterIntegrationTest {
     @Test
     @DisplayName("IT-RL-03: Hai IP khác nhau có bộ đếm Token Bucket độc lập")
     void testDifferentIpsIndependentCounters() {
-        String ip1 = "it-ip1-" + UUID.randomUUID();
-        String ip2 = "it-ip2-" + UUID.randomUUID();
+        int r1 = ThreadLocalRandom.current().nextInt(1, 255);
+        int r2 = ThreadLocalRandom.current().nextInt(1, 255);
+        String ip1 = "198.51." + r1 + ".1";
+        String ip2 = "198.51." + r2 + ".2";
 
         try {
             // IP1 dùng hết 10 lượt
@@ -151,8 +162,8 @@ class RedisRateLimiterIntegrationTest {
                 rateLimiterService.checkRateLimit(ip2, null);
             }
         } finally {
-            redisTemplate.delete("chat:rate-limit:ip:{" + ip1 + "}");
-            redisTemplate.delete("chat:rate-limit:ip:{" + ip2 + "}");
+            redisTemplate.delete(rateLimiterService.buildKey(ip1));
+            redisTemplate.delete(rateLimiterService.buildKey(ip2));
         }
     }
 
@@ -161,7 +172,10 @@ class RedisRateLimiterIntegrationTest {
     void testRealTtlInRedis() {
         rateLimiterService.checkRateLimit(testIp, null);
 
-        Long ttlSeconds = redisTemplate.getExpire("chat:rate-limit:ip:{" + testIp + "}", TimeUnit.SECONDS);
+        String redisKey = rateLimiterService.buildKey(testIp);
+        assertThat(redisTemplate.hasKey(redisKey)).isTrue();
+
+        Long ttlSeconds = redisTemplate.getExpire(redisKey, TimeUnit.SECONDS);
         assertThat(ttlSeconds).isNotNull().isGreaterThan(0L);
     }
 

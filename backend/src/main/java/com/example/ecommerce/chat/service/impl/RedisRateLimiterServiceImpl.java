@@ -44,10 +44,18 @@ public class RedisRateLimiterServiceImpl implements RateLimiterService {
             .addLimit(limit -> limit.capacity(LIMIT_CAPACITY).refillGreedy(LIMIT_CAPACITY, Duration.ofSeconds(WINDOW_SECONDS)))
             .build();
 
+    public String resolveSanitizedIp(String clientIp) {
+        return (clientIpResolver != null) ? clientIpResolver.sanitizeIp(clientIp) : ((clientIp != null && !clientIp.isBlank()) ? clientIp.trim() : "unknown");
+    }
+
+    public String buildKey(String clientIp) {
+        return "chat:rate-limit:ip:{" + resolveSanitizedIp(clientIp) + "}";
+    }
+
     @Override
     public void checkRateLimit(String clientIp, String authenticatedUserId) {
-        String sanitizedIp = (clientIpResolver != null) ? clientIpResolver.sanitizeIp(clientIp) : ((clientIp != null && !clientIp.isBlank()) ? clientIp.trim() : "unknown");
-        String key = "chat:rate-limit:ip:{" + sanitizedIp + "}";
+        String sanitizedIp = resolveSanitizedIp(clientIp);
+        String key = buildKey(clientIp);
 
         try {
             Bucket bucket = proxyManager.builder().build(key, () -> BUCKET_CONFIGURATION);
