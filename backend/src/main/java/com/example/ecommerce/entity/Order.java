@@ -17,7 +17,15 @@ import java.util.List;
  * - Đặng Thanh Bình (Inventory & Payment): Phối hợp trừ/hoàn kho và trạng thái thanh toán.
  */
 @Entity
-@Table(name = "orders")
+@Table(
+    name = "orders",
+    indexes = {
+        @Index(name = "idx_orders_user", columnList = "user_id"),
+        @Index(name = "idx_orders_status", columnList = "order_status"),
+        @Index(name = "idx_orders_created", columnList = "created_at"),
+        @Index(name = "idx_orders_coupon_code", columnList = "coupon_code")
+    }
+)
 @Getter
 @Setter
 @NoArgsConstructor

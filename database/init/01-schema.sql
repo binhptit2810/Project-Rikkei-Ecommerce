@@ -92,6 +92,8 @@ CREATE TABLE IF NOT EXISTS orders (
     recipient_phone  VARCHAR(15) NOT NULL,
     shipping_address TEXT NOT NULL,
     total_amount     DECIMAL(15, 2) NOT NULL CHECK (total_amount >= 0),
+    coupon_code      VARCHAR(50),
+    discount_amount  DECIMAL(15, 2) DEFAULT 0,
     order_status     ENUM('PENDING','CONFIRMED','PROCESSING','SHIPPING','COMPLETED','CANCELLED')
                      NOT NULL DEFAULT 'PENDING',
     payment_status   ENUM('UNPAID','PAID','FAILED','REFUNDED')
@@ -104,7 +106,8 @@ CREATE TABLE IF NOT EXISTS orders (
         REFERENCES users(id) ON DELETE RESTRICT,
     INDEX idx_orders_user (user_id),
     INDEX idx_orders_status (order_status),
-    INDEX idx_orders_created (created_at)
+    INDEX idx_orders_created (created_at),
+    INDEX idx_orders_coupon_code (coupon_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
@@ -136,6 +139,7 @@ CREATE TABLE IF NOT EXISTS payments (
     id                BIGINT AUTO_INCREMENT PRIMARY KEY,
     order_id          BIGINT NOT NULL UNIQUE,
     transaction_code  VARCHAR(64) UNIQUE,        -- Mã giao dịch định dạng PAY-YYYYMMDD-XXXX
+    vnp_txn_ref       VARCHAR(64),               -- Mã tham chiếu giao dịch VNPay (đối soát & IPN)
     payment_method    ENUM('COD', 'SIMULATED', 'VNPAY') NOT NULL,
     status            ENUM('UNPAID','PAID','FAILED','REFUNDED') NOT NULL DEFAULT 'UNPAID',
     amount            DECIMAL(15, 2) NOT NULL CHECK (amount >= 0),
@@ -146,7 +150,8 @@ CREATE TABLE IF NOT EXISTS payments (
 
     CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
     INDEX idx_payments_order (order_id),
-    INDEX idx_payments_transaction_code (transaction_code)
+    INDEX idx_payments_transaction_code (transaction_code),
+    INDEX idx_payments_vnp_txn_ref (vnp_txn_ref)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
@@ -237,6 +242,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     CONSTRAINT fk_reviews_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT uk_reviews_product_user UNIQUE (product_id, user_id),
     INDEX idx_reviews_product (product_id),
+    INDEX idx_reviews_product_created (product_id, created_at),
     INDEX idx_reviews_user (user_id),
     INDEX idx_reviews_rating (rating),
     INDEX idx_reviews_created (created_at)

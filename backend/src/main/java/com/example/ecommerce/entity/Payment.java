@@ -16,7 +16,14 @@ import java.util.UUID;
  * Gắn liền 1-1 với đơn hàng Order.
  */
 @Entity
-@Table(name = "payments")
+@Table(
+    name = "payments",
+    indexes = {
+        @Index(name = "idx_payments_order", columnList = "order_id"),
+        @Index(name = "idx_payments_transaction_code", columnList = "transaction_code"),
+        @Index(name = "idx_payments_vnp_txn_ref", columnList = "vnp_txn_ref")
+    }
+)
 @Getter
 @Setter
 @NoArgsConstructor
@@ -38,6 +45,9 @@ public class Payment {
 
     @Column(name = "transaction_code", length = 64, unique = true)
     private String transactionCode;
+
+    @Column(name = "vnp_txn_ref", length = 64)
+    private String vnpTxnRef;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
