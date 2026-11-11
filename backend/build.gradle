@@ -3,6 +3,7 @@ plugins {
     id 'org.springframework.boot' version '3.3.5'
     id 'io.spring.dependency-management' version '1.1.6'
     id 'jacoco'
+    id 'org.sonarqube' version '5.0.0.4638'
 }
 
 group = 'com.example'
@@ -83,17 +84,16 @@ tasks.named('test') {
 }
 
 jacoco {
-    toolVersion = "0.8.12"
+    toolVersion = "0.8.11"
 }
 
 // Danh sách loại trừ các lớp cấu hình và boilerplate phi nghiệp vụ
 def jacocoExclusions = [
-    '**/EcommerceApplication.*',
+    '**/*Application*',
     '**/config/**',
     '**/dto/**',
     '**/entity/**',
-    '**/exception/**',
-    '**/repository/**'
+    '**/exception/**'
 ]
 
 jacocoTestReport {
@@ -123,6 +123,16 @@ jacocoTestCoverageVerification {
                 minimum = 0.85
             }
         }
+    }
+}
+
+sonar {
+    properties {
+        property "sonar.projectKey", "rikkei-ecommerce-backend"
+        property "sonar.projectName", "Rikkei Ecommerce Backend"
+        property "sonar.host.url", System.getenv("SONAR_HOST_URL") ?: "http://localhost:9000"
+        property "sonar.coverage.jacoco.xmlReportPaths", "build/reports/jacoco/test/jacocoTestReport.xml"
+        property "sonar.coverage.exclusions", "**/config/**, **/dto/**, **/entity/**, **/exception/**, **/*Application.*"
     }
 }
 

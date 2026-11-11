@@ -383,5 +383,219 @@ class CouponServiceTest {
         assertThat(response.getActive()).isFalse();
         verify(couponRepository).save(percentCoupon);
     }
+
+    @Test
+    @DisplayName("Admin: Toggle status ném ResourceNotFoundException khi ID không tồn tại")
+    void toggleCouponStatus_NotFound_ThrowsException() {
+        when(couponRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> couponService.toggleCouponStatus(99L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Admin: Xóa voucher ném ResourceNotFoundException khi ID không tồn tại")
+    void deleteCoupon_NotFound_ThrowsException() {
+        when(couponRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> couponService.deleteCoupon(99L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Admin: Cập nhật voucher ném ResourceNotFoundException khi ID không tồn tại")
+    void updateCoupon_NotFound_ThrowsException() {
+        when(couponRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> couponService.updateCoupon(99L, new UpdateCouponRequest()))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("Admin: Cập nhật voucher thất bại khi mã trùng với coupon khác")
+    void updateCoupon_DuplicateCode_ThrowsException() {
+        UpdateCouponRequest request = UpdateCouponRequest.builder().code("EXISTING").build();
+        when(couponRepository.findById(1L)).thenReturn(Optional.of(percentCoupon));
+        when(couponRepository.existsByCodeIgnoreCaseAndIdNot("EXISTING", 1L)).thenReturn(true);
+
+        assertThatThrownBy(() -> couponService.updateCoupon(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("đã được sử dụng");
+    }
+
+    @Test
+    @DisplayName("Admin: Cập nhật voucher thất bại khi discountValue > 100% đối với PERCENT")
+    void updateCoupon_PercentOver100_ThrowsException() {
+        UpdateCouponRequest request = UpdateCouponRequest.builder()
+                .discountType(DiscountType.PERCENT)
+                .discountValue(BigDecimal.valueOf(120))
+                .build();
+        when(couponRepository.findById(1L)).thenReturn(Optional.of(percentCoupon));
+
+        assertThatThrownBy(() -> couponService.updateCoupon(1L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("không được vượt quá 100%");
+    }
+
+    @Test
+    @DisplayName("Admin: Cập nhật voucher với đầy đủ các trường tùy chọn")
+    void updateCoupon_AllOptionalFields() {
+        UpdateCouponRequest request = UpdateCouponRequest.builder()
+                .code("NEWALL")
+                .discountType(DiscountType.FIXED)
+                .discountValue(BigDecimal.valueOf(30000))
+                .minOrderValue(BigDecimal.valueOf(100000))
+                .maxDiscount(BigDecimal.valueOf(30000))
+                .usageLimit(200)
+                .expireAt(LocalDateTime.now().plusDays(10))
+                .active(true)
+                .build();
+
+        when(couponRepository.findById(1L)).thenReturn(Optional.of(percentCoupon));
+        when(couponRepository.existsByCodeIgnoreCaseAndIdNot("NEWALL", 1L)).thenReturn(false);
+        when(couponRepository.save(any(Coupon.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        CouponResponse resp = couponService.updateCoupon(1L, request);
+
+        assertThat(resp.getCode()).isEqualTo("NEWALL");
+        assertThat(resp.getDiscountType()).isEqualTo(DiscountType.FIXED);
+        assertThat(resp.getDiscountValue()).isEqualByComparingTo(BigDecimal.valueOf(30000));
+        assertThat(resp.getMinOrderValue()).isEqualByComparingTo(BigDecimal.valueOf(100000));
+        assertThat(resp.getMaxDiscount()).isEqualByComparingTo(BigDecimal.valueOf(30000));
+        assertThat(resp.getUsageLimit()).isEqualTo(200);
+        assertThat(resp.getActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("Lấy danh sách mã giảm giá đang hoạt động thành công")
+    void getActiveCoupons_Success() {
+        when(couponRepository.findByActiveTrueOrderByCreatedAtDesc())
+                .thenReturn(java.util.List.of(percentCoupon, fixedCoupon));
+
+        java.util.List<Coupon> active = couponService.getActiveCoupons();
+
+        assertThat(active).hasSize(2);
+        verify(couponRepository).findByActiveTrueOrderByCreatedAtDesc();
+    }
+
+    @Test
+    @DisplayName("Lấy thông tin coupon theo mã thành công")
+    void getCouponByCode_Success() {
+        when(couponRepository.findByCodeIgnoreCase("SALE10")).thenReturn(Optional.of(percentCoupon));
+
+        Coupon c = couponService.getCouponByCode("SALE10");
+
+        assertThat(c.getCode()).isEqualTo("SALE10");
+    }
+
+    @Test
+    @DisplayName("Lấy coupon theo mã rỗng ném BusinessException")
+    void getCouponByCode_Blank_ThrowsException() {
+        assertThatThrownBy(() -> couponService.getCouponByCode("   "))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("không được để trống");
+    }
+
+    @Test
+    @DisplayName("Lấy coupon theo mã không tồn tại ném ResourceNotFoundException")
+    void getCouponByCode_NotFound_ThrowsException() {
+        when(couponRepository.findByCodeIgnoreCase("NOTFOUND")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> couponService.getCouponByCode("NOTFOUND"))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("applyCouponForOrder: Mã rỗng hoặc null trả về 0")
+    void applyCouponForOrder_NullOrEmptyCode_ReturnsZero() {
+        assertThat(couponService.applyCouponForOrder(null, BigDecimal.valueOf(500000)))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(couponService.applyCouponForOrder("   ", BigDecimal.valueOf(500000)))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+    }
+
+    @Test
+    @DisplayName("applyCouponForOrder: Áp dụng thành công tăng usedCount và trả về discount")
+    void applyCouponForOrder_Success() {
+        when(couponRepository.findByCodeForUpdate("SALE10")).thenReturn(Optional.of(percentCoupon));
+        when(couponRepository.save(any(Coupon.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        BigDecimal discount = couponService.applyCouponForOrder("SALE10", BigDecimal.valueOf(300000));
+
+        assertThat(discount).isEqualByComparingTo(BigDecimal.valueOf(30000));
+        assertThat(percentCoupon.getUsedCount()).isEqualTo(11);
+        verify(couponRepository).save(percentCoupon);
+    }
+
+    @Test
+    @DisplayName("applyCouponForOrder: Ném ResourceNotFoundException khi mã không tồn tại")
+    void applyCouponForOrder_NotFound_ThrowsException() {
+        when(couponRepository.findByCodeForUpdate("NOTFOUND")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> couponService.applyCouponForOrder("NOTFOUND", BigDecimal.valueOf(300000)))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    @DisplayName("applyCouponForOrder: Ném BusinessException khi coupon không active")
+    void applyCouponForOrder_Inactive_ThrowsException() {
+        percentCoupon.setActive(false);
+        when(couponRepository.findByCodeForUpdate("SALE10")).thenReturn(Optional.of(percentCoupon));
+
+        assertThatThrownBy(() -> couponService.applyCouponForOrder("SALE10", BigDecimal.valueOf(300000)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("tạm ngưng áp dụng");
+    }
+
+    @Test
+    @DisplayName("applyCouponForOrder: Ném BusinessException khi coupon hết hạn")
+    void applyCouponForOrder_Expired_ThrowsException() {
+        percentCoupon.setExpireAt(LocalDateTime.now().minusDays(1));
+        when(couponRepository.findByCodeForUpdate("SALE10")).thenReturn(Optional.of(percentCoupon));
+
+        assertThatThrownBy(() -> couponService.applyCouponForOrder("SALE10", BigDecimal.valueOf(300000)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("hết hạn sử dụng");
+    }
+
+    @Test
+    @DisplayName("applyCouponForOrder: Ném BusinessException khi coupon hết lượt sử dụng")
+    void applyCouponForOrder_LimitReached_ThrowsException() {
+        percentCoupon.setUsedCount(100);
+        percentCoupon.setUsageLimit(100);
+        when(couponRepository.findByCodeForUpdate("SALE10")).thenReturn(Optional.of(percentCoupon));
+
+        assertThatThrownBy(() -> couponService.applyCouponForOrder("SALE10", BigDecimal.valueOf(300000)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("hết số lượt sử dụng");
+    }
+
+    @Test
+    @DisplayName("applyCouponForOrder: Ném BusinessException khi đơn hàng chưa đạt giá trị tối thiểu")
+    void applyCouponForOrder_BelowMinOrder_ThrowsException() {
+        when(couponRepository.findByCodeForUpdate("SALE10")).thenReturn(Optional.of(percentCoupon));
+
+        assertThatThrownBy(() -> couponService.applyCouponForOrder("SALE10", BigDecimal.valueOf(100000)))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("chưa đạt giá trị tối thiểu");
+    }
+
+    @Test
+    @DisplayName("calculateDiscount: Các trường hợp đặc biệt và giới hạn giá trị")
+    void calculateDiscount_SpecialCases() {
+        assertThat(couponService.calculateDiscount(null, BigDecimal.valueOf(100000)))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(couponService.calculateDiscount(percentCoupon, null))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(couponService.calculateDiscount(percentCoupon, BigDecimal.ZERO))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(couponService.calculateDiscount(percentCoupon, BigDecimal.valueOf(-50000)))
+                .isEqualByComparingTo(BigDecimal.ZERO);
+
+        // Fixed coupon vượt quá giá trị đơn hàng thì chỉ giảm tối đa bằng giá trị đơn hàng
+        fixedCoupon.setDiscountValue(BigDecimal.valueOf(200000));
+        BigDecimal disc = couponService.calculateDiscount(fixedCoupon, BigDecimal.valueOf(150000));
+        assertThat(disc).isEqualByComparingTo(BigDecimal.valueOf(150000));
+    }
 }
 

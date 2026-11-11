@@ -28,30 +28,54 @@ Dữ liệu mẫu đã được nạp sẵn từ file `database/init/02-sample-d
 
 ---
 
-## 2. Cách 1: Chạy trọn gói bằng Docker Compose (Khuyên dùng)
+## 2. Cách 1: Chạy trọn gói bằng Docker Compose (Khuyên dùng - 1 Lệnh duy nhất)
 
-Nếu máy tính của bạn đã cài đặt **Docker Desktop**, đây là cách tiện lợi nhất vì Docker sẽ tự động dựng MySQL, nạp sẵn dữ liệu mẫu, dựng Redis, build Backend và Frontend.
+Nếu máy tính của bạn đã cài đặt **Docker Desktop**, đây là cách tiện lợi và chuẩn mực nhất. Hệ thống đã được cấu hình cơ chế Fallback biến môi trường an toàn (Zero-Config Deployment):
 
-### Bước 1: Tạo file `.env`
-Mở terminal PowerShell tại thư mục gốc dự án:
+### Khởi chạy toàn bộ 4 Container chỉ với 1 lệnh duy nhất:
+Mở terminal tại thư mục gốc dự án:
 ```powershell
-Copy-Item .env.example .env
+docker compose up -d
+```
+*(Hoặc `docker compose up -d --build` nếu bạn muốn rebuild lại hình ảnh mới nhất)*.
+
+> [!TIP]
+> Bạn **KHÔNG BẮT BUỘC** phải tạo file `.env` trước khi chạy. Mọi biến môi trường (MySQL, Redis, JWT, VNPay Sandbox, Google Gemini AI Chatbot, Brevo Mail Fallback) đã có sẵn giá trị mặc định hợp lệ. Nếu muốn tùy chỉnh secret cá nhân, bạn có thể tạo `.env` từ file `.env.example`:
+> ```powershell
+> Copy-Item .env.example .env
+> ```
+
+### Hệ thống 4 Container tự động khởi chạy và đạt trạng thái Healthy:
+1. **`ecommerce-mysql`** (MySQL 8.0, Port 3307 -> 3306): Tự động nạp schema, migration, indexes hiệu năng và dữ liệu mẫu 75+ sản phẩm.
+2. **`ecommerce-redis`** (Redis 7 Alpine, Port 6379): Phục vụ Rate Limiter, Chat Memory, Caching và Quản lý Refresh Token.
+3. **`ecommerce-backend`** (Spring Boot 3.3.5 / Java 21, Port 8080): REST API, Spring AI Gemini, VNPay Sandbox, Coupon, Reviews.
+4. **`ecommerce-frontend`** (React/Vite SPA trên Nginx Reverse Proxy, Port 3000): Giao diện người dùng và định tuyến an toàn tới backend.
+
+### Kiểm tra trạng thái các container:
+```powershell
+docker compose ps
 ```
 
-### Bước 2: Khởi chạy Docker Compose
-```powershell
-docker compose up -d --build
-```
+### Truy cập ứng dụng:
+- **Frontend (Giao diện người dùng & Quản trị Admin):** [http://localhost:3000](http://localhost:3000)
+- **Backend API Direct:** [http://localhost:8080/api/v1](http://localhost:8080/api/v1)
+- **Kiểm tra sức khỏe Backend:** [http://localhost:8080/api/health](http://localhost:8080/api/health)
+- **Kiểm tra sức khỏe qua Nginx:** [http://localhost:3000/api/health](http://localhost:3000/api/health)
+- **Swagger / OpenAPI Documentation:** [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
 
-### Bước 3: Truy cập ứng dụng
-- **Frontend (Giao diện người dùng & Admin):** [http://localhost:3000](http://localhost:3000)
-- **Backend API:** [http://localhost:8080/api/v1](http://localhost:8080/api/v1)
-- **Kiểm tra sức khỏe Backend:** [http://localhost:8080/api/v1/health](http://localhost:8080/api/v1/health)
+### Lệnh chạy kiểm thử tự động và xuất báo cáo JaCoCo (> 85% Coverage):
+```powershell
+cd backend
+.\gradlew clean test jacocoTestReport jacocoTestCoverageVerification
+```
+- Báo cáo HTML: `backend/build/reports/jacoco/test/html/index.html`
+- Báo cáo XML: `backend/build/reports/jacoco/test/jacocoTestReport.xml`
 
 ### Lệnh dừng hệ thống khi không dùng:
 ```powershell
 docker compose down
 ```
+*(Nếu muốn xóa cả volume dữ liệu để khởi tạo sạch từ đầu: `docker compose down -v`)*.
 
 ---
 

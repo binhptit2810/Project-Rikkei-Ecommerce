@@ -450,4 +450,36 @@ class ProductServiceTest {
 
         assertThat(deal).isNull();
     }
+
+    @Test
+    @DisplayName("getDealOfTheDay: Tìm thấy deal kèm mã giảm giá hợp lệ từ CouponRepository")
+    void getDealOfTheDay_withPromoCoupon() {
+        Category other = Category.builder().id(1L).name("Thời trang").build();
+        Product dealItem = Product.builder()
+                .id(20L)
+                .name("Áo thun")
+                .price(new BigDecimal("200000"))
+                .category(other)
+                .stockQuantity(10)
+                .active(true)
+                .build();
+        com.example.ecommerce.entity.Coupon promo = com.example.ecommerce.entity.Coupon.builder()
+                .code("SALE30")
+                .discountType(com.example.ecommerce.entity.DiscountType.PERCENT)
+                .discountValue(new BigDecimal("30"))
+                .expireAt(LocalDateTime.now().plusDays(2))
+                .usedCount(5)
+                .usageLimit(100)
+                .active(true)
+                .build();
+
+        when(productRepository.findDealCandidates(any(Pageable.class))).thenReturn(List.of(dealItem));
+        when(couponRepository.findByActiveTrueOrderByCreatedAtDesc()).thenReturn(List.of(promo));
+
+        var deal = productService.getDealOfTheDay();
+
+        assertThat(deal).isNotNull();
+        assertThat(deal.getCouponCode()).isEqualTo("SALE30");
+        assertThat(deal.getDiscountPercentage()).isEqualTo(30);
+    }
 }

@@ -492,4 +492,49 @@ class AuthControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/refresh thành công với cookie refresh_token hợp lệ")
+    void refresh_Success() throws Exception {
+        AuthResponse authResponse = AuthResponse.builder()
+                .accessToken("new-access-token-xyz")
+                .tokenType("Bearer")
+                .expiresIn(900)
+                .refreshToken("new-refresh-token-xyz")
+                .build();
+
+        when(authService.refreshToken("valid-raw-refresh-token")).thenReturn(authResponse);
+
+        mockMvc.perform(post("/api/v1/auth/refresh")
+                        .cookie(new jakarta.servlet.http.Cookie("refresh_token", "valid-raw-refresh-token")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.accessToken").value("new-access-token-xyz"));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/refresh trả lỗi 401 khi không có cookie refresh_token")
+    void refresh_MissingCookie_Returns401() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/refresh"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/logout thành công thu hồi token và xóa cookie")
+    void logout_Success() throws Exception {
+        doNothing().when(authService).logout(any());
+
+        mockMvc.perform(post("/api/v1/auth/logout")
+                        .cookie(new jakarta.servlet.http.Cookie("refresh_token", "some-token")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
+
+    @Test
+    @DisplayName("POST /api/v1/auth/logout thành công khi không có cookie")
+    void logout_WithoutCookie_Success() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/logout"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true));
+    }
 }

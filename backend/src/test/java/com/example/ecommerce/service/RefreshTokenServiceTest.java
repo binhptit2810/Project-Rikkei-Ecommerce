@@ -286,4 +286,24 @@ class RefreshTokenServiceTest {
 
         verify(redisTemplate).execute(any(DefaultRedisScript.class), eq(List.of("auth:user_sessions:100")), eq("auth:refresh:"));
     }
+
+    @Test
+    @DisplayName("revokeToken: rawToken null hoặc rỗng không thực hiện gì")
+    void revokeToken_NullOrEmpty_DoesNothing() {
+        refreshTokenService.revokeToken(null);
+        refreshTokenService.revokeToken("   ");
+        verify(redisTemplate, never()).opsForValue();
+    }
+
+    @Test
+    @DisplayName("revokeToken: Token không tồn tại trong Redis vẫn xóa redisKey an toàn và không gọi ZSet remove")
+    void revokeToken_NotFound_DeletesKeySafely() {
+        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(valueOperations.get(startsWith("auth:refresh:"))).thenReturn(null);
+
+        refreshTokenService.revokeToken("non-existent-token");
+
+        verify(redisTemplate).delete(startsWith("auth:refresh:"));
+        verify(redisTemplate, never()).opsForZSet();
+    }
 }
