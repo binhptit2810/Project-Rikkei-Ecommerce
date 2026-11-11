@@ -159,6 +159,241 @@ const formatTime = (isoString) => {
   }
 }
 
+/**
+ * Xử lý làm sạch phản hồi từ Chatbot AI: loại bỏ JSON thô, code block markdown không mong muốn
+ * và định dạng lại văn bản tự nhiên, dễ đọc cho người dùng.
+ */
+const formatChatAssistantText = (rawText) => {
+  if (!rawText || typeof rawText !== 'string') return ''
+  let text = rawText.trim()
+
+  // Bóc tách nếu AI vô tình bọc trong Markdown code block
+  if (text.startsWith('```json') && text.endsWith('```')) {
+    text = text.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim()
+  } else if (text.startsWith('```') && text.endsWith('```')) {
+    text = text.replace(/^```\s*/, '').replace(/\s*```$/, '').trim()
+  }
+
+  // Nếu là JSON có cấu trúc bị trả về thô, bóc trường message hoặc text
+  if (text.startsWith('{') && text.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(text)
+      if (parsed.message) return formatChatAssistantText(parsed.message)
+      if (parsed.reply) return formatChatAssistantText(parsed.reply)
+      if (parsed.text) return formatChatAssistantText(parsed.text)
+      if (parsed.content) return formatChatAssistantText(parsed.content)
+    } catch (_e) {
+      // Giữ nguyên chuỗi nếu không parse được JSON
+    }
+  }
+
+  return text
+}
+
+/**
+ * Phân tích các thành phần Markdown inline (in đậm **, in nghiêng *, code `, liên kết [text](url))
+ * và chuyển đổi thành thẻ React tương ứng mà không để lộ các ký tự Markdown thô.
+ */
+const parseInlineMarkdown = (text, isAi, keyPrefix = '') => {
+  if (!text) return null
+
+  // Tách theo token: **bold**, __bold__, *italic*, _italic_, `code`, [text](url)
+  const tokenRegex = /(\*\*.*?\*\*|__.*?__|\*.*?\*|_.*?_|`.*?`|\[.*?\]\(.*?\))/g
+  const parts = text.split(tokenRegex)
+
+  return parts.map((part, index) => {
+    const key = `${keyPrefix}-${index}`
+    if (!part) return null
+
+    // 1. In đậm: **text** hoặc __text__
+    if (
+      (part.startsWith('**') && part.endsWith('**') && part.length >= 4) ||
+      (part.startsWith('__') && part.endsWith('__') && part.length >= 4)
+    ) {
+      const content = part.slice(2, -2)
+      return (
+        <strong key={key} className={isAi ? 'font-bold text-slate-900' : 'font-bold text-white'}>
+          {content}
+        </strong>
+      )
+    }
+
+    // 2. In nghiêng: *text* hoặc _text_
+    if (
+      ((part.startsWith('*') && part.endsWith('*')) || (part.startsWith('_') && part.endsWith('_'))) &&
+      part.length >= 2 &&
+      !part.startsWith('**') &&
+      !part.startsWith('__')
+    ) {
+      const content = part.slice(1, -1)
+      return (
+        <em key={key} className="italic">
+          {content}
+        </em>
+      )
+    }
+
+    // 3. Code inline: `code`
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+      const content = part.slice(1, -1)
+      return (
+        <code
+          key={key}
+          className={`px-1 py-0.5 rounded text-[12px] font-mono ${
+            isAi ? 'bg-slate-100 text-indigo-700' : 'bg-white/20 text-white'
+          }`}
+        >
+          {content}
+        </code>
+      )
+    }
+
+    // 4. Link: [title](url)
+    if (part.startsWith('[') && part.includes('](') && part.endsWith(')')) {
+      const match = part.match(/^\[(.*?)\]\((.*?)\)$/)
+      if (match) {
+        return (
+          <a
+            key={key}
+            href={match[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`underline font-medium hover:opacity-80 transition-opacity ${
+              isAi ? 'text-indigo-600' : 'text-blue-100'
+            }`}
+          >
+            {match[1]}
+          </a>
+        )
+      }
+    }
+
+    // 5. Xử lý trường hợp streaming gõ chữ: dấu ** đang mở nhưng chưa kết thúc
+    if (part.includes('**')) {
+      const subParts = part.split('**')
+      return (
+        <span key={key}>
+          {subParts.map((sub, sIdx) => {
+            if (sIdx % 2 === 1) {
+              return (
+                <strong key={`${key}-s-${sIdx}`} className={isAi ? 'font-bold text-slate-900' : 'font-bold text-white'}>
+                  {sub}
+                </strong>
+              )
+            }
+            return sub
+          })}
+        </span>
+      )
+    }
+
+    if (part.includes('__')) {
+      const subParts = part.split('__')
+      return (
+        <span key={key}>
+          {subParts.map((sub, sIdx) => {
+            if (sIdx % 2 === 1) {
+              return (
+                <strong key={`${key}-s-${sIdx}`} className={isAi ? 'font-bold text-slate-900' : 'font-bold text-white'}>
+                  {sub}
+                </strong>
+              )
+            }
+            return sub
+          })}
+        </span>
+      )
+    }
+
+    return part
+  })
+}
+
+/**
+ * Hiển thị tin nhắn với định dạng khối, danh sách, ngắt đoạn tự nhiên và triệt tiêu hoàn toàn các ký tự Markdown thô.
+ */
+const renderFormattedChatMessage = (rawText, isAi = true, isStreaming = false) => {
+  if (!rawText || typeof rawText !== 'string') return null
+
+  const lines = rawText.split('\n')
+
+  return (
+    <div className="space-y-1">
+      {lines.map((line, lineIdx) => {
+        const isLastLine = lineIdx === lines.length - 1
+        const trimmed = line.trim()
+
+        if (!trimmed) {
+          return (
+            <div key={lineIdx} className="h-1.5">
+              {isStreaming && isLastLine && (
+                <span
+                  className="inline-block w-1.5 h-3.5 ml-1 bg-indigo-600 animate-pulse align-middle"
+                  aria-hidden="true"
+                />
+              )}
+            </div>
+          )
+        }
+
+        // Xử lý Markdown Header: #, ##, ###
+        let headerLevel = 0
+        let contentLine = line
+        if (trimmed.startsWith('### ')) {
+          headerLevel = 3
+          contentLine = line.replace(/^\s*###\s*/, '')
+        } else if (trimmed.startsWith('## ')) {
+          headerLevel = 2
+          contentLine = line.replace(/^\s*##\s*/, '')
+        } else if (trimmed.startsWith('# ')) {
+          headerLevel = 1
+          contentLine = line.replace(/^\s*#\s*/, '')
+        }
+
+        // Xử lý danh sách gạch đầu dòng: '- ' hoặc '* ' thành bullet '• '
+        if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+          const indentMatch = line.match(/^(\s*)/)
+          const indent = indentMatch ? indentMatch[1] : ''
+          contentLine = indent + '• ' + line.replace(/^\s*[-*]\s+/, '')
+        }
+
+        const parsedContent = parseInlineMarkdown(contentLine, isAi, `l-${lineIdx}`)
+
+        if (headerLevel > 0) {
+          return (
+            <div
+              key={lineIdx}
+              className={`font-bold mt-1 ${
+                headerLevel === 1 ? 'text-base' : headerLevel === 2 ? 'text-sm' : 'text-xs'
+              } ${isAi ? 'text-slate-900' : 'text-white'}`}
+            >
+              {parsedContent}
+              {isStreaming && isLastLine && (
+                <span
+                  className="inline-block w-1.5 h-3.5 ml-1 bg-indigo-600 animate-pulse align-middle"
+                  aria-hidden="true"
+                />
+              )}
+            </div>
+          )
+        }
+
+        return (
+          <div key={lineIdx} className="leading-relaxed">
+            {parsedContent}
+            {isStreaming && isLastLine && (
+              <span
+                className="inline-block w-1.5 h-3.5 ml-1 bg-indigo-600 animate-pulse align-middle"
+                aria-hidden="true"
+              />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export const ChatWidget = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState(loadChatHistory)
@@ -540,7 +775,7 @@ export const ChatWidget = () => {
         )
 
         if (responseData && responseData.message) {
-          finalAiResponseText = responseData.message
+          finalAiResponseText = formatChatAssistantText(responseData.message)
           finalProducts = Array.isArray(responseData.products) ? responseData.products : []
         } else {
           throw new Error('Phản hồi từ dịch vụ AI không hợp lệ')
@@ -742,15 +977,7 @@ export const ChatWidget = () => {
                     } ${isStreaming ? 'cursor-pointer hover:border-indigo-300' : ''}`}
                     title={isStreaming ? 'Bấm để hiển thị toàn bộ nội dung' : undefined}
                   >
-                    <span>{msg.text}</span>
-
-                    {/* Blinking Cursor Indicator khi AI đang gõ */}
-                    {isStreaming && (
-                      <span
-                        className="inline-block w-1.5 h-4 ml-1 bg-indigo-600 animate-pulse align-middle"
-                        aria-hidden="true"
-                      />
-                    )}
+                    {renderFormattedChatMessage(msg.text, isAi, isStreaming)}
 
                     {/* Nút "Hiện toàn bộ" khi đang streaming */}
                     {isStreaming && (
