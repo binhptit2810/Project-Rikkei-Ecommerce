@@ -1,14 +1,19 @@
 package com.example.ecommerce;
 
+import com.example.ecommerce.config.VNPayConfig;
 import com.example.ecommerce.dto.request.CancelOrderRequest;
 import com.example.ecommerce.dto.request.CreateOrderRequest;
+import com.example.ecommerce.dto.request.CreateVNPayPaymentRequest;
 import com.example.ecommerce.dto.request.OrderItemRequest;
 import com.example.ecommerce.dto.request.ProcessPaymentRequest;
+import com.example.ecommerce.dto.request.ReviewCreateRequest;
+import com.example.ecommerce.dto.request.ValidateCouponRequest;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.repository.*;
 import com.example.ecommerce.service.OrderService;
 import com.example.ecommerce.service.PaymentService;
 import com.example.ecommerce.service.RefreshTokenService;
+import com.example.ecommerce.util.VNPayUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,7 +31,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.*;
@@ -96,6 +104,15 @@ class StorefrontPurchaseE2ETest {
     @Autowired
     private PaymentService paymentService;
 
+    @Autowired
+    private CouponRepository couponRepository;
+
+    @Autowired
+    private ReviewRepository reviewRepository;
+
+    @Autowired
+    private VNPayConfig vnPayConfig;
+
     @MockBean
     private RefreshTokenService refreshTokenService;
 
@@ -108,6 +125,8 @@ class StorefrontPurchaseE2ETest {
     @BeforeEach
     void setUp() {
         // Dọn dẹp dữ liệu trước mỗi bài kiểm thử
+        reviewRepository.deleteAll();
+        couponRepository.deleteAll();
         orderItemRepository.deleteAll();
         paymentRepository.deleteAll();
         inventoryTransactionRepository.deleteAll();
@@ -665,5 +684,340 @@ class StorefrontPurchaseE2ETest {
                         .param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.content", hasSize(1)));
+    }
+
+    // =========================================================================
+    // 11. TOÀN BỘ LUỒNG E2E: VOUCHER -> VNPAY SANDBOX -> PAID -> TRỪ KHO ĐÚNG 1 LẦN
+    // =========================================================================
+    @Test
+    @DisplayName("ST-11: E2E Full Flow - Áp Voucher -> Sinh VNPay URL -> Nhận IPN '00' -> PAID & CONFIRMED -> Không trừ kho 2 lần")
+    @WithMockUser(username = "hoang.customer@example.com", roles = {"CUSTOMER"})
+    void test_E2E_Purchase_With_Voucher_And_VNPay_Payment() throws Exception {
+        // 1. Chuẩn bị mã giảm giá DISCOUNT10 (10%, tối đa 50,000 đ, tối thiểu 100,000 đ)
+        Coupon coupon = couponRepository.save(Coupon.builder()
+                .code("DISCOUNT10")
+                .discountType(DiscountType.PERCENT)
+                .discountValue(BigDecimal.valueOf(10.00))
+                .maxDiscount(BigDecimal.valueOf(50000.00))
+                .minOrderValue(BigDecimal.valueOf(100000.00))
+                .usageLimit(100)
+                .usedCount(0)
+                .active(true)
+                .expireAt(LocalDateTime.now().plusDays(30))
+                .build());
+
+        // Tồn kho ban đầu: Product A = 10, Product B = 15
+        assertThat(productRepository.findById(productA.getId()).orElseThrow().getStockQuantity()).isEqualTo(10);
+        assertThat(productRepository.findById(productB.getId()).orElseThrow().getStockQuantity()).isEqualTo(15);
+
+        // 2. Tạo đơn hàng với 1 Product A (250,000 đ) + 1 Product B (149,500.50 đ)
+        // Subtotal = 399,500.50 đ. Giảm 10% = 39,950.05 đ. Final Total = 359,550.45 đ.
+        CreateOrderRequest createReq = CreateOrderRequest.builder()
+                .recipientName("Vũ Đức Huy Hoàng")
+                .recipientPhone("0912345678")
+                .shippingAddress("123 Phố Huế, Hai Bà Trưng, Hà Nội")
+                .paymentMethod(PaymentMethod.VNPAY)
+                .couponCode("DISCOUNT10")
+                .items(List.of(
+                        new OrderItemRequest(productA.getId(), 1),
+                        new OrderItemRequest(productB.getId(), 1)
+                ))
+                .build();
+
+        String createResJson = mockMvc.perform(post("/api/v1/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createReq)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.orderStatus").value("PENDING"))
+                .andExpect(jsonPath("$.data.paymentStatus").value("UNPAID"))
+                .andExpect(jsonPath("$.data.couponCode").value("DISCOUNT10"))
+                .andExpect(jsonPath("$.data.discountAmount").value(39950.05))
+                .andExpect(jsonPath("$.data.totalAmount").value(359550.45))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        Long orderId = objectMapper.readTree(createResJson).path("data").path("id").asLong();
+
+        // Kiểm tra tồn kho sau khi tạo đơn: ĐÃ TRỪ 1 LẦN
+        assertThat(productRepository.findById(productA.getId()).orElseThrow().getStockQuantity()).isEqualTo(9);
+        assertThat(productRepository.findById(productB.getId()).orElseThrow().getStockQuantity()).isEqualTo(14);
+
+        // 3. Khởi tạo thanh toán VNPay Sandbox (sinh URL và vnp_TxnRef)
+        CreateVNPayPaymentRequest vnpayReq = CreateVNPayPaymentRequest.builder()
+                .orderId(orderId)
+                .bankCode("NCB")
+                .orderInfo("Thanh toan don hang E2E VNPay")
+                .build();
+
+        String paymentResJson = mockMvc.perform(post("/api/v1/payments/create-vnpay")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(vnpayReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.paymentUrl").value(containsString("sandbox.vnpayment.vn")))
+                .andExpect(jsonPath("$.data.bankCode").value("NCB"))
+                .andReturn()
+                .getResponse()
+                .getContentAsString();
+
+        String vnpTxnRef = objectMapper.readTree(paymentResJson).path("data").path("vnpTxnRef").asText();
+        assertThat(vnpTxnRef).isNotBlank();
+
+        // 4. Mô phỏng Webhook IPN từ cổng VNPay gửi về server với chữ ký số HMAC-SHA512 hợp lệ
+        // Số tiền VNPay gửi: 359,550.45 * 100 = 35955045
+        Map<String, String> ipnParams = new HashMap<>();
+        ipnParams.put("vnp_TmnCode", vnPayConfig.getTmnCode());
+        ipnParams.put("vnp_Amount", "35955045");
+        ipnParams.put("vnp_BankCode", "NCB");
+        ipnParams.put("vnp_BankTranNo", "VNP14567890");
+        ipnParams.put("vnp_CardType", "ATM");
+        ipnParams.put("vnp_OrderInfo", "Thanh toan don hang E2E VNPay");
+        ipnParams.put("vnp_PayDate", "20261111140000");
+        ipnParams.put("vnp_ResponseCode", "00");
+        ipnParams.put("vnp_TransactionNo", "14567890");
+        ipnParams.put("vnp_TransactionStatus", "00");
+        ipnParams.put("vnp_TxnRef", vnpTxnRef);
+
+        String secureHash = VNPayUtil.hashAllFields(ipnParams, vnPayConfig.getHashSecret());
+        ipnParams.put("vnp_SecureHash", secureHash);
+
+        var ipnRequestBuilder = get("/api/v1/payments/vnpay-ipn");
+        for (Map.Entry<String, String> entry : ipnParams.entrySet()) {
+            ipnRequestBuilder.param(entry.getKey(), entry.getValue());
+        }
+
+        mockMvc.perform(ipnRequestBuilder)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.RspCode").value("00"))
+                .andExpect(jsonPath("$.Message").value("Confirm Success"));
+
+        // 5. Kiểm tra trạng thái đơn hàng và thanh toán sau khi nhận IPN thành công
+        Order updatedOrder = orderRepository.findById(orderId).orElseThrow();
+        assertThat(updatedOrder.getPaymentStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(updatedOrder.getOrderStatus()).isEqualTo(OrderStatus.CONFIRMED);
+
+        Payment updatedPayment = paymentRepository.findByOrderId(orderId).orElseThrow();
+        assertThat(updatedPayment.getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(updatedPayment.getTransactionCode()).isEqualTo(vnpTxnRef);
+
+        // 6. KIỂM TRA TRỪ KHO: Đảm bảo không bị trừ kho 2 lần khi thanh toán hoàn tất
+        assertThat(productRepository.findById(productA.getId()).orElseThrow().getStockQuantity()).isEqualTo(9);
+        assertThat(productRepository.findById(productB.getId()).orElseThrow().getStockQuantity()).isEqualTo(14);
+
+        // 7. KIỂM TRA TÍNH BẤT BIẾN (IDEMPOTENCY): Gửi IPN lần 2 -> phản hồi already confirmed
+        mockMvc.perform(ipnRequestBuilder)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.RspCode").value("02"))
+                .andExpect(jsonPath("$.Message").value("Order already confirmed"));
+    }
+
+    // =========================================================================
+    // 12. KIỂM THỬ XÁC THỰC MÃ GIẢM GIÁ VOUCHER (Section 5)
+    // =========================================================================
+    @Test
+    @DisplayName("ST-12: Kiểm thử xác thực mã Voucher - Hợp lệ, Không tồn tại, Hết hạn, Đơn tối thiểu, Max Discount")
+    @WithMockUser(username = "hoang.customer@example.com", roles = {"CUSTOMER"})
+    void test_Coupon_Validation_Scenarios() throws Exception {
+        // Voucher PERCENT có maxDiscount
+        couponRepository.save(Coupon.builder()
+                .code("SALE20")
+                .discountType(DiscountType.PERCENT)
+                .discountValue(BigDecimal.valueOf(20.00))
+                .maxDiscount(BigDecimal.valueOf(30000.00)) // Tối đa giảm 30k
+                .minOrderValue(BigDecimal.valueOf(100000.00))
+                .usageLimit(50)
+                .usedCount(0)
+                .active(true)
+                .expireAt(LocalDateTime.now().plusDays(10))
+                .build());
+
+        // Voucher FIXED
+        couponRepository.save(Coupon.builder()
+                .code("FIXED50K")
+                .discountType(DiscountType.FIXED)
+                .discountValue(BigDecimal.valueOf(50000.00))
+                .minOrderValue(BigDecimal.valueOf(200000.00))
+                .usageLimit(10)
+                .usedCount(0)
+                .active(true)
+                .expireAt(LocalDateTime.now().plusDays(10))
+                .build());
+
+        // Voucher đã hết hạn
+        couponRepository.save(Coupon.builder()
+                .code("EXPIREDCODE")
+                .discountType(DiscountType.PERCENT)
+                .discountValue(BigDecimal.valueOf(15.00))
+                .minOrderValue(BigDecimal.valueOf(50000.00))
+                .usageLimit(10)
+                .usedCount(0)
+                .active(true)
+                .expireAt(LocalDateTime.now().minusDays(1))
+                .build());
+
+        // Case 1: Voucher hợp lệ SALE20 với đơn hàng 200,000 đ -> 20% = 40,000 đ > maxDiscount (30,000 đ) -> giảm 30,000 đ
+        ValidateCouponRequest req1 = ValidateCouponRequest.builder()
+                .code("SALE20")
+                .orderValue(BigDecimal.valueOf(200000.00))
+                .build();
+        mockMvc.perform(post("/api/v1/coupons/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req1)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.discountAmount").value(30000.0))
+                .andExpect(jsonPath("$.data.finalAmount").value(170000.0));
+
+        // Case 2: Voucher FIXED50K với đơn 300,000 đ -> giảm đúng 50,000 đ
+        ValidateCouponRequest req2 = ValidateCouponRequest.builder()
+                .code("FIXED50K")
+                .orderValue(BigDecimal.valueOf(300000.00))
+                .build();
+        mockMvc.perform(post("/api/v1/coupons/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req2)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.discountAmount").value(50000.0))
+                .andExpect(jsonPath("$.data.finalAmount").value(250000.0));
+
+        // Case 3: Voucher không tồn tại -> 404 Not Found
+        ValidateCouponRequest req3 = ValidateCouponRequest.builder()
+                .code("NOTEXISTING")
+                .orderValue(BigDecimal.valueOf(200000.00))
+                .build();
+        mockMvc.perform(post("/api/v1/coupons/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req3)))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.success").value(false));
+
+        // Case 4: Voucher hết hạn -> 400 Bad Request
+        ValidateCouponRequest req4 = ValidateCouponRequest.builder()
+                .code("EXPIREDCODE")
+                .orderValue(BigDecimal.valueOf(200000.00))
+                .build();
+        mockMvc.perform(post("/api/v1/coupons/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req4)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("hết hạn sử dụng")));
+
+        // Case 5: Đơn hàng chưa đạt giá trị tối thiểu -> 400 Bad Request
+        ValidateCouponRequest req5 = ValidateCouponRequest.builder()
+                .code("FIXED50K")
+                .orderValue(BigDecimal.valueOf(150000.00)) // Cần tối thiểu 200,000 đ
+                .build();
+        mockMvc.perform(post("/api/v1/coupons/validate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req5)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value(containsString("chưa đạt giá trị tối thiểu")));
+    }
+
+    // =========================================================================
+    // 13. BẢO MẬT & PHÂN QUYỀN PAYMENT (CHẶN TRUY CẬP ĐƠN HÀNG CỦA NGƯỜI KHÁC)
+    // =========================================================================
+    @Test
+    @DisplayName("ST-13: Bảo mật thanh toán - Người dùng khác không thể xem hoặc tạo thanh toán cho đơn hàng của người khác")
+    @WithMockUser(username = "hoang.customer@example.com", roles = {"CUSTOMER"})
+    void test_Payment_Access_Denied_For_Other_Users() throws Exception {
+        // Customer 1 tạo đơn hàng
+        CreateOrderRequest createReq = CreateOrderRequest.builder()
+                .recipientName("Vũ Đức Huy Hoàng")
+                .recipientPhone("0912345678")
+                .shippingAddress("123 Phố Huế, Hà Nội")
+                .paymentMethod(PaymentMethod.VNPAY)
+                .items(List.of(new OrderItemRequest(productA.getId(), 1)))
+                .build();
+
+        String res = mockMvc.perform(post("/api/v1/orders")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(createReq)))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        Long orderId = objectMapper.readTree(res).path("data").path("id").asLong();
+
+        CreateVNPayPaymentRequest hackReq = CreateVNPayPaymentRequest.builder()
+                .orderId(orderId)
+                .bankCode("NCB")
+                .build();
+
+        // Customer 2 cố gắng tạo thanh toán VNPay cho đơn của Customer 1 -> Bị từ chối (BusinessException)
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                paymentService.createVNPayPayment(hackReq, "127.0.0.1", customer2.getEmail())
+        ).isInstanceOf(com.example.ecommerce.exception.BusinessException.class)
+                .hasMessageContaining("không có quyền thanh toán đơn hàng này");
+
+        // Customer 2 cố gắng xem thông tin thanh toán đơn hàng của Customer 1 -> Bị từ chối (BusinessException)
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+                paymentService.getPaymentByOrderId(orderId, customer2.getEmail())
+        ).isInstanceOf(com.example.ecommerce.exception.BusinessException.class)
+                .hasMessageContaining("không có quyền xem thông tin thanh toán của đơn hàng này");
+    }
+
+    // =========================================================================
+    // 14. KIỂM THỬ ĐÁNH GIÁ SẢN PHẨM & TÍNH ĐIỂM TRUNG BÌNH (Section 3)
+    // =========================================================================
+    @Test
+    @DisplayName("ST-14: Đánh giá sản phẩm - Thống kê điểm trung bình chính xác, đúng sản phẩm, không rò rỉ")
+    @WithMockUser(username = "hoang.customer@example.com", roles = {"CUSTOMER"})
+    void test_Product_Reviews_And_Rating_Summary() throws Exception {
+        // Ban đầu Product A chưa có đánh giá nào
+        mockMvc.perform(get("/api/v1/products/" + productA.getId() + "/reviews/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ratingAverage").value(0.0))
+                .andExpect(jsonPath("$.data.totalReviews").value(0));
+
+        // Tạo đơn hàng mua Product A và hoàn tất đơn (COMPLETED)
+        Order order = orderRepository.save(Order.builder()
+                .orderCode("ORD-E2E-COMPLETED")
+                .user(customer1)
+                .recipientName("Vũ Đức Huy Hoàng")
+                .recipientPhone("0912345678")
+                .shippingAddress("123 Phố Huế, Hà Nội")
+                .orderStatus(OrderStatus.COMPLETED)
+                .paymentStatus(PaymentStatus.PAID)
+                .totalAmount(BigDecimal.valueOf(250000.00))
+                .build());
+
+        OrderItem item = orderItemRepository.save(OrderItem.builder()
+                .order(order)
+                .product(productA)
+                .productName(productA.getName())
+                .unitPrice(productA.getPrice())
+                .quantity(1)
+                .subtotal(productA.getPrice())
+                .build());
+
+        // Đánh giá 5 sao cho Product A
+        ReviewCreateRequest reviewReq = ReviewCreateRequest.builder()
+                .rating(5)
+                .comment("Chất lượng áo Polo cực kỳ thoáng mát, đường may tỉ mỉ!")
+                .build();
+
+        mockMvc.perform(post("/api/v1/products/" + productA.getId() + "/reviews")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(reviewReq)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.rating").value(5))
+                .andExpect(jsonPath("$.data.comment").value(containsString("thoáng mát")));
+
+        // Kiểm tra thống kê của Product A: 1 review, 5.0 sao
+        mockMvc.perform(get("/api/v1/products/" + productA.getId() + "/reviews/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ratingAverage").value(5.0))
+                .andExpect(jsonPath("$.data.totalReviews").value(1))
+                .andExpect(jsonPath("$.data.ratingCounts.5").value(1));
+
+        // Đảm bảo Product B không bị rò rỉ review (vẫn 0 review)
+        mockMvc.perform(get("/api/v1/products/" + productB.getId() + "/reviews/summary"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.ratingAverage").value(0.0))
+                .andExpect(jsonPath("$.data.totalReviews").value(0));
     }
 }
