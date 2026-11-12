@@ -17,8 +17,9 @@ export const useCartStore = create(
 
       /**
        * Thêm sản phẩm vào giỏ hàng (Chỉ cho phép khi người dùng đã đăng nhập)
+       * Hỗ trợ lưu trữ biến thể kích cỡ selectedSize riêng biệt [TSK-D14-VDHH]
        */
-      addToCart: async (product, quantity = 1) => {
+      addToCart: async (product, quantity = 1, selectedSize = null) => {
         const { isAuthenticated, user } = useAuthStore.getState()
         if (!isAuthenticated) {
           return {
@@ -36,14 +37,32 @@ export const useCartStore = create(
           }
         }
 
-        if (!product || (product.stockQuantity !== undefined && product.stockQuantity !== null && product.stockQuantity <= 0)) {
-          return { success: false, message: 'Sản phẩm đã hết hàng' }
+        // Xác định số lượng tồn kho theo biến thể kích cỡ nếu có
+        let maxStock = 9999
+        if (selectedSize && Array.isArray(product?.variants) && product.variants.length > 0) {
+          const matchedVariant = product.variants.find((v) => v.size === selectedSize)
+          if (matchedVariant) {
+            maxStock = matchedVariant.stockQuantity !== undefined ? Number(matchedVariant.stockQuantity) : 0
+          }
+        } else if (product?.stockQuantity !== undefined && product?.stockQuantity !== null) {
+          maxStock = Number(product.stockQuantity)
         }
 
+        if (!product || maxStock <= 0) {
+          return {
+            success: false,
+            message: selectedSize ? 'Kích cỡ này hiện đã hết hàng.' : 'Sản phẩm đã hết hàng',
+          }
+        }
+
+        const normalizedSize = selectedSize ? String(selectedSize).trim() : null
         const currentItems = get().items
-        const existingIndex = currentItems.findIndex((item) => item.id === product.id)
+
+        // Định danh duy nhất theo Product ID và Kích cỡ được chọn
+        const existingIndex = currentItems.findIndex(
+          (item) => item.id === product.id && (item.selectedSize || null) === normalizedSize
+        )
         let newItems = [...currentItems]
-        const maxStock = (product.stockQuantity !== undefined && product.stockQuantity !== null) ? Number(product.stockQuantity) : 9999
         const desiredQty = Math.max(1, Number(quantity) || 1)
 
         if (existingIndex > -1) {
@@ -54,15 +73,17 @@ export const useCartStore = create(
           )
           newItems[existingIndex] = {
             ...current,
+            stockQuantity: maxStock,
             quantity: updatedQuantity,
           }
         } else {
           newItems.push({
             id: product.id,
+            selectedSize: normalizedSize,
             name: product.name,
             price: Number(product.price) || 0,
             imageUrl: product.imageUrl || '',
-            stockQuantity: product.stockQuantity,
+            stockQuantity: maxStock,
             quantity: Math.min(maxStock, desiredQty),
           })
         }
@@ -76,21 +97,26 @@ export const useCartStore = create(
       },
 
       /**
-       * Cập nhật số lượng sản phẩm trong giỏ
+       * Cập nhật số lượng sản phẩm trong giỏ (hỗ trợ phân biệt theo selectedSize)
        */
-      updateQuantity: (productId, quantity) => {
+      updateQuantity: (productId, quantity, selectedSize = null) => {
         const isAuthenticated = useAuthStore.getState().isAuthenticated
         if (!isAuthenticated) return
 
         const numQty = Number(quantity)
+        const normalizedSize = selectedSize !== null && selectedSize !== undefined ? String(selectedSize).trim() : null
+
         if (numQty <= 0) {
-          get().removeFromCart(productId)
+          get().removeFromCart(productId, selectedSize)
           return
         }
 
         set({
           items: get().items.map((item) => {
-            if (item.id === productId) {
+            const isMatch =
+              item.id === productId &&
+              (normalizedSize === null || (item.selectedSize || null) === normalizedSize)
+            if (isMatch) {
               const maxStock = (item.stockQuantity !== undefined && item.stockQuantity !== null) ? Number(item.stockQuantity) : 9999
               const clamped = Math.min(maxStock, Math.max(1, numQty))
               return { ...item, quantity: clamped }
@@ -103,11 +129,18 @@ export const useCartStore = create(
       },
 
       /**
-       * Xóa một sản phẩm khỏi giỏ hàng
+       * Xóa một sản phẩm khỏi giỏ hàng (hỗ trợ phân biệt theo selectedSize)
        */
-      removeFromCart: (productId) => {
+      removeFromCart: (productId, selectedSize = null) => {
+        const normalizedSize = selectedSize !== null && selectedSize !== undefined ? String(selectedSize).trim() : null
         set({
-          items: get().items.filter((item) => item.id !== productId),
+          items: get().items.filter((item) => {
+            if (item.id !== productId) return true
+            if (normalizedSize !== null) {
+              return (item.selectedSize || null) !== normalizedSize
+            }
+            return false
+          }),
         })
 
         cartService.removeFromCart(productId)

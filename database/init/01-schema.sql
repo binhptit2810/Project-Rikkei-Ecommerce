@@ -80,6 +80,27 @@ CREATE TABLE IF NOT EXISTS products (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================================
+-- Bảng product_variants — Biến thể sản phẩm theo kích cỡ (Size) [TSK-D14-VDHH]
+-- Quản lý số lượng tồn kho riêng biệt theo kích cỡ sản phẩm
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS product_variants (
+    id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+    product_id     BIGINT NOT NULL,
+    size           VARCHAR(50) NOT NULL,
+    stock_quantity INT NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
+    sku            VARCHAR(100) NOT NULL,
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_product_variants_product FOREIGN KEY (product_id)
+        REFERENCES products(id) ON DELETE CASCADE,
+    CONSTRAINT uk_product_variant_size UNIQUE (product_id, size),
+    CONSTRAINT uk_product_variant_sku UNIQUE (sku),
+    INDEX idx_product_variants_product (product_id),
+    INDEX idx_product_variants_sku (sku)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================================
 -- Bảng orders — Đơn hàng
 -- order_code: mã đơn duy nhất hiển thị cho người dùng (ví dụ: ORD-20241015-0001)
 -- =============================================================================
@@ -115,14 +136,15 @@ CREATE TABLE IF NOT EXISTS orders (
 -- unit_price & product_name: snapshot giá và tên tại thời điểm đặt hàng
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS order_items (
-    id           BIGINT AUTO_INCREMENT PRIMARY KEY,
-    order_id     BIGINT NOT NULL,
-    product_id   BIGINT NOT NULL,
+    id            BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_id      BIGINT NOT NULL,
+    product_id    BIGINT NOT NULL,
     -- Snapshot thời điểm đặt hàng — không phụ thuộc vào products table
-    product_name VARCHAR(200) NOT NULL,
-    unit_price   DECIMAL(15, 2) NOT NULL CHECK (unit_price >= 0),
-    quantity     INT NOT NULL CHECK (quantity > 0),
-    subtotal     DECIMAL(15, 2) NOT NULL CHECK (subtotal >= 0),
+    product_name  VARCHAR(200) NOT NULL,
+    selected_size VARCHAR(50),
+    unit_price    DECIMAL(15, 2) NOT NULL CHECK (unit_price >= 0),
+    quantity      INT NOT NULL CHECK (quantity > 0),
+    subtotal      DECIMAL(15, 2) NOT NULL CHECK (subtotal >= 0),
 
     CONSTRAINT fk_order_items_order   FOREIGN KEY (order_id)   REFERENCES orders(id)   ON DELETE CASCADE,
     CONSTRAINT fk_order_items_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE RESTRICT,

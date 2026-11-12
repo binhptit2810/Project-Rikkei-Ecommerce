@@ -227,7 +227,8 @@ Các nguyên tắc bắt buộc tuân thủ:
                 throw new GeminiServiceException("Phản hồi từ dịch vụ tư vấn AI không hợp lệ hoặc bị rỗng");
             }
 
-            ChatMessage assistantChatMessage = ChatMessage.ofAssistant(assistantReply.trim());
+            String cleanedAssistantReply = sanitizeAssistantReply(assistantReply);
+            ChatMessage assistantChatMessage = ChatMessage.ofAssistant(cleanedAssistantReply);
 
             // Bước 7: Ghi nhận cặp tin nhắn [user, assistant], tăng version OCC và gia hạn TTL nguyên tử
             ChatSessionMetadata updatedMeta = chatMemoryService.saveChatMemory(
@@ -245,7 +246,7 @@ Các nguyên tắc bắt buộc tuân thủ:
 
             ChatResponse chatResponse = ChatResponse.builder()
                     .sessionId(sessionId)
-                    .message(assistantReply.trim())
+                    .message(cleanedAssistantReply)
                     .version(updatedMeta.getVersion())
                     .products(collectedProducts)
                     .build();
@@ -358,6 +359,15 @@ Các nguyên tắc bắt buộc tuân thủ:
         }
         String msg = e.getMessage();
         return msg != null && (msg.toLowerCase().contains("timed out") || msg.toLowerCase().contains("timeout"));
+    }
+
+    private String sanitizeAssistantReply(String text) {
+        if (text == null) return "";
+        return text
+                .replaceAll("\\*\\*(.*?)\\*\\*", "$1")
+                .replaceAll("__(.*?)__", "$1")
+                .replaceAll("(?m)^\\s*#{1,6}\\s+", "")
+                .trim();
     }
 
     @Override

@@ -947,6 +947,11 @@ export const AdminOrdersPage = () => {
                             <p className="font-bold text-slate-900 truncate">
                               {item.productName}
                             </p>
+                            {item.selectedSize && (
+                              <span className="inline-block px-1.5 py-0.2 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200 mt-0.5">
+                                Size: {item.selectedSize}
+                              </span>
+                            )}
                             <p className="text-[11px] text-slate-500 mt-0.5">
                               {formatPrice(item.unitPrice)} × {item.quantity}
                             </p>

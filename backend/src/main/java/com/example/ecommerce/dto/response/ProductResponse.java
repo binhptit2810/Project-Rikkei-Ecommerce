@@ -26,6 +26,7 @@ public class ProductResponse {
     private Boolean active;
     private Double ratingAverage;
     private Integer totalReviews;
+    private List<ProductVariantResponse> variants;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -40,6 +41,13 @@ public class ProductResponse {
             catName = product.getCategory().getName();
         }
 
+        List<ProductVariantResponse> variantResponses = null;
+        if (product.getVariants() != null) {
+            variantResponses = product.getVariants().stream()
+                    .map(ProductVariantResponse::fromEntity)
+                    .toList();
+        }
+
         return ProductResponse.builder()
                 .id(product.getId())
                 .name(product.getName())
@@ -52,6 +60,7 @@ public class ProductResponse {
                 .active(product.getActive())
                 .ratingAverage(product.getRatingAverage() != null ? product.getRatingAverage() : 0.0)
                 .totalReviews(product.getTotalReviews() != null ? product.getTotalReviews() : 0)
+                .variants(variantResponses)
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())
                 .build();
