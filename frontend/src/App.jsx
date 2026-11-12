@@ -30,6 +30,7 @@ import AdminCategoriesPage from './pages/admin/AdminCategoriesPage'
 import AdminOrdersPage from './pages/admin/AdminOrdersPage'
 import AdminInventoryPage from './pages/admin/AdminInventoryPage'
 import AdminVouchersPage from './pages/admin/AdminVouchersPage'
+import AdminReviewsPage from './pages/admin/AdminReviewsPage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
 
@@ -87,6 +88,7 @@ function App() {
           <Route path="inventory" element={<AdminInventoryPage />} />
           <Route path="vouchers" element={<AdminVouchersPage />} />
           <Route path="coupons" element={<AdminVouchersPage />} />
+          <Route path="reviews" element={<AdminReviewsPage />} />
         </Route>
 
         {/* 3. Customer Area Routes (Sử dụng CustomerLayout riêng với Navbar và Footer) */}
@@ -172,7 +174,7 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/orders/vnpay-return" element={<PaymentResultPage />} />
+          <Route path="/orders/vnpay-return" element={<VNPayReturnPage />} />
           <Route path="/payment/result" element={<PaymentResultPage />} />
           <Route path="/payment-result" element={<PaymentResultPage />} />
 

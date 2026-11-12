@@ -137,11 +137,18 @@ public class ReviewServiceImpl implements ReviewService {
         }
 
         // 3. Lưu đánh giá mới vào CSDL
+        String imageString = null;
+        if (request.getImages() != null && !request.getImages().isEmpty()) {
+            imageString = String.join(",", request.getImages());
+        }
+
         Review review = Review.builder()
                 .product(product)
                 .user(currentUser)
                 .rating(request.getRating())
                 .comment(request.getComment() != null ? request.getComment().trim() : "")
+                .images(imageString)
+                .isHidden(false)
                 .build();
         Review savedReview = reviewRepository.save(review);
         reviewRepository.flush();
@@ -184,6 +191,9 @@ public class ReviewServiceImpl implements ReviewService {
 
         review.setRating(request.getRating());
         review.setComment(request.getComment().trim());
+        if (request.getImages() != null) {
+            review.setImages(String.join(",", request.getImages()));
+        }
         review.setUpdatedAt(LocalDateTime.now());
         Review savedReview = reviewRepository.save(review);
         reviewRepository.flush();
@@ -244,6 +254,53 @@ public class ReviewServiceImpl implements ReviewService {
         Review saved = reviewRepository.save(review);
 
         log.info("Admin replied to review #{}: {}", reviewId, request.getReply());
+        return ReviewResponse.fromEntity(saved);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<ReviewResponse> getAllReviewsForAdmin(Pageable pageable, Long productId, Integer rating, Boolean isHidden) {
+        Pageable sortedPageable = pageable;
+        if (pageable.getSort().isUnsorted()) {
+            sortedPageable = PageRequest.of(
+                    pageable.getPageNumber(),
+                    pageable.getPageSize(),
+                    Sort.by(Sort.Direction.DESC, "createdAt")
+            );
+        }
+
+        Page<Review> reviewPage = reviewRepository.findAllForAdmin(productId, rating, isHidden, sortedPageable);
+        return PageResponse.from(reviewPage, ReviewResponse::fromEntity);
+    }
+
+    @Override
+    @Transactional
+    public void deleteReviewByAdmin(Long reviewId) {
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
+        Product product = review.getProduct();
+
+        reviewRepository.delete(review);
+        reviewRepository.flush();
+
+        if (product != null) {
+            recalculateProductRating(product);
+        }
+
+        log.info("Admin deleted review #{}", reviewId);
+    }
+
+    @Override
+    @Transactional
+    public ReviewResponse toggleReviewVisibility(Long reviewId) {
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
+
+        boolean currentHidden = Boolean.TRUE.equals(review.getIsHidden());
+        review.setIsHidden(!currentHidden);
+        Review saved = reviewRepository.save(review);
+
+        log.info("Admin toggled review #{} visibility: isHidden={}", reviewId, saved.getIsHidden());
         return ReviewResponse.fromEntity(saved);
     }
 

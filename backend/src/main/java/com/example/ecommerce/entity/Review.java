@@ -58,6 +58,15 @@ public class Review {
     @Column(columnDefinition = "TEXT", length = 1000)
     private String comment;
 
+    /** Danh sách URL hình ảnh đính kèm (phân tách bởi dấu phẩy, tối đa 3 ảnh) */
+    @Column(name = "images", columnDefinition = "TEXT")
+    private String images;
+
+    /** Trạng thái ẩn/hiển thị đánh giá do Admin quản lý */
+    @Builder.Default
+    @Column(name = "is_hidden")
+    private Boolean isHidden = false;
+
     /** Phản hồi chính thức từ Quản trị viên / Người bán */
     @Column(name = "admin_reply", columnDefinition = "TEXT")
     private String adminReply;
@@ -76,6 +85,9 @@ public class Review {
 
     @PrePersist
     protected void onCreate() {
+        if (this.isHidden == null) {
+            this.isHidden = false;
+        }
         if (this.createdAt == null) {
             this.createdAt = LocalDateTime.now();
         }

@@ -27,6 +27,8 @@ public class ReviewResponse {
     private String userAvatar;
     private Integer rating;
     private String comment;
+    private java.util.List<String> images;
+    private Boolean isHidden;
     private String adminReply;
     private LocalDateTime adminReplyAt;
     private LocalDateTime createdAt;
@@ -41,6 +43,17 @@ public class ReviewResponse {
         Long uId = review.getUser() != null ? review.getUser().getId() : null;
         String fullName = review.getUser() != null ? review.getUser().getFullName() : null;
 
+        java.util.List<String> imgList = new java.util.ArrayList<>();
+        if (review.getImages() != null && !review.getImages().trim().isEmpty()) {
+            String[] parts = review.getImages().split(",");
+            for (String p : parts) {
+                String trimmed = p.trim();
+                if (!trimmed.isEmpty()) {
+                    imgList.add(trimmed);
+                }
+            }
+        }
+
         return ReviewResponse.builder()
                 .id(review.getId())
                 .productId(prodId)
@@ -50,6 +63,8 @@ public class ReviewResponse {
                 .userAvatar(null)
                 .rating(review.getRating())
                 .comment(review.getComment())
+                .images(imgList)
+                .isHidden(Boolean.TRUE.equals(review.getIsHidden()))
                 .adminReply(review.getAdminReply())
                 .adminReplyAt(review.getAdminReplyAt())
                 .createdAt(review.getCreatedAt())

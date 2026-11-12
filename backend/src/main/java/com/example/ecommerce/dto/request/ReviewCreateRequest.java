@@ -29,5 +29,7 @@ public class ReviewCreateRequest {
     @NotBlank(message = "Nội dung đánh giá không được để trống")
     @Size(max = 1000, message = "Nội dung đánh giá không được vượt quá 1000 ký tự")
     private String comment;
+
+    private java.util.List<String> images;
 }
 
