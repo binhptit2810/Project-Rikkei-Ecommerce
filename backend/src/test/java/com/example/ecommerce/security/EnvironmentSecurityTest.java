@@ -95,6 +95,11 @@ class EnvironmentSecurityTest {
             String dockerComposeContent = Files.readString(dockerComposePath);
             assertThat(dockerComposeContent).doesNotContain("k9X2mP5vL8qR3wY6zF1nH4bC7jD0sT2x");
             assertThat(dockerComposeContent).doesNotContain("af39f5001@smtp-brevo.com");
+            // ACT-02: Không còn fallback secret cố định cho OTP_HMAC_SECRET
+            assertThat(dockerComposeContent).doesNotContain("OTP_HMAC_SECRET:-");
+            assertThat(dockerComposeContent).doesNotContain("ecommerce-docker-otp-hmac-sha256-production-ready-secret-2024");
+            // ACT-02: Vẫn tham chiếu biến ${OTP_HMAC_SECRET}
+            assertThat(dockerComposeContent).contains("OTP_HMAC_SECRET: ${OTP_HMAC_SECRET}");
         }
     }
 
@@ -138,7 +143,7 @@ class EnvironmentSecurityTest {
         vnPayConfig.setActiveProfile("dev");
         vnPayConfig.validateVNPayConfig(); // Không ném exception
 
-        // 3. Kiểm tra AuthService trên Production khi thiếu OTP_HMAC_SECRET
+        // 3. Kiểm tra AuthService trên Production (prod, docker, production) với các kịch bản (ACT-02)
         AuthService authService = new AuthService(
                 userRepository,
                 passwordEncoder,
@@ -149,18 +154,48 @@ class EnvironmentSecurityTest {
                 emailService
         );
 
-        ReflectionTestUtils.setField(authService, "activeProfile", "prod");
+        for (String profile : List.of("prod", "docker", "production")) {
+            ReflectionTestUtils.setField(authService, "activeProfile", profile);
+
+            // 3.1. Từ chối khi thiếu secret (null)
+            ReflectionTestUtils.setField(authService, "otpHmacSecret", null);
+            assertThatThrownBy(authService::validateOtpHmacSecret)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("CRITICAL SECURITY ERROR: Biến môi trường OTP_HMAC_SECRET bắt buộc");
+
+            // 3.2. Từ chối khi secret rỗng ("")
+            ReflectionTestUtils.setField(authService, "otpHmacSecret", "");
+            assertThatThrownBy(authService::validateOtpHmacSecret)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("CRITICAL SECURITY ERROR: Biến môi trường OTP_HMAC_SECRET bắt buộc");
+
+            // 3.3. Từ chối khi secret chỉ có khoảng trắng ("   ")
+            ReflectionTestUtils.setField(authService, "otpHmacSecret", "   ");
+            assertThatThrownBy(authService::validateOtpHmacSecret)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("CRITICAL SECURITY ERROR: Biến môi trường OTP_HMAC_SECRET bắt buộc");
+
+            // 3.4. Từ chối khi secret dưới 32 ký tự
+            ReflectionTestUtils.setField(authService, "otpHmacSecret", "short-key-under-32-chars");
+            assertThatThrownBy(authService::validateOtpHmacSecret)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("CRITICAL SECURITY ERROR: Biến môi trường OTP_HMAC_SECRET bắt buộc");
+
+            // 3.5. Từ chối khi sử dụng secret mặc định
+            ReflectionTestUtils.setField(authService, "otpHmacSecret", "ecommerce-default-otp-hmac-secret-change-in-production-2024");
+            assertThatThrownBy(authService::validateOtpHmacSecret)
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("Không được phép sử dụng secret mặc định");
+
+            // 3.6. Chấp nhận secret hợp lệ (>= 32 ký tự và không dùng secret mặc định)
+            ReflectionTestUtils.setField(authService, "otpHmacSecret", "valid-dummy-production-otp-hmac-secret-at-least-32-chars-long");
+            authService.validateOtpHmacSecret(); // Không ném exception
+        }
+
+        // 4. Kiểm tra AuthService trên Dev không ném lỗi dù thiếu secret
+        ReflectionTestUtils.setField(authService, "activeProfile", "dev");
         ReflectionTestUtils.setField(authService, "otpHmacSecret", "");
-
-        assertThatThrownBy(authService::validateOtpHmacSecret)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("CRITICAL SECURITY ERROR: Biến môi trường OTP_HMAC_SECRET bắt buộc");
-
-        // 4. Kiểm tra AuthService trên Production nếu dùng default dev secret
-        ReflectionTestUtils.setField(authService, "otpHmacSecret", "ecommerce-default-otp-hmac-secret-change-in-production-2024");
-        assertThatThrownBy(authService::validateOtpHmacSecret)
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("Không được phép sử dụng secret mặc định");
+        authService.validateOtpHmacSecret(); // Không ném exception trên dev
     }
 }
 
