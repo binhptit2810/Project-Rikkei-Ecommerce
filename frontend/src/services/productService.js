@@ -41,6 +41,16 @@ export const productService = {
   },
 
   /**
+   * Lấy danh sách sản phẩm Best Seller bán chạy nhất trong tháng có phân trang.
+   * @param {Object} params - { month, year, page, size }
+   * @returns {Promise<Object>} ApiResponse chứa PageResponse<ProductResponse>
+   */
+  async getBestSellers(params = {}) {
+    const response = await apiClient.get('/products/best-sellers', { params })
+    return response.data
+  },
+
+  /**
    * Lấy danh sách sản phẩm dành cho Admin (bao gồm cả active và inactive).
    * @param {Object} params - { keyword, categoryId, active, page, size, sortBy, sortDir }
    * @returns {Promise<Object>} ApiResponse chứa PageResponse<ProductResponse>

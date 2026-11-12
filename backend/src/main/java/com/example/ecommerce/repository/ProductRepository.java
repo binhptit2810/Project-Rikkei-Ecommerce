@@ -80,4 +80,20 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
            "WHERE p.active = true AND p.stockQuantity > 0 " +
            "ORDER BY p.ratingAverage DESC, p.totalReviews DESC, p.price DESC")
     List<Product> findDealCandidates(Pageable pageable);
+
+    /**
+     * Truy vấn Best Seller bằng JPQL theo product_id và SUM(quantity) qua OrderItem trong tháng.
+     * Phụ trách: Đặng Thanh Bình (DTB)
+     */
+    @Query("SELECT oi.product.id, SUM(oi.quantity) " +
+           "FROM OrderItem oi " +
+           "WHERE oi.order.orderStatus != :cancelledStatus " +
+           "AND oi.order.createdAt >= :startDate AND oi.order.createdAt < :endDate " +
+           "GROUP BY oi.product.id " +
+           "ORDER BY SUM(oi.quantity) DESC")
+    List<Object[]> findTopSellingProductQuantities(
+            @Param("startDate") java.time.LocalDateTime startDate,
+            @Param("endDate") java.time.LocalDateTime endDate,
+            @Param("cancelledStatus") com.example.ecommerce.entity.OrderStatus cancelledStatus,
+            Pageable pageable);
 }

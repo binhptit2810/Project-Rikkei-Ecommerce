@@ -115,7 +115,7 @@ export const HomePage = () => {
   // 3. Tải danh sách sản phẩm Best Sellers độc lập (4 sản phẩm)
   const fetchBestSellers = async () => {
     try {
-      const res = await productService.getProducts({ size: 4, sortBy: 'createdAt', sortDir: 'desc' })
+      const res = await productService.getBestSellers({ size: 4 })
       const items = res.data?.content || res.data?.products || (Array.isArray(res.data) ? res.data : [])
       setBestSellers(items)
     } catch (err) {
