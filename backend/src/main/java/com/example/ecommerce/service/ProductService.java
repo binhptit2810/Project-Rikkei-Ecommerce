@@ -2,6 +2,7 @@ package com.example.ecommerce.service;
 
 import com.example.ecommerce.dto.request.CreateProductRequest;
 import com.example.ecommerce.dto.request.UpdateProductRequest;
+import com.example.ecommerce.dto.response.BestSellerProjection;
 import com.example.ecommerce.dto.response.DealOfTheDayResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
@@ -13,6 +14,7 @@ import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.repository.CategoryRepository;
 import com.example.ecommerce.repository.CouponRepository;
+import com.example.ecommerce.repository.OrderItemRepository;
 import com.example.ecommerce.repository.ProductRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,7 +27,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -42,23 +46,34 @@ public class ProductService {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final CouponRepository couponRepository;
+    private final OrderItemRepository orderItemRepository;
 
     @Autowired
     public ProductService(
             ProductRepository productRepository,
             CategoryRepository categoryRepository,
-            CouponRepository couponRepository
+            CouponRepository couponRepository,
+            OrderItemRepository orderItemRepository
     ) {
         this.productRepository = productRepository;
         this.categoryRepository = categoryRepository;
         this.couponRepository = couponRepository;
+        this.orderItemRepository = orderItemRepository;
+    }
+
+    public ProductService(
+            ProductRepository productRepository,
+            CategoryRepository categoryRepository,
+            CouponRepository couponRepository
+    ) {
+        this(productRepository, categoryRepository, couponRepository, null);
     }
 
     public ProductService(
             ProductRepository productRepository,
             CategoryRepository categoryRepository
     ) {
-        this(productRepository, categoryRepository, null);
+        this(productRepository, categoryRepository, null, null);
     }
 
     private static final int DEFAULT_PAGE_SIZE = 12;
@@ -332,6 +347,51 @@ public class ProductService {
                 .endTime(endTime)
                 .active(dealProduct.getActive())
                 .build();
+    }
+
+    /**
+     * Lấy danh sách sản phẩm Best Seller (bán chạy nhất) theo tháng và năm có phân trang.
+     * Mặc định lấy tháng và năm hiện tại nếu không truyền.
+     *
+     * Phụ trách: Đặng Thanh Bình (DTB)
+     * DoD: Trả về đúng thứ tự sản phẩm bán nhiều nhất trong tháng, tốc độ truy vấn < 30ms.
+     */
+    @Transactional(readOnly = true)
+    public PageResponse<ProductResponse> getBestSellers(Integer month, Integer year, int page, int size) {
+        int targetYear = (year != null && year > 0) ? year : LocalDate.now().getYear();
+        int targetMonth = (month != null && month >= 1 && month <= 12) ? month : LocalDate.now().getMonthValue();
+
+        if (month != null && (month < 1 || month > 12)) {
+            throw new BusinessException("Tháng không hợp lệ: phải nằm trong khoảng từ 1 đến 12");
+        }
+        if (year != null && year < 2000) {
+            throw new BusinessException("Năm không hợp lệ: phải từ 2000 trở lên");
+        }
+
+        YearMonth ym = YearMonth.of(targetYear, targetMonth);
+        LocalDateTime startDate = ym.atDay(1).atStartOfDay();
+        LocalDateTime endDate = ym.plusMonths(1).atDay(1).atStartOfDay();
+
+        int validPage = Math.max(page, 0);
+        int validSize = (size > 0) ? Math.min(size, MAX_PAGE_SIZE) : DEFAULT_PAGE_SIZE;
+        Pageable pageable = PageRequest.of(validPage, validSize);
+
+        log.info("Lấy danh sách Best Seller tháng {}/{} (page={}, size={})", targetMonth, targetYear, validPage, validSize);
+
+        if (orderItemRepository == null) {
+            return PageResponse.<ProductResponse>builder()
+                    .content(java.util.Collections.emptyList())
+                    .pageNumber(validPage)
+                    .pageSize(validSize)
+                    .totalElements(0)
+                    .totalPages(0)
+                    .last(true)
+                    .build();
+        }
+
+        Page<BestSellerProjection> bestSellerPage = orderItemRepository.findBestSellers(startDate, endDate, pageable);
+
+        return PageResponse.from(bestSellerPage, ProductResponse::fromProjection);
     }
 
     /**

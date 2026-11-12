@@ -193,6 +193,7 @@ export const CheckoutPage = () => {
       couponCode: appliedCoupon?.code || null,
       items: items.map((item) => ({
         productId: Number(item.id),
+        selectedSize: item.selectedSize ? String(item.selectedSize).trim() : null,
         quantity: Number(item.quantity),
       })),
     }
@@ -654,7 +655,7 @@ export const CheckoutPage = () => {
                 {/* Danh sách sản phẩm mua */}
                 <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 pr-1">
                   {items.map((item) => (
-                    <div key={item.id} className="py-3 flex items-center justify-between gap-3">
+                    <div key={`${item.id}-${item.selectedSize || 'default'}`} className="py-3 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-11 h-11 rounded-xl bg-slate-50 shrink-0 overflow-hidden border border-slate-200 p-1 flex items-center justify-center">
                           {item.imageUrl ? (
@@ -667,6 +668,11 @@ export const CheckoutPage = () => {
                         </div>
                         <div className="min-w-0">
                           <p className="text-xs font-bold text-slate-900 truncate">{item.name}</p>
+                          {item.selectedSize && (
+                            <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
+                              Size: {item.selectedSize}
+                            </span>
+                          )}
                           <p className="text-[11px] text-slate-500">
                             {formatPrice(item.price)} × {item.quantity}
                           </p>

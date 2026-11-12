@@ -15,8 +15,8 @@ import java.util.Optional;
 
 /**
  * Repository truy vấn dữ liệu đánh giá sản phẩm (bảng reviews).
- * Phụ trách: Đỗ Đức Mạnh (DDM), Cao Chí Thiện (CCT)
- * Task ID: [TSK-D11-DDM] & [TSK-D14-CCT] Tích Hợp Upload Ảnh Đánh Giá (Local Storage) & API Quản Lý Đánh Giá
+ * Phụ trách: Đỗ Đức Mạnh (DDM), Đỗ Hoàng Anh (DHA), Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D11-DDM], [TSK-D14-DHA] & [TSK-D14-CCT]
  */
 @Repository
 public interface ReviewRepository extends JpaRepository<Review, Long> {
@@ -40,28 +40,20 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     Optional<Review> findByIdForUpdate(@Param("id") Long id);
 
     /**
-     * Kiểm tra người dùng đã đánh giá sản phẩm này chưa (chặn đánh giá trùng lặp).
+     * Lọc và tìm kiếm danh sách đánh giá dành cho Quản trị viên (Admin).
      */
-    boolean existsByProductIdAndUserId(Long productId, Long userId);
-
-    /**
-     * Tính điểm đánh giá trung bình của sản phẩm (chỉ tính các review đang hiển thị isVisible = true) [TSK-D14-CCT].
-     */
-    @Query("SELECT AVG(r.rating) FROM Review r WHERE r.product.id = :productId AND r.isVisible = true")
-    Double calculateAverageRating(@Param("productId") Long productId);
-
-    /**
-     * Đếm tổng số lượt đánh giá của sản phẩm (chỉ tính các review đang hiển thị isVisible = true) [TSK-D14-CCT].
-     */
-    @Query("SELECT COUNT(r) FROM Review r WHERE r.product.id = :productId AND r.isVisible = true")
-    Integer countByProductId(@Param("productId") Long productId);
-
-    /**
-     * Thống kê số lượng đánh giá gom nhóm theo từng mức sao (1, 2, 3, 4, 5) của các review hiển thị [TSK-D14-CCT].
-     * Kết quả mỗi phần tử: Object[]{ Integer rating, Long count }
-     */
-    @Query("SELECT r.rating, COUNT(r) FROM Review r WHERE r.product.id = :productId AND r.isVisible = true GROUP BY r.rating")
-    List<Object[]> countRatingsGrouped(@Param("productId") Long productId);
+    @Query(value = "SELECT r FROM Review r LEFT JOIN FETCH r.product LEFT JOIN FETCH r.user WHERE " +
+           "(:productId IS NULL OR r.product.id = :productId) AND " +
+           "(:rating IS NULL OR r.rating = :rating) AND " +
+           "(:isHidden IS NULL OR r.isHidden = :isHidden)",
+           countQuery = "SELECT COUNT(r) FROM Review r WHERE " +
+           "(:productId IS NULL OR r.product.id = :productId) AND " +
+           "(:rating IS NULL OR r.rating = :rating) AND " +
+           "(:isHidden IS NULL OR r.isHidden = :isHidden)")
+    Page<Review> findAllForAdmin(@Param("productId") Long productId,
+                                 @Param("rating") Integer rating,
+                                 @Param("isHidden") Boolean isHidden,
+                                 Pageable pageable);
 
     /**
      * Lấy danh sách đánh giá phục vụ Quản trị viên (Admin) kèm tìm nạp Product và User,
@@ -70,4 +62,28 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     @Query(value = "SELECT r FROM Review r LEFT JOIN FETCH r.product LEFT JOIN FETCH r.user WHERE (:isVisible IS NULL OR r.isVisible = :isVisible)",
            countQuery = "SELECT COUNT(r) FROM Review r WHERE (:isVisible IS NULL OR r.isVisible = :isVisible)")
     Page<Review> findAllForAdmin(@Param("isVisible") Boolean isVisible, Pageable pageable);
+
+    /**
+     * Kiểm tra người dùng đã đánh giá sản phẩm này chưa (chặn đánh giá trùng lặp).
+     */
+    boolean existsByProductIdAndUserId(Long productId, Long userId);
+
+    /**
+     * Tính điểm đánh giá trung bình của sản phẩm (chỉ tính các review đang hiển thị công khai).
+     */
+    @Query("SELECT AVG(r.rating) FROM Review r WHERE r.product.id = :productId AND (r.isVisible = true OR r.isVisible IS NULL) AND (r.isHidden = false OR r.isHidden IS NULL)")
+    Double calculateAverageRating(@Param("productId") Long productId);
+
+    /**
+     * Đếm tổng số lượt đánh giá của sản phẩm (chỉ tính các review đang hiển thị công khai).
+     */
+    @Query("SELECT COUNT(r) FROM Review r WHERE r.product.id = :productId AND (r.isVisible = true OR r.isVisible IS NULL) AND (r.isHidden = false OR r.isHidden IS NULL)")
+    Integer countByProductId(@Param("productId") Long productId);
+
+    /**
+     * Thống kê số lượng đánh giá gom nhóm theo từng mức sao (1, 2, 3, 4, 5) của các review hiển thị công khai.
+     * Kết quả mỗi phần tử: Object[]{ Integer rating, Long count }
+     */
+    @Query("SELECT r.rating, COUNT(r) FROM Review r WHERE r.product.id = :productId AND (r.isVisible = true OR r.isVisible IS NULL) AND (r.isHidden = false OR r.isHidden IS NULL) GROUP BY r.rating")
+    List<Object[]> countRatingsGrouped(@Param("productId") Long productId);
 }

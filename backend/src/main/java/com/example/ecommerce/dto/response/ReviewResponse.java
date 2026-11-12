@@ -1,19 +1,21 @@
 package com.example.ecommerce.dto.response;
 
 import com.example.ecommerce.entity.Review;
+import com.example.ecommerce.entity.ReviewImage;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
  * DTO phản hồi thông tin chi tiết một đánh giá sản phẩm.
- * Phụ trách: Đỗ Đức Mạnh (DDM), Cao Chí Thiện (CCT)
- * Task ID: [TSK-D11-DDM] & [TSK-D14-CCT] Tích Hợp Upload Ảnh Đánh Giá (Local Storage) & API Quản Lý Đánh Giá
+ * Phụ trách: Đỗ Đức Mạnh (DDM), Đỗ Hoàng Anh (DHA), Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D11-DDM], [TSK-D14-DHA] & [TSK-D14-CCT]
  */
 @Data
 @Builder
@@ -31,10 +33,11 @@ public class ReviewResponse {
     private String userAvatar;
     private Integer rating;
     private String comment;
+    private List<String> images;
+    private Boolean isHidden;
+    private Boolean isVisible;
     private String adminReply;
     private LocalDateTime adminReplyAt;
-    private Boolean isVisible;
-    private List<ReviewImageResponse> images;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -49,9 +52,17 @@ public class ReviewResponse {
         Long uId = review.getUser() != null ? review.getUser().getId() : null;
         String fullName = review.getUser() != null ? review.getUser().getFullName() : null;
 
-        List<ReviewImageResponse> imgResponses = (review.getImages() != null)
-                ? review.getImages().stream().map(ReviewImageResponse::fromEntity).toList()
-                : Collections.emptyList();
+        List<String> imgList = new ArrayList<>();
+        if (review.getImages() != null && !review.getImages().isEmpty()) {
+            for (ReviewImage img : review.getImages()) {
+                if (img != null && img.getImageUrl() != null && !img.getImageUrl().trim().isEmpty()) {
+                    imgList.add(img.getImageUrl().trim());
+                }
+            }
+        }
+
+        boolean hidden = Boolean.TRUE.equals(review.getIsHidden()) || Boolean.FALSE.equals(review.getIsVisible());
+        boolean visible = !hidden;
 
         return ReviewResponse.builder()
                 .id(review.getId())
@@ -64,13 +75,13 @@ public class ReviewResponse {
                 .userAvatar(null)
                 .rating(review.getRating())
                 .comment(review.getComment())
+                .images(imgList)
+                .isHidden(hidden)
+                .isVisible(visible)
                 .adminReply(review.getAdminReply())
                 .adminReplyAt(review.getAdminReplyAt())
-                .isVisible(review.getIsVisible())
-                .images(imgResponses)
                 .createdAt(review.getCreatedAt())
                 .updatedAt(review.getUpdatedAt())
                 .build();
     }
 }
-

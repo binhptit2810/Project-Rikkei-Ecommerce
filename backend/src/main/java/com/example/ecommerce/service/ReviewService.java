@@ -14,8 +14,8 @@ import java.util.List;
 
 /**
  * Service xử lý nghiệp vụ Đánh giá & Nhận xét sản phẩm.
- * Phụ trách: Đỗ Đức Mạnh (DDM), Cao Chí Thiện (CCT)
- * Task ID: [TSK-D11-DDM], [TSK-D14-DDM] & [TSK-D14-CCT] Tích Hợp Upload Ảnh Đánh Giá (Local Storage) & API Quản Lý Đánh Giá
+ * Phụ trách: Đỗ Đức Mạnh (DDM), Đỗ Hoàng Anh (DHA), Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D11-DDM], [TSK-D14-DHA] & [TSK-D14-CCT]
  */
 public interface ReviewService {
 
@@ -29,7 +29,7 @@ public interface ReviewService {
     PageResponse<ReviewResponse> getProductReviews(Long productId, Pageable pageable);
 
     /**
-     * Thống kê điểm đánh giá trung bình và số lượng đánh giá theo từng mức sao (1-5 sao) của các đánh giá hiển thị.
+     * Thống kê điểm đánh giá trung bình và số lượng đánh giá theo từng mức sao (1-5 sao) của các đánh giá hiển thị công khai.
      *
      * @param productId ID sản phẩm
      * @return ProductRatingSummaryResponse
@@ -37,31 +37,26 @@ public interface ReviewService {
     ProductRatingSummaryResponse getProductRatingSummary(Long productId);
 
     /**
-     * Tạo đánh giá mới cho sản phẩm.
-     * Ràng buộc:
-     * - Người dùng phải đăng nhập.
-     * - Chỉ khách hàng đã mua sản phẩm và đơn hàng ở trạng thái COMPLETED mới được đánh giá.
-     * - Mỗi người dùng chỉ được đánh giá 1 lần duy nhất trên 1 sản phẩm.
-     * - Tự động tính toán lại ratingAverage và totalReviews cập nhật vào Product.
+     * Khách hàng tạo đánh giá mới cho sản phẩm đã mua và hoàn thành giao dịch.
      *
      * @param productId ID sản phẩm
-     * @param request   Dữ liệu đánh giá (rating, comment)
+     * @param request   Dữ liệu đánh giá (rating 1-5, comment, tùy chọn images)
      * @return ReviewResponse
      */
     ReviewResponse createReview(Long productId, ReviewCreateRequest request);
 
     /**
-     * Chỉnh sửa đánh giá sản phẩm (Chính chủ người dùng).
+     * Khách hàng chỉnh sửa đánh giá đã gửi (chính chủ người dùng).
      *
      * @param productId ID sản phẩm
-     * @param reviewId  ID đánh giá cần chỉnh sửa
-     * @param request   Dữ liệu cập nhật (rating, comment)
-     * @return ReviewResponse
+     * @param reviewId  ID đánh giá
+     * @param request   Dữ liệu chỉnh sửa (rating 1-5, comment, tùy chọn images)
+     * @return ReviewResponse sau khi cập nhật
      */
     ReviewResponse updateReview(Long productId, Long reviewId, ReviewRequest request);
 
     /**
-     * Xóa đánh giá sản phẩm (Chính chủ hoặc Quản trị viên ADMIN).
+     * Xóa đánh giá sản phẩm (chính chủ hoặc Quản trị viên).
      *
      * @param productId ID sản phẩm
      * @param reviewId  ID đánh giá cần xóa
@@ -88,22 +83,15 @@ public interface ReviewService {
     List<ReviewImageResponse> uploadReviewImages(Long reviewId, List<MultipartFile> files);
 
     /**
-     * Quản trị viên (ADMIN) chuyển đổi trạng thái hiển thị công khai (ẩn/hiện) của đánh giá.
-     * Tự động tính toán lại điểm rating và số lượng đánh giá công khai của sản phẩm.
-     * [TSK-D14-CCT]
+     * Lấy toàn bộ danh sách đánh giá của hệ thống dành cho Admin quản lý có phân trang và bộ lọc.
      *
-     * @param id ID đánh giá cần chuyển đổi trạng thái
-     * @return ReviewResponse với trạng thái hiển thị mới
+     * @param pageable  Thông tin phân trang và sắp xếp
+     * @param productId Lọc theo ID sản phẩm (tùy chọn)
+     * @param rating    Lọc theo số sao (tùy chọn)
+     * @param isHidden  Lọc theo trạng thái ẩn/hiện (tùy chọn)
+     * @return PageResponse chứa danh sách ReviewResponse
      */
-    ReviewResponse toggleReviewVisibility(Long id);
-
-    /**
-     * Quản trị viên (ADMIN) xóa vĩnh viễn đánh giá vi phạm và dọn dẹp các tệp ảnh khỏi Local Storage.
-     * [TSK-D14-CCT]
-     *
-     * @param id ID đánh giá cần xóa
-     */
-    void deleteReviewByAdmin(Long id);
+    PageResponse<ReviewResponse> getAllReviewsForAdmin(Pageable pageable, Long productId, Integer rating, Boolean isHidden);
 
     /**
      * Lấy danh sách tất cả đánh giá phục vụ Quản trị viên (Admin) kèm phân trang và lọc theo trạng thái hiển thị.
@@ -114,4 +102,20 @@ public interface ReviewService {
      * @return PageResponse chứa danh sách ReviewResponse
      */
     PageResponse<ReviewResponse> getAllReviewsForAdmin(Boolean isVisible, Pageable pageable);
+
+    /**
+     * Quản trị viên (ADMIN) chuyển đổi trạng thái hiển thị công khai (ẩn/hiện) của đánh giá.
+     * Tự động tính toán lại điểm rating và số lượng đánh giá công khai của sản phẩm.
+     *
+     * @param id ID đánh giá cần chuyển đổi trạng thái
+     * @return ReviewResponse với trạng thái hiển thị mới
+     */
+    ReviewResponse toggleReviewVisibility(Long id);
+
+    /**
+     * Quản trị viên (ADMIN) xóa vĩnh viễn đánh giá vi phạm và dọn dẹp các tệp ảnh khỏi Local Storage.
+     *
+     * @param id ID đánh giá cần xóa
+     */
+    void deleteReviewByAdmin(Long id);
 }

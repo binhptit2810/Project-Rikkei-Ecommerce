@@ -174,7 +174,7 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/orders/vnpay-return" element={<PaymentResultPage />} />
+          <Route path="/orders/vnpay-return" element={<VNPayReturnPage />} />
           <Route path="/payment/result" element={<PaymentResultPage />} />
           <Route path="/payment-result" element={<PaymentResultPage />} />
 

@@ -8,8 +8,9 @@ import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.repository.InventoryTransactionRepository;
 import com.example.ecommerce.repository.ProductRepository;
-import lombok.RequiredArgsConstructor;
+import com.example.ecommerce.repository.ProductVariantRepository;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -38,12 +39,30 @@ import java.util.stream.Collectors;
  * - Tra cứu lịch sử biến động kho có bộ lọc GET /admin/inventory/transactions (TSK-D07-DTB).
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class InventoryService {
 
     private final ProductRepository productRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
+    private final ProductVariantRepository productVariantRepository;
+
+    @Autowired
+    public InventoryService(
+            ProductRepository productRepository,
+            InventoryTransactionRepository inventoryTransactionRepository,
+            ProductVariantRepository productVariantRepository
+    ) {
+        this.productRepository = productRepository;
+        this.inventoryTransactionRepository = inventoryTransactionRepository;
+        this.productVariantRepository = productVariantRepository;
+    }
+
+    public InventoryService(
+            ProductRepository productRepository,
+            InventoryTransactionRepository inventoryTransactionRepository
+    ) {
+        this(productRepository, inventoryTransactionRepository, null);
+    }
 
     private static final int DEFAULT_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 100;
@@ -51,7 +70,7 @@ public class InventoryService {
 
     /**
      * Trừ tồn kho khi đơn hàng được tạo (Order Placed).
-     * Áp dụng Khóa Bi Quan (Pessimistic Write Lock) trên từng bản ghi sản phẩm
+     * Áp dụng Khóa Bi Quan (Pessimistic Write Lock) trên từng bản ghi sản phẩm và biến thể kích cỡ
      * để chống tranh chấp dữ liệu (Race Condition) và ngăn chặn bán vượt tồn kho (Overselling).
      */
     @Transactional(rollbackFor = Exception.class)
@@ -60,11 +79,34 @@ public class InventoryService {
 
         for (OrderItem item : order.getItems()) {
             Long productId = item.getProduct().getId();
+            String size = item.getSelectedSize();
+            int buyQuantity = item.getQuantity();
 
             Product product = findProductForUpdateOrRegular(productId);
 
+            // Kiểm tra và trừ kho biến thể kích cỡ độc lập nếu sản phẩm có biến thể kích cỡ [TSK-D14-VDHH]
+            if (size != null && !size.isBlank() && productVariantRepository != null) {
+                ProductVariant variant = productVariantRepository.findByProductIdAndSizeForUpdate(productId, size.trim())
+                        .orElse(null);
+
+                if (variant != null) {
+                    int variantStock = variant.getStockQuantity() != null ? variant.getStockQuantity() : 0;
+                    if (variantStock < buyQuantity) {
+                        log.error("Hết hàng kích cỡ '{}' cho sản phẩm #{}: '{}' (tồn: {}, yêu cầu: {})",
+                                size, productId, product.getName(), variantStock, buyQuantity);
+                        throw new BusinessException(String.format(
+                                "Sản phẩm '%s' kích cỡ '%s' không đủ số lượng tồn kho (hiện còn: %d, yêu cầu mua: %d)",
+                                product.getName(), size, variantStock, buyQuantity));
+                    }
+                    int variantStockAfter = variantStock - buyQuantity;
+                    variant.setStockQuantity(variantStockAfter);
+                    productVariantRepository.save(variant);
+                    log.info("Đã trừ {} sản phẩm '{}' (size {}), tồn kho biến thể mới: {}",
+                            buyQuantity, product.getName(), size, variantStockAfter);
+                }
+            }
+
             int currentStock = product.getStockQuantity() != null ? product.getStockQuantity() : 0;
-            int buyQuantity = item.getQuantity();
 
             if (currentStock < buyQuantity) {
                 log.error("Hết hàng hoặc không đủ tồn kho cho sản phẩm #{}: '{}' (tồn: {}, yêu cầu: {})",
@@ -78,13 +120,16 @@ public class InventoryService {
             product.setStockQuantity(stockAfter);
             productRepository.save(product);
 
+            String transactionNote = "Trừ tồn kho" + (size != null && !size.isBlank() ? " (Size " + size + ")" : "")
+                    + " cho đơn hàng " + order.getOrderCode();
+
             InventoryTransaction transaction = InventoryTransaction.builder()
                     .product(product)
                     .changeQuantity(-buyQuantity)
                     .stockAfter(stockAfter)
                     .transactionType(InventoryTransactionType.ORDER_PLACED)
                     .orderId(order.getId())
-                    .note("Trừ tồn kho cho đơn hàng " + order.getOrderCode())
+                    .note(transactionNote)
                     .build();
 
             inventoryTransactionRepository.save(transaction);
@@ -96,6 +141,7 @@ public class InventoryService {
 
     /**
      * Hoàn lại số lượng tồn kho khi đơn hàng bị hủy (Order Cancelled).
+     * Phục hồi tồn kho của cả ProductVariant (theo size) và Product tổng.
      */
     @Transactional(rollbackFor = Exception.class)
     public void restoreStockForOrder(Order order) {
@@ -103,28 +149,47 @@ public class InventoryService {
 
         for (OrderItem item : order.getItems()) {
             Long productId = item.getProduct().getId();
+            String size = item.getSelectedSize();
+            int restoreQuantity = item.getQuantity();
 
             Product product = findProductForUpdateOrRegular(productId);
 
+            // Hoàn tồn kho cho biến thể kích cỡ nếu có
+            if (size != null && !size.isBlank() && productVariantRepository != null) {
+                ProductVariant variant = productVariantRepository.findByProductIdAndSizeForUpdate(productId, size.trim())
+                        .orElse(null);
+
+                if (variant != null) {
+                    int variantStock = variant.getStockQuantity() != null ? variant.getStockQuantity() : 0;
+                    variant.setStockQuantity(variantStock + restoreQuantity);
+                    productVariantRepository.save(variant);
+                    log.info("Đã hoàn {} sản phẩm '{}' (size {}), tồn kho biến thể mới: {}",
+                            restoreQuantity, product.getName(), size, variant.getStockQuantity());
+                }
+            }
+
             int currentStock = product.getStockQuantity() != null ? product.getStockQuantity() : 0;
-            int stockAfter = currentStock + item.getQuantity();
+            int stockAfter = currentStock + restoreQuantity;
 
             product.setStockQuantity(stockAfter);
             productRepository.save(product);
 
+            String transactionNote = "Hoàn tồn kho" + (size != null && !size.isBlank() ? " (Size " + size + ")" : "")
+                    + " do hủy đơn hàng " + order.getOrderCode();
+
             InventoryTransaction transaction = InventoryTransaction.builder()
                     .product(product)
-                    .changeQuantity(item.getQuantity())
+                    .changeQuantity(restoreQuantity)
                     .stockAfter(stockAfter)
                     .transactionType(InventoryTransactionType.ORDER_CANCELLED)
                     .orderId(order.getId())
-                    .note("Hoàn tồn kho do hủy đơn hàng " + order.getOrderCode())
+                    .note(transactionNote)
                     .build();
 
             inventoryTransactionRepository.save(transaction);
 
             log.info("Đã hoàn {} sản phẩm '{}', tồn kho mới: {}",
-                    item.getQuantity(), product.getName(), stockAfter);
+                    restoreQuantity, product.getName(), stockAfter);
         }
     }
 

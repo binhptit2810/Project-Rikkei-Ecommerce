@@ -11,30 +11,35 @@ import {
   AlertTriangle,
   X,
   MessageSquare,
+  MessageSquareReply,
   ZoomIn,
   Package,
   Image as ImageIcon,
   SlidersHorizontal,
+  Store,
+  Sparkles,
 } from 'lucide-react'
 import reviewService from '../../services/reviewService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import Pagination from '../../components/common/Pagination'
+import ReviewImageLightbox, { resolveImageUrl } from '../../components/reviews/ReviewImageLightbox'
 
 /**
  * Trang Quản trị Đánh giá & Nhận xét sản phẩm (AdminReviewsPage).
  * Tuyến đường (Route): /admin/reviews
- * Phụ trách: Cao Chí Thiện (CCT)
- * Task ID: [TSK-D14-CCT] Tích Hợp Upload Ảnh Đánh Giá (Local Storage) & API Quản Lý Đánh Giá
+ * Phụ trách: Đỗ Hoàng Anh (DHA), Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D14-DHA] & [TSK-D14-CCT]
  *
- * Tính năng chính & Quy chuẩn giao diện:
- * 1. Đồng bộ 100% với Design System của hệ thống Admin (shadcn/ui Neutral/Zinc Palette, nền sáng đồng nhất).
+ * Tính năng chính:
+ * 1. Đồng bộ 100% với Design System của hệ thống Admin (shadcn/ui Neutral/Zinc Palette).
  * 2. Hiển thị danh sách đánh giá sản phẩm có phân trang từ API GET /api/v1/admin/reviews.
- * 3. Bộ lọc trạng thái hiển thị: Tất cả, Đang hiển thị (isVisible = true), Đã ẩn (isVisible = false).
+ * 3. Bộ lọc trạng thái hiển thị (Tất cả, Đang hiển thị, Đã ẩn) và bộ lọc phản hồi (Tất cả, Đã phản hồi, Chưa phản hồi).
  * 4. Lọc theo điểm số sao đánh giá (1 - 5 sao) và tìm kiếm tức thì theo mã ID, khách hàng, sản phẩm, bình luận.
- * 5. Chuyển đổi trạng thái hiển thị công khai (Ẩn / Hiện) qua PUT /api/v1/admin/reviews/{id}/toggle-status.
- * 6. Xóa vĩnh viễn đánh giá và dọn dẹp các tệp ảnh khỏi storage qua DELETE /api/v1/admin/reviews/{id} kèm Modal xác nhận chuẩn Admin.
- * 7. Lightbox modal phóng to hình ảnh đính kèm của đánh giá.
- * 8. Tái sử dụng component Pagination dùng chung với theme="zinc" và tùy chọn thay đổi kích thước trang (10, 20, 50).
+ * 5. Chuyển đổi trạng thái hiển thị công khai (Ẩn / Hiện) qua PATCH /visibility hoặc PUT /toggle-status.
+ * 6. Quản trị viên phản hồi trực tiếp đánh giá của khách hàng (Thêm mới & Cập nhật phản hồi).
+ * 7. Xóa vĩnh viễn đánh giá và dọn dẹp các tệp ảnh khỏi storage qua DELETE /api/v1/admin/reviews/{id} kèm Modal xác nhận chuẩn Admin.
+ * 8. Lightbox modal phóng to hình ảnh đính kèm của đánh giá hỗ trợ Zoom in/out, điều hướng phím mũi tên.
+ * 9. Tái sử dụng component Pagination dùng chung với theme="zinc" và tùy chọn thay đổi kích thước trang (10, 20, 50).
  */
 export const AdminReviewsPage = () => {
   // --- Danh sách đánh giá & Phân trang ---
@@ -46,6 +51,7 @@ export const AdminReviewsPage = () => {
 
   // --- Bộ lọc & Tìm kiếm ---
   const [visibilityFilter, setVisibilityFilter] = useState('ALL') // 'ALL' | 'VISIBLE' | 'HIDDEN'
+  const [replyFilter, setReplyFilter] = useState('ALL') // 'ALL' | 'REPLIED' | 'UNREPLIED'
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedRating, setSelectedRating] = useState('ALL') // 'ALL' | '1' | '2' | '3' | '4' | '5'
 
@@ -59,8 +65,17 @@ export const AdminReviewsPage = () => {
   const [deletingReview, setDeletingReview] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
+  // --- Modal Phản hồi từ Người bán / Admin ---
+  const [replyingReview, setReplyingReview] = useState(null)
+  const [replyContent, setReplyContent] = useState('')
+  const [isSubmittingReply, setIsSubmittingReply] = useState(false)
+
   // --- Lightbox xem ảnh lớn ---
-  const [activeLightboxImage, setActiveLightboxImage] = useState(null)
+  const [lightboxState, setLightboxState] = useState({
+    isOpen: false,
+    images: [],
+    currentIndex: 0,
+  })
 
   // Tự động đóng toast sau 4 giây
   useEffect(() => {
@@ -76,15 +91,38 @@ export const AdminReviewsPage = () => {
       setIsLoading(true)
       try {
         let isVisibleParam = null
-        if (visibilityFilter === 'VISIBLE') isVisibleParam = true
-        if (visibilityFilter === 'HIDDEN') isVisibleParam = false
+        let isHiddenParam = null
+        if (visibilityFilter === 'VISIBLE') {
+          isVisibleParam = true
+          isHiddenParam = false
+        }
+        if (visibilityFilter === 'HIDDEN') {
+          isVisibleParam = false
+          isHiddenParam = true
+        }
 
-        const res = await reviewService.getAdminReviews(targetPage, currentSize, isVisibleParam)
+        const numericRating = selectedRating !== 'ALL' ? parseInt(selectedRating, 10) : null
+
+        const res = await reviewService.getAllReviewsForAdmin({
+          page: targetPage,
+          size: currentSize,
+          rating: numericRating,
+          isHidden: isHiddenParam,
+          isVisible: isVisibleParam,
+          sortBy: 'createdAt',
+          sortDir: 'desc',
+        })
+
         if (res?.success && res.data) {
-          setReviews(res.data.content || [])
+          const content = res.data.content || []
+          setReviews(content)
           setPage(res.data.pageNumber || 0)
           setTotalPages(res.data.totalPages || 1)
           setTotalElements(res.data.totalElements || 0)
+        } else if (Array.isArray(res?.data)) {
+          setReviews(res.data)
+          setTotalElements(res.data.length)
+          setTotalPages(Math.ceil(res.data.length / currentSize) || 1)
         } else {
           setReviews([])
           setTotalPages(1)
@@ -102,7 +140,7 @@ export const AdminReviewsPage = () => {
         setIsRefreshing(false)
       }
     },
-    [pageSize, visibilityFilter]
+    [pageSize, visibilityFilter, selectedRating]
   )
 
   useEffect(() => {
@@ -120,9 +158,13 @@ export const AdminReviewsPage = () => {
     try {
       const res = await reviewService.toggleReviewVisibility(review.id)
       if (res?.success && res.data) {
-        const updatedIsVisible = res.data.isVisible
+        const updatedIsVisible = res.data.isVisible ?? !res.data.isHidden
         setReviews((prev) =>
-          prev.map((r) => (r.id === review.id ? { ...r, isVisible: updatedIsVisible } : r))
+          prev.map((r) =>
+            r.id === review.id
+              ? { ...r, isVisible: updatedIsVisible, isHidden: !updatedIsVisible }
+              : r
+          )
         )
         setToastMessage({
           type: 'success',
@@ -139,6 +181,65 @@ export const AdminReviewsPage = () => {
       })
     } finally {
       setTogglingId(null)
+    }
+  }
+
+  // Mở modal phản hồi
+  const handleOpenReplyModal = (review) => {
+    setReplyingReview(review)
+    setReplyContent(review.adminReply || '')
+  }
+
+  // Gửi hoặc cập nhật phản hồi
+  const handleSaveReply = async (e) => {
+    e.preventDefault()
+    if (!replyingReview) return
+
+    const trimmed = replyContent.trim()
+    if (!trimmed) {
+      setToastMessage({
+        type: 'error',
+        text: 'Nội dung phản hồi không được để trống.',
+      })
+      return
+    }
+
+    setIsSubmittingReply(true)
+    try {
+      const isUpdating = Boolean(replyingReview.adminReply)
+      const res = isUpdating
+        ? await reviewService.updateReplyReview(replyingReview.id, { reply: trimmed })
+        : await reviewService.replyReview(replyingReview.id, { reply: trimmed })
+
+      if (res?.success && res.data) {
+        setReviews((prev) =>
+          prev.map((r) =>
+            r.id === replyingReview.id
+              ? {
+                  ...r,
+                  adminReply: res.data.adminReply,
+                  adminReplyAt: res.data.adminReplyAt || new Date().toISOString(),
+                }
+              : r
+          )
+        )
+        setToastMessage({
+          type: 'success',
+          text: isUpdating
+            ? `Đã cập nhật phản hồi cho đánh giá #${replyingReview.id}`
+            : `Đã gửi phản hồi cho đánh giá #${replyingReview.id}`,
+        })
+        setReplyingReview(null)
+        setReplyContent('')
+      }
+    } catch (err) {
+      console.error('Lỗi khi lưu phản hồi đánh giá:', err)
+      setToastMessage({
+        type: 'error',
+        text: err.response?.data?.message || 'Không thể lưu phản hồi đánh giá.',
+      })
+    } finally {
+      setIsSubmittingReply(false)
     }
   }
 
@@ -171,13 +272,12 @@ export const AdminReviewsPage = () => {
     }
   }
 
-  // Client-side filter theo từ khóa và số sao trên trang dữ liệu
+  // Client-side filter theo từ khóa và phản hồi trên trang dữ liệu
   const filteredReviews = useMemo(() => {
     return reviews.filter((r) => {
-      // Lọc theo rating
-      if (selectedRating !== 'ALL' && r.rating !== parseInt(selectedRating, 10)) {
-        return false
-      }
+      // Lọc theo replyFilter
+      if (replyFilter === 'REPLIED' && !r.adminReply) return false
+      if (replyFilter === 'UNREPLIED' && r.adminReply) return false
 
       // Lọc theo search term
       if (searchTerm.trim()) {
@@ -190,21 +290,23 @@ export const AdminReviewsPage = () => {
           r.productName?.toLowerCase().includes(query) ||
           String(r.productId).includes(query)
         const commentMatch = r.comment?.toLowerCase().includes(query)
+        const replyMatch = r.adminReply?.toLowerCase().includes(query)
         const idMatch = String(r.id).includes(query)
 
-        return userMatch || prodMatch || commentMatch || idMatch
+        return userMatch || prodMatch || commentMatch || replyMatch || idMatch
       }
 
       return true
     })
-  }, [reviews, selectedRating, searchTerm])
+  }, [reviews, replyFilter, searchTerm])
 
   // Thống kê nhanh trên trang hiện tại
   const stats = useMemo(() => {
-    const visibleCount = reviews.filter((r) => r.isVisible).length
-    const hiddenCount = reviews.filter((r) => !r.isVisible).length
+    const visibleCount = reviews.filter((r) => r.isVisible ?? !r.isHidden).length
+    const hiddenCount = reviews.filter((r) => !(r.isVisible ?? !r.isHidden)).length
     const withImagesCount = reviews.filter((r) => r.images && r.images.length > 0).length
-    return { visibleCount, hiddenCount, withImagesCount }
+    const repliedCount = reviews.filter((r) => Boolean(r.adminReply)).length
+    return { visibleCount, hiddenCount, withImagesCount, repliedCount }
   }, [reviews])
 
   const formatDate = (isoString) => {
@@ -216,6 +318,18 @@ export const AdminReviewsPage = () => {
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
+    })
+  }
+
+  // Mở Lightbox xem ảnh lớn
+  const handleOpenLightbox = (images, index) => {
+    const normalizedImages = (images || []).map((img) =>
+      typeof img === 'object' && img !== null ? img.imageUrl || img.url || '' : String(img)
+    )
+    setLightboxState({
+      isOpen: true,
+      images: normalizedImages,
+      currentIndex: index,
     })
   }
 
@@ -259,7 +373,7 @@ export const AdminReviewsPage = () => {
             </span>
           </div>
           <p className="text-sm text-slate-500 mt-1">
-            Kiểm duyệt bình luận, ẩn/hiển thị công khai và xóa vĩnh viễn đánh giá vi phạm tiêu chuẩn cộng đồng.
+            Kiểm duyệt bình luận, ẩn/hiển thị công khai, phản hồi từ Người bán và dọn dẹp các đánh giá vi phạm.
           </p>
         </div>
 
@@ -312,13 +426,13 @@ export const AdminReviewsPage = () => {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border border-blue-200/80 bg-blue-50/20 p-4 shadow-2xs">
-          <div className="flex items-center justify-between text-blue-700 mb-2">
-            <span className="text-[11px] font-bold uppercase tracking-wider">Có ảnh đính kèm (Trang này)</span>
-            <ImageIcon className="w-4 h-4 text-blue-500" />
+        <div className="bg-white rounded-2xl border border-indigo-200/80 bg-indigo-50/20 p-4 shadow-2xs">
+          <div className="flex items-center justify-between text-indigo-700 mb-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider">Đã phản hồi (Trang này)</span>
+            <Store className="w-4 h-4 text-indigo-500" />
           </div>
-          <div className="text-2xl font-black text-blue-900 tabular-nums">
-            {stats.withImagesCount}
+          <div className="text-2xl font-black text-indigo-900 tabular-nums">
+            {stats.repliedCount}
           </div>
         </div>
       </div>
@@ -353,7 +467,10 @@ export const AdminReviewsPage = () => {
               <span className="font-semibold text-slate-600 hidden sm:inline">Mức sao:</span>
               <select
                 value={selectedRating}
-                onChange={(e) => setSelectedRating(e.target.value)}
+                onChange={(e) => {
+                  setSelectedRating(e.target.value)
+                  setPage(0)
+                }}
                 className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/60 text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-zinc-900 cursor-pointer"
               >
                 <option value="ALL">Tất cả số sao</option>
@@ -362,6 +479,20 @@ export const AdminReviewsPage = () => {
                 <option value="3">3 sao ⭐⭐⭐</option>
                 <option value="2">2 sao ⭐⭐</option>
                 <option value="1">1 sao ⭐</option>
+              </select>
+            </div>
+
+            {/* Lọc theo trạng thái phản hồi */}
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span className="font-semibold text-slate-600 hidden sm:inline">Phản hồi:</span>
+              <select
+                value={replyFilter}
+                onChange={(e) => setReplyFilter(e.target.value)}
+                className="px-3 py-2 rounded-xl border border-slate-200 bg-slate-50/60 text-xs font-semibold text-slate-800 focus:outline-none focus:bg-white focus:ring-2 focus:ring-zinc-900 cursor-pointer"
+              >
+                <option value="ALL">Tất cả</option>
+                <option value="REPLIED">Đã phản hồi</option>
+                <option value="UNREPLIED">Chưa phản hồi</option>
               </select>
             </div>
 
@@ -394,7 +525,10 @@ export const AdminReviewsPage = () => {
           </span>
           <button
             type="button"
-            onClick={() => setVisibilityFilter('ALL')}
+            onClick={() => {
+              setVisibilityFilter('ALL')
+              setPage(0)
+            }}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
               visibilityFilter === 'ALL'
                 ? 'bg-zinc-900 text-white shadow-2xs'
@@ -405,7 +539,10 @@ export const AdminReviewsPage = () => {
           </button>
           <button
             type="button"
-            onClick={() => setVisibilityFilter('VISIBLE')}
+            onClick={() => {
+              setVisibilityFilter('VISIBLE')
+              setPage(0)
+            }}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
               visibilityFilter === 'VISIBLE'
                 ? 'bg-zinc-900 text-white shadow-2xs'
@@ -416,7 +553,10 @@ export const AdminReviewsPage = () => {
           </button>
           <button
             type="button"
-            onClick={() => setVisibilityFilter('HIDDEN')}
+            onClick={() => {
+              setVisibilityFilter('HIDDEN')
+              setPage(0)
+            }}
             className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
               visibilityFilter === 'HIDDEN'
                 ? 'bg-zinc-900 text-white shadow-2xs'
@@ -442,16 +582,17 @@ export const AdminReviewsPage = () => {
             </div>
             <h3 className="text-sm font-bold text-slate-900">Không tìm thấy đánh giá nào</h3>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
-              {searchTerm || selectedRating !== 'ALL' || visibilityFilter !== 'ALL'
+              {searchTerm || selectedRating !== 'ALL' || visibilityFilter !== 'ALL' || replyFilter !== 'ALL'
                 ? 'Không có đánh giá nào khớp với điều kiện tìm kiếm hoặc bộ lọc hiện tại.'
                 : 'Chưa có đánh giá nào được gửi trên hệ thống.'}
             </p>
-            {(searchTerm || selectedRating !== 'ALL' || visibilityFilter !== 'ALL') && (
+            {(searchTerm || selectedRating !== 'ALL' || visibilityFilter !== 'ALL' || replyFilter !== 'ALL') && (
               <button
                 type="button"
                 onClick={() => {
                   setVisibilityFilter('ALL')
                   setSelectedRating('ALL')
+                  setReplyFilter('ALL')
                   setSearchTerm('')
                 }}
                 className="px-3.5 py-1.5 rounded-xl text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
@@ -468,20 +609,21 @@ export const AdminReviewsPage = () => {
                   <th className="py-3.5 px-4 w-16">Mã ID</th>
                   <th className="py-3.5 px-4 min-w-[200px]">Sản phẩm</th>
                   <th className="py-3.5 px-4 min-w-[170px]">Khách hàng</th>
-                  <th className="py-3.5 px-4 min-w-[300px]">Nội dung &amp; Ảnh đính kèm</th>
+                  <th className="py-3.5 px-4 min-w-[320px]">Nội dung &amp; Phản hồi</th>
                   <th className="py-3.5 px-4 w-32 text-center">Trạng thái</th>
-                  <th className="py-3.5 px-4 w-36 text-center">Thao tác</th>
+                  <th className="py-3.5 px-4 w-40 text-center">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredReviews.map((r) => {
                   const isToggling = togglingId === r.id
+                  const isVisible = r.isVisible ?? !r.isHidden
 
                   return (
                     <tr
                       key={r.id}
                       className={`hover:bg-slate-50/60 transition-colors ${
-                        !r.isVisible ? 'bg-amber-50/20' : ''
+                        !isVisible ? 'bg-amber-50/20' : ''
                       }`}
                     >
                       {/* Cột 1: ID & Ngày tạo */}
@@ -497,7 +639,7 @@ export const AdminReviewsPage = () => {
                         <div className="flex items-start gap-3">
                           {r.productImage ? (
                             <img
-                              src={r.productImage}
+                              src={resolveImageUrl(r.productImage)}
                               alt={r.productName || 'Product'}
                               className="w-10 h-10 rounded-lg object-cover bg-slate-100 shrink-0 border border-slate-200"
                               onError={(e) => {
@@ -535,8 +677,8 @@ export const AdminReviewsPage = () => {
                         </div>
                       </td>
 
-                      {/* Cột 4: Đánh giá & Bình luận & Ảnh */}
-                      <td className="py-4 px-4 align-top space-y-2">
+                      {/* Cột 4: Đánh giá & Bình luận & Ảnh & Phản hồi */}
+                      <td className="py-4 px-4 align-top space-y-2.5">
                         {/* Số sao */}
                         <div className="flex items-center gap-1">
                           {[1, 2, 3, 4, 5].map((star) => (
@@ -567,35 +709,58 @@ export const AdminReviewsPage = () => {
                               <span>{r.images.length} ảnh:</span>
                             </span>
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              {r.images.map((img) => (
-                                <button
-                                  key={img.id}
-                                  type="button"
-                                  onClick={() => setActiveLightboxImage(img.imageUrl)}
-                                  className="group relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 hover:border-zinc-900 transition-all cursor-pointer shadow-2xs"
-                                  title="Bấm để xem ảnh phóng to"
-                                >
-                                  <img
-                                    src={img.imageUrl}
-                                    alt="Ảnh đánh giá"
-                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform"
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none'
-                                    }}
-                                  />
-                                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                    <ZoomIn className="w-3.5 h-3.5 text-white" />
-                                  </div>
-                                </button>
-                              ))}
+                              {r.images.map((img, idx) => {
+                                const url = typeof img === 'object' && img !== null ? img.imageUrl || img.url : img
+                                return (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => handleOpenLightbox(r.images, idx)}
+                                    className="group relative w-10 h-10 rounded-lg overflow-hidden border border-slate-200 hover:border-zinc-900 transition-all cursor-pointer shadow-2xs"
+                                    title="Bấm để xem ảnh phóng to"
+                                  >
+                                    <img
+                                      src={resolveImageUrl(url)}
+                                      alt="Ảnh đánh giá"
+                                      className="w-full h-full object-cover group-hover:scale-110 transition-transform"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = 'none'
+                                      }}
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                      <ZoomIn className="w-3.5 h-3.5 text-white" />
+                                    </div>
+                                  </button>
+                                )
+                              })}
                             </div>
+                          </div>
+                        )}
+
+                        {/* Phản hồi từ Người bán (nếu có) */}
+                        {r.adminReply && (
+                          <div className="mt-2 p-2.5 bg-slate-50 border-l-3 border-indigo-600 rounded-r-xl text-xs space-y-1">
+                            <div className="flex items-center justify-between gap-1 text-[11px] text-indigo-900 font-bold">
+                              <span className="flex items-center gap-1">
+                                <Store className="w-3 h-3 text-indigo-600" />
+                                Phản hồi từ Shop:
+                              </span>
+                              {r.adminReplyAt && (
+                                <span className="text-[10px] text-slate-400 font-normal">
+                                  {formatDate(r.adminReplyAt)}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-slate-600 italic line-clamp-2">
+                              &ldquo;{r.adminReply}&rdquo;
+                            </p>
                           </div>
                         )}
                       </td>
 
                       {/* Cột 5: Trạng thái hiển thị */}
                       <td className="py-4 px-4 align-top text-center">
-                        {r.isVisible ? (
+                        {isVisible ? (
                           <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                             Hiển thị
@@ -608,24 +773,38 @@ export const AdminReviewsPage = () => {
                         )}
                       </td>
 
-                      {/* Cột 6: Thao tác */}
+                      {/* Cột 6: Thao tác (Phản hồi, Ẩn/Hiện, Xóa) */}
                       <td className="py-4 px-4 align-top text-center">
                         <div className="inline-flex items-center gap-1.5">
+                          {/* Nút Phản hồi */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenReplyModal(r)}
+                            className={`p-2 rounded-xl border transition-colors cursor-pointer ${
+                              r.adminReply
+                                ? 'bg-indigo-50 border-indigo-200 text-indigo-700 hover:bg-indigo-100'
+                                : 'bg-white border-slate-200 text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
+                            }`}
+                            title={r.adminReply ? 'Chỉnh sửa câu phản hồi' : 'Gửi phản hồi cho đánh giá này'}
+                          >
+                            <MessageSquareReply className="w-4 h-4" />
+                          </button>
+
                           {/* Nút Chuyển đổi Ẩn / Hiện */}
                           <button
                             type="button"
                             onClick={() => handleToggleStatus(r)}
                             disabled={isToggling}
                             className={`p-2 rounded-xl border transition-colors cursor-pointer ${
-                              r.isVisible
+                              isVisible
                                 ? 'bg-white border-slate-200 text-slate-600 hover:text-amber-700 hover:bg-amber-50 hover:border-amber-200'
                                 : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
                             } disabled:opacity-50`}
-                            title={r.isVisible ? 'Ẩn đánh giá khỏi trang sản phẩm' : 'Hiển thị lại đánh giá'}
+                            title={isVisible ? 'Ẩn đánh giá khỏi trang sản phẩm' : 'Hiển thị lại đánh giá'}
                           >
                             {isToggling ? (
                               <LoadingSpinner size="sm" className="text-zinc-900" />
-                            ) : r.isVisible ? (
+                            ) : isVisible ? (
                               <EyeOff className="w-4 h-4" />
                             ) : (
                               <Eye className="w-4 h-4" />
@@ -671,7 +850,100 @@ export const AdminReviewsPage = () => {
         </div>
       </div>
 
-      {/* 6. Modal Xác nhận Xóa vĩnh viễn Review */}
+      {/* 6. Modal Phản hồi từ Người bán */}
+      {replyingReview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity"
+            onClick={() => !isSubmittingReply && setReplyingReview(null)}
+          />
+
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-lg p-6 z-10 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <MessageSquareReply className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    {replyingReview.adminReply ? 'Chỉnh sửa phản hồi' : 'Phản hồi đánh giá'} #{replyingReview.id}
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Khách hàng: <strong>{replyingReview.userFullName || replyingReview.userName}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReplyingReview(null)}
+                disabled={isSubmittingReply}
+                className="p-1 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-600 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Trích đoạn bình luận của khách */}
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1 mb-4">
+              <div className="flex items-center gap-1">
+                {[1, 2, 3, 4, 5].map((s) => (
+                  <Star
+                    key={s}
+                    className={`w-3 h-3 ${
+                      s <= replyingReview.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-200 fill-slate-200'
+                    }`}
+                  />
+                ))}
+                <span className="text-[11px] font-bold text-amber-600 ml-1">{replyingReview.rating} sao</span>
+              </div>
+              <p className="italic text-slate-600 line-clamp-3">
+                &ldquo;{replyingReview.comment}&rdquo;
+              </p>
+            </div>
+
+            <form onSubmit={handleSaveReply} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                  <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Nội dung phản hồi chính thức từ Cửa hàng</span>
+                </label>
+                <textarea
+                  rows={4}
+                  maxLength={1000}
+                  value={replyContent}
+                  onChange={(e) => setReplyContent(e.target.value)}
+                  placeholder="Nhập lời cảm ơn hoặc giải đáp thắc mắc gửi đến khách hàng..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-zinc-900 transition-all resize-none"
+                />
+                <div className="text-right text-[10px] text-slate-400 mt-1">
+                  {replyContent.length} / 1000 ký tự
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setReplyingReview(null)}
+                  disabled={isSubmittingReply}
+                  className="px-4 py-2 border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingReply || !replyContent.trim()}
+                  className="inline-flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingReply && <LoadingSpinner size="sm" className="text-white" />}
+                  <span>{isSubmittingReply ? 'Đang lưu...' : 'Lưu phản hồi'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Modal Xác nhận Xóa vĩnh viễn Review */}
       {deletingReview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
           <div
@@ -746,32 +1018,14 @@ export const AdminReviewsPage = () => {
         </div>
       )}
 
-      {/* 7. Modal Lightbox Xem Ảnh Lớn */}
-      {activeLightboxImage && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200"
-          onClick={() => setActiveLightboxImage(null)}
-        >
-          <div
-            className="relative max-w-3xl max-h-[85vh] bg-white rounded-2xl shadow-2xl p-2 border border-slate-200 overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={() => setActiveLightboxImage(null)}
-              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-slate-900/80 hover:bg-slate-950 text-white transition-colors cursor-pointer shadow-md"
-              title="Đóng cửa sổ ảnh"
-            >
-              <X className="w-5 h-5" />
-            </button>
-            <img
-              src={activeLightboxImage}
-              alt="Hình ảnh đánh giá"
-              className="max-h-[80vh] w-auto mx-auto object-contain rounded-xl"
-            />
-          </div>
-        </div>
-      )}
+      {/* 8. Lightbox Phóng To Ảnh */}
+      <ReviewImageLightbox
+        isOpen={lightboxState.isOpen}
+        images={lightboxState.images}
+        currentIndex={lightboxState.currentIndex}
+        onClose={() => setLightboxState({ isOpen: false, images: [], currentIndex: 0 })}
+        onNavigate={(newIdx) => setLightboxState((prev) => ({ ...prev, currentIndex: newIdx }))}
+      />
     </div>
   )
 }

@@ -33,6 +33,10 @@ public class OrderItem {
     @Column(name = "product_name", nullable = false, length = 200)
     private String productName;
 
+    /** Snapshot kích cỡ sản phẩm tại thời điểm đặt hàng [TSK-D14-VDHH]. */
+    @Column(name = "selected_size", length = 50)
+    private String selectedSize;
+
     @Column(name = "unit_price", nullable = false, precision = 15, scale = 2)
     private BigDecimal unitPrice;
 

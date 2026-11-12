@@ -57,6 +57,20 @@ PREPARE stmt_idx_coupon FROM @sql_idx_coupon;
 EXECUTE stmt_idx_coupon;
 DEALLOCATE PREPARE stmt_idx_coupon;
 
+SET @idx_orders_status_created = (
+    SELECT COUNT(*) FROM information_schema.STATISTICS 
+    WHERE TABLE_SCHEMA = DATABASE() 
+      AND TABLE_NAME = 'orders' 
+      AND INDEX_NAME = 'idx_orders_status_created'
+);
+SET @sql_idx_status_created = IF(@idx_orders_status_created = 0, 
+    'CREATE INDEX idx_orders_status_created ON orders (order_status, created_at)', 
+    'SELECT 1'
+);
+PREPARE stmt_idx_status_created FROM @sql_idx_status_created;
+EXECUTE stmt_idx_status_created;
+DEALLOCATE PREPARE stmt_idx_status_created;
+
 -- -----------------------------------------------------------------------------
 -- 2. BẢNG COUPONS: Đảm bảo index idx_coupons_code trên cột code
 -- -----------------------------------------------------------------------------

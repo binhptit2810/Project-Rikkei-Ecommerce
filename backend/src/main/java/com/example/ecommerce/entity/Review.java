@@ -14,8 +14,8 @@ import java.util.List;
 /**
  * Entity ánh xạ bảng `reviews` trong MySQL.
  * Quản lý đánh giá và nhận xét sản phẩm của khách hàng.
- * Phụ trách: Đỗ Đức Mạnh (DDM), Cao Chí Thiện (CCT)
- * Task ID: [TSK-D11-DDM] & [TSK-D14-CCT] Tích Hợp Upload Ảnh Đánh Giá (Local Storage) & API Quản Lý Đánh Giá
+ * Phụ trách: Đỗ Đức Mạnh (DDM), Đỗ Hoàng Anh (DHA), Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D11-DDM], [TSK-D14-DHA] & [TSK-D14-CCT]
  */
 @Entity
 @Table(
@@ -62,6 +62,11 @@ public class Review {
     @Column(columnDefinition = "TEXT", length = 1000)
     private String comment;
 
+    /** Trạng thái ẩn/hiển thị đánh giá do Admin quản lý */
+    @Builder.Default
+    @Column(name = "is_hidden")
+    private Boolean isHidden = false;
+
     /** Phản hồi chính thức từ Quản trị viên / Người bán */
     @Column(name = "admin_reply", columnDefinition = "TEXT")
     private String adminReply;
@@ -75,7 +80,7 @@ public class Review {
     @Builder.Default
     private Boolean isVisible = true;
 
-    /** Danh sách hình ảnh đính kèm của đánh giá (tối đa 3 ảnh) */
+    /** Danh sách hình ảnh đính kèm của đánh giá (tối đa 3 ảnh) [TSK-D14-CCT] */
     @OneToMany(mappedBy = "review", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ReviewImage> images = new ArrayList<>();
@@ -93,6 +98,9 @@ public class Review {
         if (this.isVisible == null) {
             this.isVisible = true;
         }
+        if (this.isHidden == null) {
+            this.isHidden = !this.isVisible;
+        }
         if (this.createdAt == null) {
             this.createdAt = LocalDateTime.now();
         }
@@ -104,6 +112,20 @@ public class Review {
     @PreUpdate
     protected void onUpdate() {
         this.updatedAt = LocalDateTime.now();
+    }
+
+    public void setIsVisible(Boolean isVisible) {
+        this.isVisible = isVisible;
+        if (isVisible != null) {
+            this.isHidden = !isVisible;
+        }
+    }
+
+    public void setIsHidden(Boolean isHidden) {
+        this.isHidden = isHidden;
+        if (isHidden != null) {
+            this.isVisible = !isHidden;
+        }
     }
 
     public void addImage(ReviewImage image) {
@@ -121,4 +143,3 @@ public class Review {
         }
     }
 }
-

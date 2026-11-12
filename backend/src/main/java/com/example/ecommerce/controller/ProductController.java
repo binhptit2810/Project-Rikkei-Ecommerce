@@ -56,6 +56,24 @@ public class ProductController {
     }
 
     /**
+     * Lấy danh sách sản phẩm bán chạy nhất (Best Sellers) theo tháng và năm có phân trang.
+     * GET /api/v1/products/best-sellers?month=11&year=2026&page=0&size=10
+     *
+     * Phụ trách: Đặng Thanh Bình (DTB)
+     * DoD: Trả về đúng thứ tự sản phẩm bán nhiều nhất trong tháng, tốc độ truy vấn < 30ms.
+     */
+    @GetMapping("/best-sellers")
+    public ResponseEntity<ApiResponse<PageResponse<ProductResponse>>> getBestSellers(
+            @RequestParam(required = false) Integer month,
+            @RequestParam(required = false) Integer year,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        PageResponse<ProductResponse> bestSellers = productService.getBestSellers(month, year, page, size);
+        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách Best Seller thành công", bestSellers));
+    }
+
+    /**
      * Chi tiết sản phẩm theo ID (chỉ hiển thị nếu active = true).
      * GET /api/v1/products/{id}
      */
