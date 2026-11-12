@@ -26,8 +26,39 @@ public class ProductResponse {
     private Boolean active;
     private Double ratingAverage;
     private Integer totalReviews;
+    private Long totalSold;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    public static ProductResponse fromEntity(Product product, Long totalSold) {
+        ProductResponse res = fromEntity(product);
+        if (res != null) {
+            res.setTotalSold(totalSold);
+        }
+        return res;
+    }
+
+    public static ProductResponse fromProjection(BestSellerProjection p) {
+        if (p == null) {
+            return null;
+        }
+        return ProductResponse.builder()
+                .id(p.getProductId())
+                .name(p.getProductName())
+                .description(p.getDescription())
+                .price(p.getPrice())
+                .imageUrl(p.getImageUrl())
+                .categoryId(p.getCategoryId())
+                .categoryName(p.getCategoryName())
+                .stockQuantity(p.getStockQuantity())
+                .active(p.getActive())
+                .ratingAverage(p.getRatingAverage() != null ? p.getRatingAverage() : 0.0)
+                .totalReviews(p.getTotalReviews() != null ? p.getTotalReviews() : 0)
+                .totalSold(p.getTotalSold() != null ? p.getTotalSold() : 0L)
+                .createdAt(p.getCreatedAt())
+                .updatedAt(p.getUpdatedAt())
+                .build();
+    }
 
     public static ProductResponse fromEntity(Product product) {
         if (product == null) {
