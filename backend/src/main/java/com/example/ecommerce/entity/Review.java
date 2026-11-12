@@ -58,6 +58,14 @@ public class Review {
     @Column(columnDefinition = "TEXT", length = 1000)
     private String comment;
 
+    /** Phản hồi chính thức từ Quản trị viên / Người bán */
+    @Column(name = "admin_reply", columnDefinition = "TEXT")
+    private String adminReply;
+
+    /** Thời điểm Quản trị viên gửi phản hồi */
+    @Column(name = "admin_reply_at")
+    private LocalDateTime adminReplyAt;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;

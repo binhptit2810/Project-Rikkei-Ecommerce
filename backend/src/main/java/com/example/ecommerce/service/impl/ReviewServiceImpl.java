@@ -1,12 +1,15 @@
 package com.example.ecommerce.service.impl;
 
+import com.example.ecommerce.dto.request.AdminReplyRequest;
 import com.example.ecommerce.dto.request.ReviewCreateRequest;
+import com.example.ecommerce.dto.request.ReviewRequest;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductRatingSummaryResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import com.example.ecommerce.entity.OrderStatus;
 import com.example.ecommerce.entity.Product;
 import com.example.ecommerce.entity.Review;
+import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
 import com.example.ecommerce.exception.BadRequestException;
 import com.example.ecommerce.exception.BusinessException;
@@ -24,11 +27,13 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -36,7 +41,7 @@ import java.util.Map;
 /**
  * Triển khai nghiệp vụ Đánh giá & Nhận xét sản phẩm.
  * Phụ trách: Đỗ Đức Mạnh (DDM)
- * Task ID: [TSK-D11-DDM] Xây Dựng Phân Hệ Đánh Giá Sản Phẩm (Product Review & Rating Backend)
+ * Task ID: [TSK-D11-DDM] & [TSK-D14-DDM] Xây Dựng API Chỉnh Sửa, Xóa Đánh Giá & Admin Phản Hồi Đánh Giá
  */
 @Service
 @RequiredArgsConstructor
@@ -139,24 +144,124 @@ public class ReviewServiceImpl implements ReviewService {
                 .comment(request.getComment() != null ? request.getComment().trim() : "")
                 .build();
         Review savedReview = reviewRepository.save(review);
+        reviewRepository.flush();
 
         // 4. Tự động tính toán lại ratingAverage và totalReviews, cập nhật vào Product
-        Double avg = reviewRepository.calculateAverageRating(productId);
-        double newAverage = (avg != null)
-                ? Math.round(avg * 10.0) / 10.0
-                : (double) request.getRating();
-
-        Integer count = reviewRepository.countByProductId(productId);
-        int newTotal = (count != null) ? count : 1;
-
-        product.setRatingAverage(newAverage);
-        product.setTotalReviews(newTotal);
-        productRepository.save(product);
+        recalculateProductRating(product);
 
         log.info("Created review #{} for product #{}: rating={}, newAvg={}, totalReviews={}",
-                savedReview.getId(), productId, request.getRating(), newAverage, newTotal);
+                savedReview.getId(), productId, request.getRating(), product.getRatingAverage(), product.getTotalReviews());
 
         return ReviewResponse.fromEntity(savedReview);
+    }
+
+    @Override
+    @Transactional
+    public ReviewResponse updateReview(Long productId, Long reviewId, ReviewRequest request) {
+        User currentUser = getCurrentUser();
+
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sản phẩm không tồn tại với ID: " + productId));
+
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
+
+        if (!review.getProduct().getId().equals(productId)) {
+            throw new ResourceNotFoundException("Đánh giá #" + reviewId + " không thuộc về sản phẩm #" + productId);
+        }
+
+        // Chỉ đúng user đã tạo đánh giá này mới được sửa
+        if (!review.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Bạn không có quyền chỉnh sửa đánh giá này");
+        }
+
+        if (request.getRating() == null || request.getRating() < 1 || request.getRating() > 5) {
+            throw new BadRequestException("Số sao đánh giá phải từ 1 đến 5");
+        }
+        if (request.getComment() == null || request.getComment().trim().isEmpty()) {
+            throw new BadRequestException("Nội dung đánh giá không được để trống");
+        }
+
+        review.setRating(request.getRating());
+        review.setComment(request.getComment().trim());
+        review.setUpdatedAt(LocalDateTime.now());
+        Review savedReview = reviewRepository.save(review);
+        reviewRepository.flush();
+
+        // Bắt buộc tính lại rating_average của sản phẩm
+        recalculateProductRating(product);
+
+        log.info("User #{} updated review #{} for product #{}: newRating={}",
+                currentUser.getId(), reviewId, productId, request.getRating());
+
+        return ReviewResponse.fromEntity(savedReview);
+    }
+
+    @Override
+    @Transactional
+    public void deleteReview(Long productId, Long reviewId) {
+        User currentUser = getCurrentUser();
+
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new ResourceNotFoundException("Sản phẩm không tồn tại với ID: " + productId));
+
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
+
+        if (!review.getProduct().getId().equals(productId)) {
+            throw new ResourceNotFoundException("Đánh giá #" + reviewId + " không thuộc về sản phẩm #" + productId);
+        }
+
+        // Cho phép chính chủ tạo review HOẶC người dùng có role ADMIN thực hiện xóa
+        boolean isOwner = review.getUser().getId().equals(currentUser.getId());
+        boolean isAdmin = currentUser.getRole() == Role.ADMIN;
+        if (!isOwner && !isAdmin) {
+            throw new AccessDeniedException("Bạn không có quyền xóa đánh giá này");
+        }
+
+        reviewRepository.delete(review);
+        reviewRepository.flush();
+
+        // Tính lại rating_average và total_reviews của sản phẩm
+        recalculateProductRating(product);
+
+        log.info("User #{} (role={}) deleted review #{} for product #{}",
+                currentUser.getId(), currentUser.getRole(), reviewId, productId);
+    }
+
+    @Override
+    @Transactional
+    public ReviewResponse replyReview(Long reviewId, AdminReplyRequest request) {
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
+
+        if (request == null || request.getReply() == null || request.getReply().trim().isEmpty()) {
+            throw new BadRequestException("Nội dung phản hồi không được để trống");
+        }
+
+        review.setAdminReply(request.getReply().trim());
+        review.setAdminReplyAt(LocalDateTime.now());
+        Review saved = reviewRepository.save(review);
+
+        log.info("Admin replied to review #{}: {}", reviewId, request.getReply());
+        return ReviewResponse.fromEntity(saved);
+    }
+
+    /**
+     * Tính toán lại điểm trung bình rating_average và tổng số lượt đánh giá total_reviews.
+     */
+    private void recalculateProductRating(Product product) {
+        Long productId = product.getId();
+        Double avg = reviewRepository.calculateAverageRating(productId);
+        Integer count = reviewRepository.countByProductId(productId);
+        int total = (count != null) ? count : 0;
+        double newAverage = (total > 0 && avg != null)
+                ? Math.round(avg * 10.0) / 10.0
+                : 0.0;
+
+        product.setRatingAverage(newAverage);
+        product.setTotalReviews(total);
+        productRepository.save(product);
     }
 
     /**

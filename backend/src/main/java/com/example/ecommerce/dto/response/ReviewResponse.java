@@ -22,11 +22,15 @@ public class ReviewResponse {
     private Long id;
     private Long productId;
     private Long userId;
+    private String userName;
     private String userFullName;
     private String userAvatar;
     private Integer rating;
     private String comment;
+    private String adminReply;
+    private LocalDateTime adminReplyAt;
     private LocalDateTime createdAt;
+    private LocalDateTime updatedAt;
 
     public static ReviewResponse fromEntity(Review review) {
         if (review == null) {
@@ -41,11 +45,15 @@ public class ReviewResponse {
                 .id(review.getId())
                 .productId(prodId)
                 .userId(uId)
+                .userName(fullName)
                 .userFullName(fullName)
                 .userAvatar(null)
                 .rating(review.getRating())
                 .comment(review.getComment())
+                .adminReply(review.getAdminReply())
+                .adminReplyAt(review.getAdminReplyAt())
                 .createdAt(review.getCreatedAt())
+                .updatedAt(review.getUpdatedAt())
                 .build();
     }
 }

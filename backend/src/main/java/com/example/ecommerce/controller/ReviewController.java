@@ -1,6 +1,7 @@
 package com.example.ecommerce.controller;
 
 import com.example.ecommerce.dto.request.ReviewCreateRequest;
+import com.example.ecommerce.dto.request.ReviewRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductRatingSummaryResponse;
@@ -74,6 +75,35 @@ public class ReviewController {
         ReviewResponse response = reviewService.createReview(productId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.success("Đánh giá sản phẩm thành công", response));
+    }
+
+    /**
+     * Chỉnh sửa đánh giá sản phẩm (Chính chủ User).
+     * PUT /api/v1/products/{productId}/reviews/{reviewId}
+     */
+    @PutMapping("/{reviewId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<ReviewResponse>> updateReview(
+            @PathVariable Long productId,
+            @PathVariable Long reviewId,
+            @Valid @RequestBody ReviewRequest request) {
+
+        ReviewResponse response = reviewService.updateReview(productId, reviewId, request);
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật đánh giá thành công", response));
+    }
+
+    /**
+     * Xóa đánh giá sản phẩm (Chính chủ User hoặc Admin).
+     * DELETE /api/v1/products/{productId}/reviews/{reviewId}
+     */
+    @DeleteMapping("/{reviewId}")
+    @PreAuthorize("isAuthenticated()")
+    public ResponseEntity<ApiResponse<Void>> deleteReview(
+            @PathVariable Long productId,
+            @PathVariable Long reviewId) {
+
+        reviewService.deleteReview(productId, reviewId);
+        return ResponseEntity.ok(ApiResponse.success("Xóa đánh giá thành công", null));
     }
 }
 

@@ -48,6 +48,40 @@ export const reviewService = {
     const response = await apiClient.post(`/products/${productId}/reviews`, reviewData)
     return response.data
   },
+
+  /**
+   * Chỉnh sửa đánh giá sản phẩm (Chính chủ người dùng).
+   * @param {number|string} productId ID sản phẩm
+   * @param {number|string} reviewId ID đánh giá
+   * @param {Object} reviewData { rating: number (1-5), comment: string }
+   * @returns {Promise<Object>} ApiResponse chứa ReviewResponse
+   */
+  async updateReview(productId, reviewId, reviewData) {
+    const response = await apiClient.put(`/products/${productId}/reviews/${reviewId}`, reviewData)
+    return response.data
+  },
+
+  /**
+   * Xóa đánh giá sản phẩm (Chính chủ hoặc Quản trị viên).
+   * @param {number|string} productId ID sản phẩm
+   * @param {number|string} reviewId ID đánh giá
+   * @returns {Promise<Object>} ApiResponse
+   */
+  async deleteReview(productId, reviewId) {
+    const response = await apiClient.delete(`/products/${productId}/reviews/${reviewId}`)
+    return response.data
+  },
+
+  /**
+   * Quản trị viên phản hồi trực tiếp đánh giá của khách hàng.
+   * @param {number|string} reviewId ID đánh giá
+   * @param {Object} replyData { reply: string }
+   * @returns {Promise<Object>} ApiResponse chứa ReviewResponse
+   */
+  async replyReview(reviewId, replyData) {
+    const response = await apiClient.post(`/admin/reviews/${reviewId}/reply`, replyData)
+    return response.data
+  },
 }
 
 export default reviewService
