@@ -72,5 +72,31 @@ public interface ReviewService {
      * @return ReviewResponse
      */
     ReviewResponse replyReview(Long reviewId, AdminReplyRequest request);
+
+    /**
+     * Lấy toàn bộ danh sách đánh giá của hệ thống dành cho Admin quản lý.
+     *
+     * @param pageable  Thông tin phân trang và sắp xếp
+     * @param productId Lọc theo ID sản phẩm (tùy chọn)
+     * @param rating    Lọc theo số sao (tùy chọn)
+     * @param isHidden  Lọc theo trạng thái ẩn/hiện (tùy chọn)
+     * @return PageResponse chứa danh sách ReviewResponse
+     */
+    PageResponse<ReviewResponse> getAllReviewsForAdmin(Pageable pageable, Long productId, Integer rating, Boolean isHidden);
+
+    /**
+     * Xóa đánh giá trực tiếp bởi Admin theo reviewId.
+     *
+     * @param reviewId ID đánh giá cần xóa
+     */
+    void deleteReviewByAdmin(Long reviewId);
+
+    /**
+     * Bật / Tắt trạng thái hiển thị của đánh giá (Ẩn / Hiện).
+     *
+     * @param reviewId ID đánh giá
+     * @return ReviewResponse sau khi cập nhật
+     */
+    ReviewResponse toggleReviewVisibility(Long reviewId);
 }
 

@@ -24,6 +24,18 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     Page<Review> findByProductId(Long productId, Pageable pageable);
 
     /**
+     * Lọc và tìm kiếm danh sách đánh giá dành cho Quản trị viên (Admin).
+     */
+    @Query("SELECT r FROM Review r WHERE " +
+           "(:productId IS NULL OR r.product.id = :productId) AND " +
+           "(:rating IS NULL OR r.rating = :rating) AND " +
+           "(:isHidden IS NULL OR r.isHidden = :isHidden)")
+    Page<Review> findAllForAdmin(@Param("productId") Long productId,
+                                 @Param("rating") Integer rating,
+                                 @Param("isHidden") Boolean isHidden,
+                                 Pageable pageable);
+
+    /**
      * Kiểm tra người dùng đã đánh giá sản phẩm này chưa (chặn đánh giá trùng lặp).
      */
     boolean existsByProductIdAndUserId(Long productId, Long userId);

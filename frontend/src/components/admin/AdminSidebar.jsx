@@ -73,7 +73,7 @@ export const AdminSidebar = ({ onClose }) => {
           label: 'Quản lý đánh giá',
           path: '/admin/reviews',
           icon: Star,
-          isImplemented: false,
+          isImplemented: true,
         },
       ],
     },
