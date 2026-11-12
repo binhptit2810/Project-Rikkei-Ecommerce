@@ -392,5 +392,18 @@ class ProductVariantServiceAndOrderTest {
         verify(mockVariantRepo).save(liveVariant);
         verify(productRepository).save(fashionProduct);
     }
+
+    @Test
+    @DisplayName("PV-11: ProductResponse.fromEntity map chính xác danh sách biến thể kích cỡ")
+    void testProductResponse_FromEntity_MapsVariants() {
+        com.example.ecommerce.dto.response.ProductResponse res = com.example.ecommerce.dto.response.ProductResponse.fromEntity(fashionProduct);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getId()).isEqualTo(100L);
+        assertThat(res.getVariants()).isNotNull();
+        assertThat(res.getVariants()).hasSize(4);
+        assertThat(res.getVariants()).extracting(com.example.ecommerce.dto.response.ProductVariantResponse::getSize)
+                .containsExactlyInAnyOrder("S", "M", "L", "XXL");
+    }
 }
 

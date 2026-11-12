@@ -128,6 +128,7 @@ CREATE TABLE IF NOT EXISTS orders (
     INDEX idx_orders_user (user_id),
     INDEX idx_orders_status (order_status),
     INDEX idx_orders_created (created_at),
+    INDEX idx_orders_status_created (order_status, created_at),
     INDEX idx_orders_coupon_code (coupon_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
