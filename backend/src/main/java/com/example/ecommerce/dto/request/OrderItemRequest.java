@@ -25,4 +25,10 @@ public class OrderItemRequest {
     @Min(value = 1, message = "Số lượng đặt phải lớn hơn hoặc bằng 1")
     @Max(value = 1000, message = "Số lượng đặt tối đa 1000 sản phẩm cho mỗi món")
     private Integer quantity;
+
+    public OrderItemRequest(Long productId, Integer quantity) {
+        this.productId = productId;
+        this.selectedSize = null;
+        this.quantity = quantity;
+    }
 }
