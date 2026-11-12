@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -27,6 +28,7 @@ public class ProductResponse {
     private Double ratingAverage;
     private Integer totalReviews;
     private Long totalSold;
+    private List<ProductVariantResponse> variants;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -55,6 +57,7 @@ public class ProductResponse {
                 .ratingAverage(p.getRatingAverage() != null ? p.getRatingAverage() : 0.0)
                 .totalReviews(p.getTotalReviews() != null ? p.getTotalReviews() : 0)
                 .totalSold(p.getTotalSold() != null ? p.getTotalSold() : 0L)
+                .variants(null)
                 .createdAt(p.getCreatedAt())
                 .updatedAt(p.getUpdatedAt())
                 .build();
@@ -71,6 +74,13 @@ public class ProductResponse {
             catName = product.getCategory().getName();
         }
 
+        List<ProductVariantResponse> variantResponses = null;
+        if (product.getVariants() != null) {
+            variantResponses = product.getVariants().stream()
+                    .map(ProductVariantResponse::fromEntity)
+                    .toList();
+        }
+
         return ProductResponse.builder()
                 .id(product.getId())
                 .name(product.getName())
@@ -83,6 +93,7 @@ public class ProductResponse {
                 .active(product.getActive())
                 .ratingAverage(product.getRatingAverage() != null ? product.getRatingAverage() : 0.0)
                 .totalReviews(product.getTotalReviews() != null ? product.getTotalReviews() : 0)
+                .variants(variantResponses)
                 .createdAt(product.getCreatedAt())
                 .updatedAt(product.getUpdatedAt())
                 .build();

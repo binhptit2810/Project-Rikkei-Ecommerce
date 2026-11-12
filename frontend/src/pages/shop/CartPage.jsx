@@ -167,7 +167,7 @@ export const CartPage = () => {
               <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden divide-y divide-slate-100">
                 {items.map((item) => (
                   <div
-                    key={item.id}
+                    key={`${item.id}-${item.selectedSize || 'default'}`}
                     className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 hover:bg-slate-50/60 transition-colors"
                   >
                     {/* Item Details */}
@@ -201,6 +201,12 @@ export const CartPage = () => {
                         >
                           {item.name}
                         </Link>
+                        {item.selectedSize && (
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
+                            <span>Kích cỡ:</span>
+                            <span className="font-extrabold">{item.selectedSize}</span>
+                          </div>
+                        )}
                         <div className="text-slate-900 font-extrabold text-sm tabular-nums">
                           {formatPrice(item.price)}
                         </div>
@@ -218,7 +224,7 @@ export const CartPage = () => {
                       <div className="flex items-center border border-slate-200 rounded-full bg-slate-50 overflow-hidden shadow-xs">
                         <button
                           type="button"
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          onClick={() => updateQuantity(item.id, item.quantity - 1, item.selectedSize)}
                           className="p-2 text-slate-600 hover:bg-white transition-colors cursor-pointer"
                           aria-label="Giảm số lượng"
                         >
@@ -229,7 +235,7 @@ export const CartPage = () => {
                         </span>
                         <button
                           type="button"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          onClick={() => updateQuantity(item.id, item.quantity + 1, item.selectedSize)}
                           disabled={item.stockQuantity && item.quantity >= item.stockQuantity}
                           className="p-2 text-slate-600 hover:bg-white disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
                           aria-label="Tăng số lượng"
@@ -248,7 +254,7 @@ export const CartPage = () => {
                       {/* Remove Button */}
                       <button
                         type="button"
-                        onClick={() => removeFromCart(item.id)}
+                        onClick={() => removeFromCart(item.id, item.selectedSize)}
                         className="text-slate-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50 transition-colors cursor-pointer"
                         title="Xóa khỏi giỏ hàng"
                         aria-label="Xóa món hàng"

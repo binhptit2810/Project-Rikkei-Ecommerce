@@ -117,8 +117,9 @@ public class OrderService {
             throw new BusinessException("Đơn hàng phải chứa ít nhất một sản phẩm");
         }
 
-        // 1. Gộp các sản phẩm trùng lặp trong request (nếu có)
-        Map<Long, Integer> consolidatedItems = new LinkedHashMap<>();
+        // 1. Gộp các sản phẩm trùng lặp trong request theo (productId, selectedSize) [TSK-D14-VDHH]
+        record OrderItemKey(Long productId, String selectedSize) {}
+        Map<OrderItemKey, Integer> consolidatedItems = new LinkedHashMap<>();
         for (OrderItemRequest itemReq : request.getItems()) {
             if (itemReq.getProductId() == null) {
                 log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}",
@@ -130,7 +131,9 @@ public class OrderService {
                         userId, "Số lượng sản phẩm đặt mua phải lớn hơn hoặc bằng 1");
                 throw new BusinessException("Số lượng sản phẩm đặt mua phải lớn hơn hoặc bằng 1");
             }
-            consolidatedItems.merge(itemReq.getProductId(), itemReq.getQuantity(), Integer::sum);
+            String rawSize = itemReq.getSelectedSize() != null && !itemReq.getSelectedSize().isBlank()
+                    ? itemReq.getSelectedSize().trim() : null;
+            consolidatedItems.merge(new OrderItemKey(itemReq.getProductId(), rawSize), itemReq.getQuantity(), Integer::sum);
         }
 
         // 2. Khởi tạo đối tượng đơn hàng với mã duy nhất
@@ -147,9 +150,10 @@ public class OrderService {
 
         BigDecimal totalAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
-        // 3. Duyệt từng sản phẩm: lấy thông tin từ DB, tính giá, lưu snapshot
-        for (Map.Entry<Long, Integer> entry : consolidatedItems.entrySet()) {
-            Long productId = entry.getKey();
+        // 3. Duyệt từng sản phẩm: lấy thông tin từ DB, tính giá, kiểm tra size, lưu snapshot
+        for (Map.Entry<OrderItemKey, Integer> entry : consolidatedItems.entrySet()) {
+            Long productId = entry.getKey().productId();
+            String selectedSize = entry.getKey().selectedSize();
             int quantity = entry.getValue();
 
             Product product = productRepository.findById(productId)
@@ -164,6 +168,36 @@ public class OrderService {
                         product.getName(), productId);
                 log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}", userId, reason);
                 throw new BusinessException(reason);
+            }
+
+            // Kiểm tra ràng buộc chọn kích cỡ nếu sản phẩm có biến thể kích cỡ [TSK-D14-VDHH]
+            if (product.getVariants() != null && !product.getVariants().isEmpty()) {
+                if (selectedSize == null || selectedSize.isBlank()) {
+                    String reason = "Vui lòng chọn kích cỡ trước khi tiếp tục cho sản phẩm: " + product.getName();
+                    log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}", userId, reason);
+                    throw new BusinessException(reason);
+                }
+
+                ProductVariant matchedVariant = product.getVariants().stream()
+                        .filter(v -> v.getSize().equalsIgnoreCase(selectedSize))
+                        .findFirst()
+                        .orElseThrow(() -> {
+                            String reason = String.format("Kích cỡ '%s' không tồn tại cho sản phẩm '%s'", selectedSize, product.getName());
+                            log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}", userId, reason);
+                            return new BusinessException(reason);
+                        });
+
+                if (matchedVariant.getStockQuantity() == null || matchedVariant.getStockQuantity() <= 0) {
+                    String reason = "Kích cỡ này hiện đã hết hàng.";
+                    log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}", userId, reason);
+                    throw new BusinessException(reason);
+                }
+
+                if (quantity > matchedVariant.getStockQuantity()) {
+                    String reason = "Số lượng sản phẩm vượt quá tồn kho hiện có.";
+                    log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}", userId, reason);
+                    throw new BusinessException(reason);
+                }
             }
 
             // Tuyệt đối lấy giá từ DB, không nhận hay tin tưởng giá từ client
@@ -183,6 +217,7 @@ public class OrderService {
                     .order(order)
                     .product(product)
                     .productName(product.getName())   // Snapshot tên sản phẩm
+                    .selectedSize(selectedSize)       // Snapshot kích cỡ đã chọn [TSK-D14-VDHH]
                     .unitPrice(unitPrice)             // Snapshot đơn giá từ DB (chuẩn hóa scale = 2)
                     .quantity(quantity)               // Số lượng mua
                     .subtotal(subtotal)               // Snapshot thành tiền (chuẩn hóa scale = 2)
@@ -706,6 +741,7 @@ public class OrderService {
                 .id(item.getId())
                 .productId(item.getProduct() != null ? item.getProduct().getId() : null)
                 .productName(item.getProductName())
+                .selectedSize(item.getSelectedSize())
                 .unitPrice(item.getUnitPrice())
                 .quantity(item.getQuantity())
                 .subtotal(item.getSubtotal())

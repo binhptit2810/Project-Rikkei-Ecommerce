@@ -82,6 +82,28 @@ public class Product {
     @EqualsAndHashCode.Exclude
     private List<Review> reviews = new ArrayList<>();
 
+    /** Danh sách các biến thể kích cỡ của sản phẩm [TSK-D14-VDHH]. */
+    @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private List<ProductVariant> variants = new ArrayList<>();
+
+    public void addVariant(ProductVariant variant) {
+        if (variants == null) {
+            variants = new ArrayList<>();
+        }
+        variants.add(variant);
+        variant.setProduct(this);
+    }
+
+    public void removeVariant(ProductVariant variant) {
+        if (variants != null) {
+            variants.remove(variant);
+            variant.setProduct(null);
+        }
+    }
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 

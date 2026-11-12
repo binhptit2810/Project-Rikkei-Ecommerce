@@ -42,8 +42,8 @@ const INITIAL_MESSAGES = [
   {
     id: 'welcome-1',
     sender: 'ai',
-    text: 'Xin chào quý khách! 👋 Tôi là **Rikkei AI** - Trợ lý mua sắm thông minh của bạn.\n\nTôi sẵn sàng hỗ trợ bạn tức thì:\n• 📦 Tra cứu hành trình đơn hàng (ví dụ: *"Đơn hàng ORD-123 của tôi đến đâu rồi?"*)\n• 📏 Tư vấn chọn size chuẩn vóc dáng\n• 🔄 Chính sách đổi trả & bảo hành 7 ngày\n• 🎟️ Săn mã giảm giá hot hôm nay\n\nBạn cần Rikkei AI hỗ trợ thông tin gì ạ?',
-    fullText: 'Xin chào quý khách! 👋 Tôi là **Rikkei AI** - Trợ lý mua sắm thông minh của bạn.\n\nTôi sẵn sàng hỗ trợ bạn tức thì:\n• 📦 Tra cứu hành trình đơn hàng (ví dụ: *"Đơn hàng ORD-123 của tôi đến đâu rồi?"*)\n• 📏 Tư vấn chọn size chuẩn vóc dáng\n• 🔄 Chính sách đổi trả & bảo hành 7 ngày\n• 🎟️ Săn mã giảm giá hot hôm nay\n\nBạn cần Rikkei AI hỗ trợ thông tin gì ạ?',
+    text: 'Xin chào quý khách! 👋 Tôi là Rikkei AI - Trợ lý mua sắm thông minh của bạn.\n\nTôi sẵn sàng hỗ trợ bạn tức thì:\n• 📦 Tra cứu hành trình đơn hàng (ví dụ: "Đơn hàng ORD-123 của tôi đến đâu rồi?")\n• 📏 Tư vấn chọn size chuẩn vóc dáng\n• 🔄 Chính sách đổi trả & bảo hành 7 ngày\n• 🎟️ Săn mã giảm giá hot hôm nay\n\nBạn cần Rikkei AI hỗ trợ thông tin gì ạ?',
+    fullText: 'Xin chào quý khách! 👋 Tôi là Rikkei AI - Trợ lý mua sắm thông minh của bạn.\n\nTôi sẵn sàng hỗ trợ bạn tức thì:\n• 📦 Tra cứu hành trình đơn hàng (ví dụ: "Đơn hàng ORD-123 của tôi đến đâu rồi?")\n• 📏 Tư vấn chọn size chuẩn vóc dáng\n• 🔄 Chính sách đổi trả & bảo hành 7 ngày\n• 🎟️ Săn mã giảm giá hot hôm nay\n\nBạn cần Rikkei AI hỗ trợ thông tin gì ạ?',
     isStreaming: false,
     timestamp: new Date().toISOString(),
   },
@@ -59,18 +59,23 @@ const loadChatHistory = () => {
     if (saved) {
       const parsed = JSON.parse(saved)
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Đảm bảo không có tin nhắn cũ nào ở trạng thái streaming khi reload
+        // Đảm bảo không có tin nhắn cũ nào ở trạng thái streaming khi reload và làm sạch markdown thô
         return parsed.map((m) => ({
           ...m,
           isStreaming: false,
-          text: m.text || m.fullText || '',
+          text: formatChatAssistantText(m.text || m.fullText || ''),
+          fullText: formatChatAssistantText(m.fullText || m.text || ''),
         }))
       }
     }
   } catch (_e) {
     // SessionStorage bị khoá hoặc lỗi JSON -> fallback về mặc định
   }
-  return INITIAL_MESSAGES
+  return INITIAL_MESSAGES.map((m) => ({
+    ...m,
+    text: formatChatAssistantText(m.text),
+    fullText: formatChatAssistantText(m.fullText),
+  }))
 }
 
 const saveChatHistory = (messages) => {
@@ -186,6 +191,14 @@ const formatChatAssistantText = (rawText) => {
       // Giữ nguyên chuỗi nếu không parse được JSON
     }
   }
+
+  // Loại bỏ hoàn toàn định dạng Markdown thô (dấu sao **, __, *, _, heading #) để câu trả lời hiển thị văn bản thuần tự nhiên
+  text = text
+    .replace(/\*\*(.*?)\*\*/g, '$1')
+    .replace(/__(.*?)__/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/_([^_\n]+)_/g, '$1')
+    .replace(/^\s*#{1,6}\s+/gm, '')
 
   return text
 }

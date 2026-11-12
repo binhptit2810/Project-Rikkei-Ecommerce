@@ -925,6 +925,13 @@ export const OrderDetailPage = () => {
                               >
                                 {item.productName}
                               </Link>
+                              {item.selectedSize && (
+                                <div className="mt-1">
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                                    Size: {item.selectedSize}
+                                  </span>
+                                </div>
+                              )}
                               <p className="text-xs text-slate-500 mt-1">
                                 {formatPrice(item.unitPrice)} × {item.quantity}
                               </p>
