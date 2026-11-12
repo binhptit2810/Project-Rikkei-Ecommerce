@@ -1,6 +1,8 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.dto.request.AdminReplyRequest;
 import com.example.ecommerce.dto.request.ReviewCreateRequest;
+import com.example.ecommerce.dto.request.ReviewRequest;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductRatingSummaryResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
@@ -9,7 +11,7 @@ import org.springframework.data.domain.Pageable;
 /**
  * Service xử lý nghiệp vụ Đánh giá & Nhận xét sản phẩm.
  * Phụ trách: Đỗ Đức Mạnh (DDM)
- * Task ID: [TSK-D11-DDM] Xây Dựng Phân Hệ Đánh Giá Sản Phẩm (Product Review & Rating Backend)
+ * Task ID: [TSK-D11-DDM] & [TSK-D14-DDM] Xây Dựng API Chỉnh Sửa, Xóa Đánh Giá & Admin Phản Hồi Đánh Giá
  */
 public interface ReviewService {
 
@@ -43,5 +45,32 @@ public interface ReviewService {
      * @return ReviewResponse
      */
     ReviewResponse createReview(Long productId, ReviewCreateRequest request);
+
+    /**
+     * Chỉnh sửa đánh giá sản phẩm (Chính chủ người dùng).
+     *
+     * @param productId ID sản phẩm
+     * @param reviewId  ID đánh giá cần chỉnh sửa
+     * @param request   Dữ liệu cập nhật (rating, comment)
+     * @return ReviewResponse
+     */
+    ReviewResponse updateReview(Long productId, Long reviewId, ReviewRequest request);
+
+    /**
+     * Xóa đánh giá sản phẩm (Chính chủ hoặc Quản trị viên ADMIN).
+     *
+     * @param productId ID sản phẩm
+     * @param reviewId  ID đánh giá cần xóa
+     */
+    void deleteReview(Long productId, Long reviewId);
+
+    /**
+     * Quản trị viên phản hồi trực tiếp đánh giá của khách hàng.
+     *
+     * @param reviewId ID đánh giá
+     * @param request  Nội dung phản hồi từ Admin
+     * @return ReviewResponse
+     */
+    ReviewResponse replyReview(Long reviewId, AdminReplyRequest request);
 }
 

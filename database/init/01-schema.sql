@@ -230,13 +230,15 @@ CREATE TABLE IF NOT EXISTS coupons (
 -- rating: 1 -> 5 sao
 -- =============================================================================
 CREATE TABLE IF NOT EXISTS reviews (
-    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
-    product_id  BIGINT NOT NULL,
-    user_id     BIGINT NOT NULL,
-    rating      INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
-    comment     TEXT,
-    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+    product_id     BIGINT NOT NULL,
+    user_id        BIGINT NOT NULL,
+    rating         INT NOT NULL CHECK (rating >= 1 AND rating <= 5),
+    comment        TEXT,
+    admin_reply    TEXT,
+    admin_reply_at DATETIME,
+    created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     CONSTRAINT fk_reviews_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
     CONSTRAINT fk_reviews_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
