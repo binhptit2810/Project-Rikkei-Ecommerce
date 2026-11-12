@@ -237,6 +237,7 @@ CREATE TABLE IF NOT EXISTS reviews (
     comment        TEXT,
     admin_reply    TEXT,
     admin_reply_at DATETIME,
+    is_visible     BOOLEAN NOT NULL DEFAULT TRUE,
     created_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at     DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -245,7 +246,25 @@ CREATE TABLE IF NOT EXISTS reviews (
     CONSTRAINT uk_reviews_product_user UNIQUE (product_id, user_id),
     INDEX idx_reviews_product (product_id),
     INDEX idx_reviews_product_created (product_id, created_at),
+    INDEX idx_reviews_product_visible (product_id, is_visible),
+    INDEX idx_reviews_visible (is_visible),
     INDEX idx_reviews_user (user_id),
     INDEX idx_reviews_rating (rating),
     INDEX idx_reviews_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================================
+-- Bảng review_images — Hình ảnh đính kèm Đánh giá sản phẩm [TSK-D14-CCT]
+-- Tối đa 3 ảnh/đánh giá, lưu trữ đường dẫn ảnh tương đối trên Local Storage
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS review_images (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    review_id   BIGINT NOT NULL,
+    image_url   VARCHAR(500) NOT NULL,
+    image_path  VARCHAR(500) NOT NULL,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_review_images_review FOREIGN KEY (review_id) REFERENCES reviews(id) ON DELETE CASCADE,
+    INDEX idx_review_images_review (review_id),
+    INDEX idx_review_images_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

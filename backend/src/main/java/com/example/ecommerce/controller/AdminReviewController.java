@@ -1,19 +1,21 @@
 package com.example.ecommerce.controller;
 
-import com.example.ecommerce.dto.request.AdminReplyRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import com.example.ecommerce.service.ReviewService;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Controller quản trị đánh giá sản phẩm dành cho Admin.
- * Phụ trách: Đỗ Đức Mạnh (DDM)
- * Task ID: [TSK-D14-DDM] Xây Dựng API Chỉnh Sửa, Xóa Đánh Giá & Admin Phản Hồi Đánh Giá
+ * Controller quản trị Đánh giá & Nhận xét sản phẩm dành riêng cho Quản trị viên (Admin).
+ * Phụ trách: Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D14-CCT] Tích Hợp Upload Ảnh Đánh Giá (Local Storage) & API Quản Lý Đánh Giá
+ *
+ * Tất cả endpoint yêu cầu quyền ADMIN:
+ * - Bảo vệ Filter Chain: /api/v1/admin/** (hasRole('ADMIN'))
+ * - Bảo vệ Method Security: @PreAuthorize("hasRole('ADMIN')")
  */
 @RestController
 @RequestMapping("/api/v1/admin/reviews")
@@ -24,29 +26,31 @@ public class AdminReviewController {
     private final ReviewService reviewService;
 
     /**
-     * Admin phản hồi trực tiếp đánh giá của khách hàng.
-     * POST /api/v1/admin/reviews/{reviewId}/reply
+     * Chuyển đổi trạng thái hiển thị công khai (ẩn / hiện) của đánh giá.
+     * PUT /api/v1/admin/reviews/{id}/toggle-status
+     *
+     * @param id ID đánh giá
+     * @return ApiResponse chứa ReviewResponse với trạng thái isVisible mới
      */
-    @PostMapping("/{reviewId}/reply")
-    public ResponseEntity<ApiResponse<ReviewResponse>> replyReview(
-            @PathVariable Long reviewId,
-            @Valid @RequestBody AdminReplyRequest request) {
-
-        ReviewResponse response = reviewService.replyReview(reviewId, request);
-        return ResponseEntity.ok(ApiResponse.success("Phản hồi đánh giá thành công", response));
+    @PutMapping("/{id}/toggle-status")
+    public ResponseEntity<ApiResponse<ReviewResponse>> toggleReviewVisibility(@PathVariable Long id) {
+        ReviewResponse response = reviewService.toggleReviewVisibility(id);
+        String message = Boolean.TRUE.equals(response.getIsVisible())
+                ? "Hiển thị đánh giá thành công"
+                : "Ẩn đánh giá thành công";
+        return ResponseEntity.ok(ApiResponse.success(message, response));
     }
 
     /**
-     * Admin cập nhật lại câu trả lời / phản hồi đánh giá.
-     * PUT /api/v1/admin/reviews/{reviewId}/reply
+     * Xóa vĩnh viễn đánh giá sản phẩm và dọn dẹp các tệp ảnh khỏi Local Storage.
+     * DELETE /api/v1/admin/reviews/{id}
+     *
+     * @param id ID đánh giá cần xóa
+     * @return ApiResponse thông báo thành công
      */
-    @PutMapping("/{reviewId}/reply")
-    public ResponseEntity<ApiResponse<ReviewResponse>> updateReplyReview(
-            @PathVariable Long reviewId,
-            @Valid @RequestBody AdminReplyRequest request) {
-
-        ReviewResponse response = reviewService.replyReview(reviewId, request);
-        return ResponseEntity.ok(ApiResponse.success("Cập nhật phản hồi thành công", response));
+    @DeleteMapping("/{id}")
+    public ResponseEntity<ApiResponse<Void>> deleteReview(@PathVariable Long id) {
+        reviewService.deleteReviewByAdmin(id);
+        return ResponseEntity.ok(ApiResponse.success("Xóa đánh giá vĩnh viễn thành công", null));
     }
 }
-

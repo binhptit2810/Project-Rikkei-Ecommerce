@@ -7,11 +7,13 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * DTO phản hồi thông tin chi tiết một đánh giá sản phẩm.
- * Phụ trách: Đỗ Đức Mạnh (DDM)
- * Task ID: [TSK-D11-DDM] Xây Dựng Phân Hệ Đánh Giá Sản Phẩm (Product Review & Rating Backend)
+ * Phụ trách: Đỗ Đức Mạnh (DDM), Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D11-DDM] & [TSK-D14-CCT] Tích Hợp Upload Ảnh Đánh Giá (Local Storage) & API Quản Lý Đánh Giá
  */
 @Data
 @Builder
@@ -29,6 +31,8 @@ public class ReviewResponse {
     private String comment;
     private String adminReply;
     private LocalDateTime adminReplyAt;
+    private Boolean isVisible;
+    private List<ReviewImageResponse> images;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
@@ -41,6 +45,10 @@ public class ReviewResponse {
         Long uId = review.getUser() != null ? review.getUser().getId() : null;
         String fullName = review.getUser() != null ? review.getUser().getFullName() : null;
 
+        List<ReviewImageResponse> imgResponses = (review.getImages() != null)
+                ? review.getImages().stream().map(ReviewImageResponse::fromEntity).toList()
+                : Collections.emptyList();
+
         return ReviewResponse.builder()
                 .id(review.getId())
                 .productId(prodId)
@@ -52,6 +60,8 @@ public class ReviewResponse {
                 .comment(review.getComment())
                 .adminReply(review.getAdminReply())
                 .adminReplyAt(review.getAdminReplyAt())
+                .isVisible(review.getIsVisible())
+                .images(imgResponses)
                 .createdAt(review.getCreatedAt())
                 .updatedAt(review.getUpdatedAt())
                 .build();
