@@ -23,6 +23,8 @@ public class ReviewResponse {
 
     private Long id;
     private Long productId;
+    private String productName;
+    private String productImage;
     private Long userId;
     private String userName;
     private String userFullName;
@@ -42,6 +44,8 @@ public class ReviewResponse {
         }
 
         Long prodId = review.getProduct() != null ? review.getProduct().getId() : null;
+        String prodName = review.getProduct() != null ? review.getProduct().getName() : null;
+        String prodImg = review.getProduct() != null ? review.getProduct().getImageUrl() : null;
         Long uId = review.getUser() != null ? review.getUser().getId() : null;
         String fullName = review.getUser() != null ? review.getUser().getFullName() : null;
 
@@ -52,6 +56,8 @@ public class ReviewResponse {
         return ReviewResponse.builder()
                 .id(review.getId())
                 .productId(prodId)
+                .productName(prodName)
+                .productImage(prodImg)
                 .userId(uId)
                 .userName(fullName)
                 .userFullName(fullName)

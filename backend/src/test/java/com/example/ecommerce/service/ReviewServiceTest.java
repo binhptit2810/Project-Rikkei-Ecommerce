@@ -468,4 +468,52 @@ class ReviewServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessageContaining("Đánh giá không tồn tại");
     }
+
+    @Test
+    @DisplayName("Test 12: Không cho phép upload ảnh vào review đã bị ẩn -> 400 BadRequestException")
+    void uploadReviewImages_hiddenReview_throwsBadRequestException() {
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+
+        Review hiddenReview = Review.builder()
+                .id(100L)
+                .user(testUser)
+                .product(testProduct)
+                .rating(5)
+                .isVisible(false) // Review đã bị Admin ẩn
+                .build();
+
+        when(reviewRepository.findByIdForUpdate(100L)).thenReturn(Optional.of(hiddenReview));
+
+        MockMultipartFile file = new MockMultipartFile("files", "img.jpg", "image/jpeg", new byte[]{1, 2});
+
+        assertThatThrownBy(() -> reviewService.uploadReviewImages(100L, List.of(file)))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Không thể tải lên hình ảnh cho đánh giá đã bị ẩn");
+
+        verify(fileStorageService, never()).storeReviewImage(any(), any());
+    }
+
+    @Test
+    @DisplayName("Test 13: Lấy danh sách đánh giá cho Admin có phân trang thành công")
+    void getAllReviewsForAdmin_success() {
+        Pageable pageable = PageRequest.of(0, 10);
+        Review r1 = Review.builder()
+                .id(1L)
+                .product(testProduct)
+                .user(testUser)
+                .rating(5)
+                .comment("Hài lòng")
+                .isVisible(true)
+                .build();
+
+        Page<Review> page = new PageImpl<>(List.of(r1), pageable, 1);
+        when(reviewRepository.findAllForAdmin(eq(true), eq(pageable))).thenReturn(page);
+
+        PageResponse<ReviewResponse> response = reviewService.getAllReviewsForAdmin(true, pageable);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getContent()).hasSize(1);
+        assertThat(response.getContent().get(0).getId()).isEqualTo(1L);
+        assertThat(response.getContent().get(0).getProductName()).isEqualTo("Áo thun nam basic Cotton");
+    }
 }

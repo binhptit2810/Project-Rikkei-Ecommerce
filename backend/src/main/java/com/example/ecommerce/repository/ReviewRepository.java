@@ -62,4 +62,12 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
      */
     @Query("SELECT r.rating, COUNT(r) FROM Review r WHERE r.product.id = :productId AND r.isVisible = true GROUP BY r.rating")
     List<Object[]> countRatingsGrouped(@Param("productId") Long productId);
+
+    /**
+     * Lấy danh sách đánh giá phục vụ Quản trị viên (Admin) kèm tìm nạp Product và User,
+     * hỗ trợ lọc theo trạng thái isVisible (null = lấy tất cả).
+     */
+    @Query(value = "SELECT r FROM Review r LEFT JOIN FETCH r.product LEFT JOIN FETCH r.user WHERE (:isVisible IS NULL OR r.isVisible = :isVisible)",
+           countQuery = "SELECT COUNT(r) FROM Review r WHERE (:isVisible IS NULL OR r.isVisible = :isVisible)")
+    Page<Review> findAllForAdmin(@Param("isVisible") Boolean isVisible, Pageable pageable);
 }

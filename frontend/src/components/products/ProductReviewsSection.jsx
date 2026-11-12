@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react'
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import {
   Star,
@@ -16,6 +16,9 @@ import {
   Trash2,
   AlertTriangle,
   Check,
+  Image as ImageIcon,
+  UploadCloud,
+  ZoomIn,
 } from 'lucide-react'
 import reviewService from '../../services/reviewService'
 import { useAuthStore } from '../../store/useAuthStore'
@@ -50,7 +53,7 @@ export const ProductReviewsSection = ({ productId }) => {
   const [page, setPage] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
   const [totalElements, setTotalElements] = useState(0)
-  const [loadingSummary, setLoadingSummary] = useState(false)
+  const [_loadingSummary, setLoadingSummary] = useState(false)
   const [loadingReviews, setLoadingReviews] = useState(false)
 
   // --- Bộ lọc nhanh theo số sao (null: Tất cả, 1-5: Lọc cụ thể) ---
@@ -61,6 +64,13 @@ export const ProductReviewsSection = ({ productId }) => {
   const [hoverRating, setHoverRating] = useState(0)
   const [comment, setComment] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  // --- State Upload Hình ảnh Đánh giá (TSK-D14-CCT) ---
+  const [selectedImages, setSelectedImages] = useState([]) // File[]
+  const [previewImages, setPreviewImages] = useState([]) // { url, name, size }[]
+  const [uploadingImages, setUploadingImages] = useState(false)
+  const [activeLightboxImage, setActiveLightboxImage] = useState(null)
+  const fileInputRef = useRef(null)
 
   // --- Toast Notification ---
   const [toast, setToast] = useState(null) // { type: 'success' | 'error', message: string }
@@ -133,11 +143,80 @@ export const ProductReviewsSection = ({ productId }) => {
     fetchReviews(0)
   }, [fetchSummary, fetchReviews])
 
+  // Tự động thu hồi object URL khi unmount hoặc đổi ảnh
+  useEffect(() => {
+    return () => {
+      previewImages.forEach((img) => URL.revokeObjectURL(img.url))
+    }
+  }, [previewImages])
+
   // Lọc đánh giá theo mức sao đã chọn
   const filteredReviews = useMemo(() => {
     if (selectedRatingFilter === null) return reviews
     return reviews.filter((r) => r.rating === selectedRatingFilter)
   }, [reviews, selectedRatingFilter])
+
+  // --- Xử lý chọn hình ảnh tải lên [TSK-D14-CCT] ---
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+
+    if (selectedImages.length + files.length > 3) {
+      setToast({
+        type: 'error',
+        message: `Mỗi đánh giá chỉ được đính kèm tối đa 3 ảnh. Bạn đã chọn ${selectedImages.length} ảnh.`,
+      })
+      if (fileInputRef.current) fileInputRef.current.value = ''
+      return
+    }
+
+    const validFiles = []
+    const newPreviews = []
+
+    for (const file of files) {
+      const ext = file.name.substring(file.name.lastIndexOf('.')).toLowerCase()
+      const isValidExt = ['.jpg', '.jpeg', '.png'].includes(ext)
+      const isValidMime = ['image/jpeg', 'image/png'].includes(file.type?.toLowerCase())
+
+      if (!isValidExt && !isValidMime) {
+        setToast({
+          type: 'error',
+          message: `Tệp "${file.name}" không hợp lệ. Chỉ chấp nhận các định dạng ảnh JPG/JPEG hoặc PNG.`,
+        })
+        continue
+      }
+
+      if (file.size >= 5 * 1024 * 1024) {
+        setToast({
+          type: 'error',
+          message: `Tệp "${file.name}" có dung lượng từ 5MB trở lên. Yêu cầu dung lượng nhỏ hơn 5MB mỗi ảnh.`,
+        })
+        continue
+      }
+
+      validFiles.push(file)
+      newPreviews.push({
+        url: URL.createObjectURL(file),
+        name: file.name,
+        size: (file.size / 1024).toFixed(1) + ' KB',
+      })
+    }
+
+    if (validFiles.length > 0) {
+      setSelectedImages((prev) => [...prev, ...validFiles])
+      setPreviewImages((prev) => [...prev, ...newPreviews])
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleRemoveSelectedImage = (index) => {
+    if (previewImages[index]?.url) {
+      URL.revokeObjectURL(previewImages[index].url)
+    }
+    setSelectedImages((prev) => prev.filter((_, i) => i !== index))
+    setPreviewImages((prev) => prev.filter((_, i) => i !== index))
+  }
 
   // Xử lý gửi đánh giá
   const handleSubmitReview = async (e) => {
@@ -185,14 +264,45 @@ export const ProductReviewsSection = ({ productId }) => {
         comment: trimmedComment,
       })
 
-      if (res?.success) {
-        setToast({
-          type: 'success',
-          message: 'Đánh giá sản phẩm thành công! Cảm ơn nhận xét quý giá của bạn.',
-        })
+      if (res?.success && res.data?.id) {
+        const reviewId = res.data.id
+
+        // Nếu có ảnh đính kèm, thực hiện upload ảnh ngay sau khi tạo review [TSK-D14-CCT]
+        if (selectedImages.length > 0) {
+          setUploadingImages(true)
+          try {
+            await reviewService.uploadReviewImages(reviewId, selectedImages)
+            setToast({
+              type: 'success',
+              message: 'Gửi nhận xét và hình ảnh đánh giá thành công! Cảm ơn nhận xét quý giá của bạn.',
+            })
+          } catch (uploadErr) {
+            console.error('Lỗi upload ảnh đánh giá:', uploadErr)
+            const uploadErrMsg =
+              uploadErr.response?.data?.message ||
+              uploadErr.message ||
+              'Không thể tải ảnh đính kèm.'
+            setToast({
+              type: 'error',
+              message: `Đánh giá đã được lưu, nhưng tải ảnh đính kèm thất bại: ${uploadErrMsg}`,
+            })
+          } finally {
+            setUploadingImages(false)
+          }
+        } else {
+          setToast({
+            type: 'success',
+            message: 'Đánh giá sản phẩm thành công! Cảm ơn nhận xét quý giá của bạn.',
+          })
+        }
+
+        // Dọn dẹp form và preview
         setComment('')
         setUserRating(5)
         setHoverRating(0)
+        previewImages.forEach((img) => URL.revokeObjectURL(img.url))
+        setSelectedImages([])
+        setPreviewImages([])
 
         // Reload lại cả summary và danh sách đánh giá mới nhất
         fetchSummary()
@@ -591,6 +701,74 @@ export const ProductReviewsSection = ({ productId }) => {
               />
             </div>
 
+            {/* Đính kèm hình ảnh đánh giá (tối đa 3 ảnh, < 5MB) [TSK-D14-CCT] */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                  <ImageIcon className="w-4 h-4 text-slate-500" />
+                  <span>Hình ảnh thực tế đính kèm (tối đa 3 ảnh)</span>
+                </label>
+                <span className="text-[11px] font-medium text-slate-400">
+                  PNG, JPG &bull; Dưới 5MB/ảnh
+                </span>
+              </div>
+
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/jpg"
+                multiple
+                className="hidden"
+                onChange={handleImageSelect}
+                disabled={submitting || uploadingImages || selectedImages.length >= 3}
+              />
+
+              {/* Danh sách ảnh đã chọn xem trước */}
+              {previewImages.length > 0 && (
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                  {previewImages.map((img, idx) => (
+                    <div
+                      key={idx}
+                      className="relative group rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 aspect-square shadow-2xs"
+                    >
+                      <img
+                        src={img.url}
+                        alt={img.name}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-slate-900/50 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col justify-between p-1.5">
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveSelectedImage(idx)}
+                            className="p-1 rounded-full bg-red-600 hover:bg-red-700 text-white shadow-xs cursor-pointer"
+                            title="Xóa ảnh này"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                        <span className="text-[9px] text-white font-medium truncate bg-slate-900/80 px-1 py-0.5 rounded text-center">
+                          {img.size}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {selectedImages.length < 3 && (
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={submitting || uploadingImages}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl border border-dashed border-slate-300 hover:border-blue-400 bg-slate-50/70 hover:bg-blue-50/50 text-xs font-semibold text-slate-600 hover:text-blue-600 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <UploadCloud className="w-4 h-4 text-blue-500" />
+                  <span>Chọn ảnh đính kèm ({selectedImages.length}/3)</span>
+                </button>
+              )}
+            </div>
+
             {/* Nút gửi đánh giá */}
             <div className="flex justify-end">
               <button
@@ -824,6 +1002,35 @@ export const ProductReviewsSection = ({ productId }) => {
                     </div>
                   )}
 
+                  {/* Hiển thị hình ảnh đính kèm của đánh giá nếu có [TSK-D14-CCT] */}
+                  {review.images && review.images.length > 0 && (
+                    <div className="mt-3 pl-13">
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        {review.images.map((img) => (
+                          <button
+                            key={img.id}
+                            type="button"
+                            onClick={() => setActiveLightboxImage(img.imageUrl)}
+                            className="group relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-blue-400 transition-all cursor-pointer focus:outline-hidden"
+                            title="Nhấp để xem ảnh lớn"
+                          >
+                            <img
+                              src={img.imageUrl}
+                              alt="Hình ảnh thực tế đính kèm"
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                              onError={(e) => {
+                                e.currentTarget.style.display = 'none'
+                              }}
+                            />
+                            <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <ZoomIn className="w-4 h-4 text-white" />
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Phản hồi từ Người bán / Admin */}
                   {review.adminReply && (
                     <div className="mt-4 pl-13">
@@ -926,6 +1133,33 @@ export const ProductReviewsSection = ({ productId }) => {
                 <span>{isDeleting ? 'Đang xóa...' : 'Xác nhận xóa'}</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Lightbox xem ảnh kích thước lớn [TSK-D14-CCT] */}
+      {activeLightboxImage && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in duration-200"
+          onClick={() => setActiveLightboxImage(null)}
+        >
+          <div
+            className="relative max-w-3xl max-h-[85vh] bg-white rounded-3xl overflow-hidden shadow-2xl p-2"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => setActiveLightboxImage(null)}
+              className="absolute top-4 right-4 z-10 p-2 rounded-full bg-slate-900/70 hover:bg-slate-900 text-white transition-colors cursor-pointer"
+              title="Đóng (ESC)"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={activeLightboxImage}
+              alt="Xem ảnh lớn"
+              className="max-h-[80vh] w-auto mx-auto object-contain rounded-2xl"
+            />
           </div>
         </div>
       )}

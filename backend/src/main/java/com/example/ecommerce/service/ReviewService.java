@@ -104,4 +104,14 @@ public interface ReviewService {
      * @param id ID đánh giá cần xóa
      */
     void deleteReviewByAdmin(Long id);
+
+    /**
+     * Lấy danh sách tất cả đánh giá phục vụ Quản trị viên (Admin) kèm phân trang và lọc theo trạng thái hiển thị.
+     * [TSK-D14-CCT]
+     *
+     * @param isVisible Lọc theo trạng thái hiển thị (null: tất cả, true: hiển thị, false: đã ẩn)
+     * @param pageable  Thông tin phân trang và sắp xếp
+     * @return PageResponse chứa danh sách ReviewResponse
+     */
+    PageResponse<ReviewResponse> getAllReviewsForAdmin(Boolean isVisible, Pageable pageable);
 }

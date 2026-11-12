@@ -1,9 +1,13 @@
 package com.example.ecommerce.controller;
 
 import com.example.ecommerce.dto.response.ApiResponse;
+import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import com.example.ecommerce.service.ReviewService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -24,6 +28,27 @@ import org.springframework.web.bind.annotation.*;
 public class AdminReviewController {
 
     private final ReviewService reviewService;
+
+    /**
+     * Lấy danh sách tất cả đánh giá phục vụ Quản trị viên (Admin) kèm phân trang và lọc theo trạng thái hiển thị.
+     * GET /api/v1/admin/reviews?page=0&size=10&isVisible=true
+     *
+     * @param page      Số trang (mặc định: 0)
+     * @param size      Số phần tử mỗi trang (mặc định: 10)
+     * @param isVisible Lọc theo trạng thái hiển thị (null: tất cả, true: hiển thị, false: bị ẩn)
+     * @return ApiResponse chứa PageResponse<ReviewResponse>
+     */
+    @GetMapping
+    public ResponseEntity<ApiResponse<PageResponse<ReviewResponse>>> getAllReviews(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Boolean isVisible) {
+        int pageIndex = Math.max(0, page);
+        int pageSize = size <= 0 ? 10 : Math.min(size, 100);
+        Pageable pageable = PageRequest.of(pageIndex, pageSize, Sort.by(Sort.Direction.DESC, "createdAt"));
+        PageResponse<ReviewResponse> response = reviewService.getAllReviewsForAdmin(isVisible, pageable);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
 
     /**
      * Chuyển đổi trạng thái hiển thị công khai (ẩn / hiện) của đánh giá.

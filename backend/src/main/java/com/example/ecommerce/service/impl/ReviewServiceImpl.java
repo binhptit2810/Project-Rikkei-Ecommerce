@@ -288,6 +288,12 @@ public class ReviewServiceImpl implements ReviewService {
             throw new AccessDeniedException("Bạn không có quyền đăng tải hình ảnh cho đánh giá của người khác");
         }
 
+        // [TSK-D14-CCT] Kiểm tra trạng thái review: không cho phép upload ảnh vào review đã bị ẩn
+        if (!Boolean.TRUE.equals(review.getIsVisible())) {
+            log.warn("User #{} attempted upload image to hidden review #{}", currentUser.getId(), reviewId);
+            throw new BadRequestException("Không thể tải lên hình ảnh cho đánh giá đã bị ẩn");
+        }
+
         // Kiểm tra tổng số lượng ảnh hiện có + số lượng ảnh tải lên
         int currentCount = reviewImageRepository.countByReviewId(reviewId);
         if (currentCount + files.size() > 3) {
@@ -389,6 +395,13 @@ public class ReviewServiceImpl implements ReviewService {
         String adminIdentity = getAdminIdentifier();
         log.info("Admin [{}] deleted review #{} for product #{}. Scheduled cleanup for {} images.",
                 adminIdentity, id, productId, imagePathsToDelete.size());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public PageResponse<ReviewResponse> getAllReviewsForAdmin(Boolean isVisible, Pageable pageable) {
+        Page<Review> reviewPage = reviewRepository.findAllForAdmin(isVisible, pageable);
+        return PageResponse.from(reviewPage, ReviewResponse::fromEntity);
     }
 
     /**

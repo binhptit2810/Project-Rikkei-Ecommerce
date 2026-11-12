@@ -1,5 +1,6 @@
 package com.example.ecommerce.controller;
 
+import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.service.RefreshTokenService;
@@ -16,8 +17,11 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.List;
+
 import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -149,6 +153,59 @@ class AdminReviewControllerTest {
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.success").value(false));
+    }
+
+    // =========================================================================
+    // TESTS CHO GET ALL REVIEWS (ADMIN)
+    // =========================================================================
+
+    @Test
+    @DisplayName("Admin lấy danh sách review thành công -> 200 OK")
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    void getAllReviews_asAdmin_success() throws Exception {
+        ReviewResponse r = ReviewResponse.builder()
+                .id(1L)
+                .productId(10L)
+                .productName("Sản phẩm mẫu")
+                .rating(5)
+                .comment("Hài lòng")
+                .isVisible(true)
+                .build();
+
+        PageResponse<ReviewResponse> pageResponse = PageResponse.<ReviewResponse>builder()
+                .content(List.of(r))
+                .pageNumber(0)
+                .pageSize(10)
+                .totalElements(1)
+                .totalPages(1)
+                .last(true)
+                .build();
+
+        when(reviewService.getAllReviewsForAdmin(eq(null), any())).thenReturn(pageResponse);
+
+        mockMvc.perform(get("/api/v1/admin/reviews")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.content[0].id").value(1))
+                .andExpect(jsonPath("$.data.content[0].productName").value("Sản phẩm mẫu"));
+    }
+
+    @Test
+    @DisplayName("Customer gọi API lấy danh sách review Admin -> 403 Forbidden")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void getAllReviews_asCustomer_forbidden() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/reviews")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Khách chưa đăng nhập gọi API lấy danh sách review Admin -> 401 Unauthorized")
+    void getAllReviews_unauthenticated_unauthorized() throws Exception {
+        mockMvc.perform(get("/api/v1/admin/reviews")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isUnauthorized());
     }
 }
 

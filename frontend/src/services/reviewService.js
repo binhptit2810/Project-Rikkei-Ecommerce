@@ -82,6 +82,64 @@ export const reviewService = {
     const response = await apiClient.post(`/admin/reviews/${reviewId}/reply`, replyData)
     return response.data
   },
+
+  /**
+   * Tải lên từ 1 đến 3 ảnh đính kèm cho đánh giá (Customer - [TSK-D14-CCT]).
+   * @param {number|string} reviewId ID đánh giá
+   * @param {File[]|File} files Mảng các tệp File hoặc một File đơn
+   * @returns {Promise<Object>} ApiResponse chứa danh sách ReviewImageResponse
+   */
+  async uploadReviewImages(reviewId, files) {
+    const formData = new FormData()
+    if (Array.isArray(files)) {
+      files.forEach((f) => formData.append('files', f))
+    } else if (files) {
+      formData.append('files', files)
+    }
+
+    const response = await apiClient.post(`/reviews/${reviewId}/images`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    })
+    return response.data
+  },
+
+  /**
+   * Lấy danh sách tất cả đánh giá phục vụ Quản trị viên (Admin - [TSK-D14-CCT]).
+   * @param {number} [page=0] Số trang
+   * @param {number} [size=10] Kích thước trang
+   * @param {boolean|null} [isVisible=null] Lọc theo trạng thái hiển thị
+   * @returns {Promise<Object>} ApiResponse chứa PageResponse<ReviewResponse>
+   */
+  async getAdminReviews(page = 0, size = 10, isVisible = null) {
+    const params = { page, size }
+    if (isVisible !== null && isVisible !== undefined && isVisible !== '') {
+      params.isVisible = isVisible
+    }
+    const response = await apiClient.get('/admin/reviews', { params })
+    return response.data
+  },
+
+  /**
+   * Chuyển đổi trạng thái hiển thị (ẩn / hiện) của đánh giá (Admin - [TSK-D14-CCT]).
+   * @param {number|string} reviewId ID đánh giá
+   * @returns {Promise<Object>} ApiResponse chứa ReviewResponse với isVisible mới
+   */
+  async toggleReviewVisibility(reviewId) {
+    const response = await apiClient.put(`/admin/reviews/${reviewId}/toggle-status`)
+    return response.data
+  },
+
+  /**
+   * Xóa vĩnh viễn đánh giá sản phẩm và dọn tệp ảnh khỏi storage (Admin - [TSK-D14-CCT]).
+   * @param {number|string} reviewId ID đánh giá
+   * @returns {Promise<Object>} ApiResponse
+   */
+  async deleteReviewByAdmin(reviewId) {
+    const response = await apiClient.delete(`/admin/reviews/${reviewId}`)
+    return response.data
+  },
 }
 
 export default reviewService
