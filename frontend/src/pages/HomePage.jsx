@@ -27,6 +27,7 @@ import categoryService from '../services/categoryService'
 import { useAuthStore } from '../store/useAuthStore'
 import { useCartStore } from '../store/useCartStore'
 import ProductCard from '../components/common/ProductCard'
+import BestSellerSection from '../components/products/BestSellerSection'
 
 // Các thương hiệu đối tác nổi tiếng (Brand Ticker)
 const BRAND_PARTNERS = [
@@ -53,7 +54,6 @@ export const HomePage = () => {
   // Dữ liệu từ database MySQL qua API
   const [categories, setCategories] = useState([])
   const [featuredProducts, setFeaturedProducts] = useState([])
-  const [bestSellers, setBestSellers] = useState([])
   const [selectedCategoryTab, setSelectedCategoryTab] = useState('ALL')
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [productsError, setProductsError] = useState(null)
@@ -103,18 +103,7 @@ export const HomePage = () => {
     }
   }, [])
 
-  // 3. Tải danh sách sản phẩm Best Sellers độc lập (4 sản phẩm)
-  const fetchBestSellers = async () => {
-    try {
-      const res = await productService.getBestSellers({ size: 4 })
-      const items = res.data?.content || res.data?.products || (Array.isArray(res.data) ? res.data : [])
-      setBestSellers(items)
-    } catch (err) {
-      console.error('Không thể tải sản phẩm Best Sellers:', err)
-    }
-  }
-
-  // 4. Tải Deal of the Day từ API backend thật
+  // 3. Tải Deal of the Day từ API backend thật
   const fetchDealOfTheDay = async () => {
     setLoadingDeal(true)
     setDealError(null)
@@ -134,10 +123,9 @@ export const HomePage = () => {
     }
   }
 
-  // Tải danh mục, best sellers và deal khi mở trang
+  // Tải danh mục và deal khi mở trang
   useEffect(() => {
     fetchCategories()
-    fetchBestSellers()
     fetchDealOfTheDay()
   }, [])
 
@@ -876,49 +864,8 @@ export const HomePage = () => {
         )}
       </motion.section>
 
-      {/* 7. "MOST LOVED" BEST SELLERS (Scroll Reveal) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <motion.div 
-          initial={shouldReduceMotion ? {} : { opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-50px' }}
-          transition={{ duration: 0.5 }}
-          className="flex items-end justify-between mb-8"
-        >
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-orange-50 text-orange-600 text-xs font-bold uppercase tracking-wider mb-2">
-              <span>🏆 BÁN CHẠY NHẤT</span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Sản phẩm bán chạy nhất
-            </h2>
-          </div>
-          <Link
-            to="/products"
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 group transition-colors"
-          >
-            <span>Xem tất cả</span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </Link>
-        </motion.div>
-
-        {/* Product Grid */}
-        <motion.div 
-          initial={shouldReduceMotion ? {} : { opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.4 }}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
-        >
-          {(bestSellers.length > 0 ? bestSellers : featuredProducts.slice(0, 4)).map((prod) => (
-            <ProductCard
-              key={prod.id}
-              product={prod}
-              onAddToCart={handleAddToCart}
-            />
-          ))}
-        </motion.div>
-      </section>
+      {/* 7. BEST SELLER SECTION – SẢN PHẨM BÁN CHẠY NHẤT THÁNG */}
+      <BestSellerSection limit={8} />
 
     </div>
   )

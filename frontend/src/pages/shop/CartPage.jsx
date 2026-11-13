@@ -56,13 +56,14 @@ export const CartPage = () => {
 
     // Validate mọi mặt hàng: 1 <= quantity <= stockQuantity
     for (const item of items) {
+      const itemName = item.name || item.productName || 'Sản phẩm'
       if (!item.quantity || item.quantity <= 0) {
-        setCheckoutNotice(`Sản phẩm "${item.name}" có số lượng không hợp lệ. Vui lòng cập nhật lại.`)
+        setCheckoutNotice(`Sản phẩm "${itemName}" có số lượng không hợp lệ. Vui lòng cập nhật lại.`)
         return
       }
       if (item.stockQuantity !== undefined && item.stockQuantity !== null && item.quantity > item.stockQuantity) {
         setCheckoutNotice(
-          `Sản phẩm "${item.name}" chỉ còn ${item.stockQuantity} sản phẩm trong kho. Vui lòng giảm số lượng đặt hàng.`
+          `Sản phẩm "${itemName}" chỉ còn ${item.stockQuantity} sản phẩm trong kho. Vui lòng giảm số lượng đặt hàng.`
         )
         return
       }
@@ -165,22 +166,31 @@ export const CartPage = () => {
             {/* Products List (8/12) */}
             <div className="lg:col-span-8 space-y-4">
               <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden divide-y divide-slate-100">
-                {items.map((item) => (
-                  <div
-                    key={`${item.id}-${item.selectedSize || 'default'}`}
-                    className="p-5 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 hover:bg-slate-50/60 transition-colors"
-                  >
-                    {/* Item Details */}
-                    <div className="flex items-center gap-4 min-w-0 flex-1">
+                {items.map((item) => {
+                  const itemName = item.name || item.productName || 'Sản phẩm'
+                  const itemKey = `${item.id}-${item.selectedSize || 'default'}`
+                  const productId = item.id || item.productId
+                  const itemPrice = Number(item.price) || 0
+                  const isMaxStock =
+                    item.stockQuantity !== undefined &&
+                    item.stockQuantity !== null &&
+                    item.quantity >= item.stockQuantity
+
+                  return (
+                    <div
+                      key={itemKey}
+                      className="p-4 sm:p-5 flex gap-3.5 sm:gap-5 items-start hover:bg-slate-50/70 transition-colors"
+                    >
+                      {/* 1. Ảnh thumbnail (76px trên mobile, 110px trên desktop) */}
                       <Link
-                        to={`/products/${item.id}`}
-                        className="w-18 h-18 sm:w-22 sm:h-22 rounded-2xl overflow-hidden bg-slate-50 shrink-0 border border-slate-200 p-2 flex items-center justify-center"
+                        to={`/products/${productId}`}
+                        className="w-[76px] h-[76px] sm:w-[110px] sm:h-[110px] min-w-[76px] min-h-[76px] sm:min-w-[110px] sm:min-h-[110px] max-w-[110px] max-h-[110px] rounded-2xl overflow-hidden bg-slate-50 shrink-0 flex-shrink-0 border border-slate-200 p-1.5 sm:p-2 flex items-center justify-center group"
                       >
                         {item.imageUrl ? (
                           <img
                             src={item.imageUrl}
-                            alt={item.name}
-                            className="w-full h-full object-contain mix-blend-multiply"
+                            alt={itemName}
+                            className="w-full h-full object-cover rounded-xl group-hover:scale-105 transition-transform duration-300"
                             onError={(e) => {
                               e.currentTarget.onerror = null
                               e.currentTarget.src =
@@ -189,81 +199,100 @@ export const CartPage = () => {
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-slate-300">
-                            <ShoppingBag className="w-7 h-7 stroke-[1.25]" />
+                            <ShoppingBag className="w-6 h-6 stroke-[1.25]" />
                           </div>
                         )}
                       </Link>
 
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <Link
-                          to={`/products/${item.id}`}
-                          className="font-bold text-slate-900 text-sm hover:text-blue-600 line-clamp-1 transition-colors"
-                        >
-                          {item.name}
-                        </Link>
-                        {item.selectedSize && (
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold">
-                            <span>Kích cỡ:</span>
-                            <span className="font-extrabold">{item.selectedSize}</span>
-                          </div>
-                        )}
-                        <div className="text-slate-900 font-extrabold text-sm tabular-nums">
-                          {formatPrice(item.price)}
+                      {/* 2. Chi tiết sản phẩm & Thao tác */}
+                      <div className="flex-1 min-w-0 flex flex-col justify-between gap-2.5">
+                        {/* Hàng 1: Tên sản phẩm & Nút xóa bên phải */}
+                        <div className="flex items-start justify-between gap-2">
+                          <Link
+                            to={`/products/${productId}`}
+                            className="font-bold text-slate-900 text-sm sm:text-base hover:text-blue-600 transition-colors line-clamp-2 leading-snug"
+                            title={itemName}
+                          >
+                            {itemName}
+                          </Link>
+
+                          {/* Nút xóa đặt góc trên bên phải */}
+                          <button
+                            type="button"
+                            onClick={() => removeFromCart(item.id, item.selectedSize)}
+                            className="text-slate-400 hover:text-red-600 p-1.5 rounded-full hover:bg-red-50 transition-colors cursor-pointer shrink-0 -mr-1"
+                            title="Xóa khỏi giỏ hàng"
+                            aria-label="Xóa món hàng"
+                          >
+                            <Trash2 className="w-4 h-4 sm:w-4.5 sm:h-4.5" />
+                          </button>
                         </div>
-                        {item.stockQuantity !== undefined && (
-                          <div className="text-[11px] text-slate-400">
-                            Tồn kho khả dụng: <span className="font-semibold text-slate-600">{item.stockQuantity}</span>
+
+                        {/* Hàng 2: Giá bán, Size đã chọn, Tồn kho khả dụng */}
+                        <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-xs sm:text-sm">
+                          <div className="flex items-center gap-1">
+                            <span className="text-slate-500 font-medium">Giá bán:</span>
+                            <span className="font-extrabold text-slate-900 tabular-nums">
+                              {formatPrice(itemPrice)}
+                            </span>
                           </div>
-                        )}
+
+                          {item.selectedSize && (
+                            <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-blue-50 border border-blue-200 text-blue-700 text-xs font-semibold whitespace-nowrap">
+                              <span>Size:</span>
+                              <span className="font-extrabold">{item.selectedSize}</span>
+                            </div>
+                          )}
+
+                          {item.stockQuantity !== undefined && item.stockQuantity !== null && (
+                            <div className="text-xs text-slate-500 whitespace-nowrap">
+                              <span>Tồn kho khả dụng: </span>
+                              <span className="font-bold text-slate-700 tabular-nums">{item.stockQuantity}</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Hàng 3: Bộ điều chỉnh số lượng (- / +) & Thành tiền */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100 mt-0.5">
+                          {/* Bộ điều chỉnh số lượng */}
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500 font-medium hidden xs:inline">Số lượng:</span>
+                            <div className="flex items-center border border-slate-200 rounded-full bg-slate-50 overflow-hidden shadow-2xs">
+                              <button
+                                type="button"
+                                onClick={() => updateQuantity(item.id, item.quantity - 1, item.selectedSize)}
+                                className="p-1.5 sm:p-2 text-slate-600 hover:bg-white hover:text-slate-900 transition-colors cursor-pointer"
+                                aria-label="Giảm số lượng"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="px-2.5 sm:px-3 py-0.5 text-xs sm:text-sm font-bold text-slate-900 min-w-[28px] sm:min-w-[32px] text-center select-none tabular-nums">
+                                {item.quantity}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => updateQuantity(item.id, item.quantity + 1, item.selectedSize)}
+                                disabled={isMaxStock}
+                                className="p-1.5 sm:p-2 text-slate-600 hover:bg-white hover:text-slate-900 disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
+                                aria-label="Tăng số lượng"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Thành tiền */}
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-xs text-slate-500 font-medium">Thành tiền:</span>
+                            <span className="text-sm sm:text-base font-black text-blue-600 tabular-nums">
+                              {formatPrice(itemPrice * item.quantity)}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-
-                    {/* Quantity & Controls */}
-                    <div className="flex items-center justify-between sm:justify-end w-full sm:w-auto gap-5">
-                      {/* Quantity Selector */}
-                      <div className="flex items-center border border-slate-200 rounded-full bg-slate-50 overflow-hidden shadow-xs">
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.id, item.quantity - 1, item.selectedSize)}
-                          className="p-2 text-slate-600 hover:bg-white transition-colors cursor-pointer"
-                          aria-label="Giảm số lượng"
-                        >
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="px-3 py-1 text-xs font-bold text-slate-900 min-w-[32px] text-center select-none tabular-nums">
-                          {item.quantity}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => updateQuantity(item.id, item.quantity + 1, item.selectedSize)}
-                          disabled={item.stockQuantity && item.quantity >= item.stockQuantity}
-                          className="p-2 text-slate-600 hover:bg-white disabled:opacity-30 disabled:pointer-events-none transition-colors cursor-pointer"
-                          aria-label="Tăng số lượng"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {/* Line Item Total */}
-                      <div className="text-right min-w-[110px]">
-                        <div className="text-base font-extrabold text-slate-900 tabular-nums">
-                          {formatPrice((item.price || 0) * item.quantity)}
-                        </div>
-                      </div>
-
-                      {/* Remove Button */}
-                      <button
-                        type="button"
-                        onClick={() => removeFromCart(item.id, item.selectedSize)}
-                        className="text-slate-400 hover:text-red-600 p-2 rounded-full hover:bg-red-50 transition-colors cursor-pointer"
-                        title="Xóa khỏi giỏ hàng"
-                        aria-label="Xóa món hàng"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
 
               {/* Navigation Back */}
