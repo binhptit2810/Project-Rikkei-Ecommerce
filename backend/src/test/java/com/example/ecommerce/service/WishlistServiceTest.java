@@ -6,6 +6,7 @@ import com.example.ecommerce.entity.Product;
 import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
 import com.example.ecommerce.entity.Wishlist;
+import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.repository.ProductRepository;
 import com.example.ecommerce.repository.UserRepository;
@@ -20,6 +21,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
@@ -211,5 +213,54 @@ class WishlistServiceTest {
 
         assertThat(productIds).containsExactly(100L, 200L, 300L);
         verify(wishlistRepository, times(1)).findProductIdsByUserId(testUser.getId());
+    }
+
+    @Test
+    @DisplayName("6. Toggle sản phẩm khi userId không tồn tại -> Ném ResourceNotFoundException")
+    void toggleWishlist_whenUserNotFound_shouldThrowResourceNotFoundException() {
+        Long productId = testProduct.getId();
+        Long nonExistentUserId = 8888L;
+        when(productRepository.findById(productId)).thenReturn(Optional.of(testProduct));
+        when(userRepository.findById(nonExistentUserId)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> wishlistService.toggleWishlist(nonExistentUserId, productId))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Người dùng không tồn tại với ID: " + nonExistentUserId);
+    }
+
+    @Test
+    @DisplayName("7. getCurrentUser khi chưa đăng nhập (SecurityContext null hoặc anonymous) -> Ném BusinessException")
+    void getCurrentUser_whenNotAuthenticated_shouldThrowBusinessException() {
+        SecurityContextHolder.clearContext();
+
+        assertThatThrownBy(() -> wishlistService.getWishlist())
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Vui lòng đăng nhập để thực hiện thao tác");
+    }
+
+    @Test
+    @DisplayName("8. getCurrentUser khi principal là String email (không phải CustomUserDetails) -> Tra cứu qua findByEmail")
+    void getCurrentUser_whenPrincipalIsStringEmail_shouldLookupByEmail() {
+        UsernamePasswordAuthenticationToken authentication =
+                new UsernamePasswordAuthenticationToken("customer@example.com", "credentials", List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER")));
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(testUser));
+        when(wishlistRepository.findByUserIdOrderByCreatedAtDesc(testUser.getId())).thenReturn(List.of());
+
+        List<WishlistItemResponse> result = wishlistService.getWishlist();
+
+        assertThat(result).isEmpty();
+        verify(userRepository, times(1)).findByEmail("customer@example.com");
+    }
+
+    @Test
+    @DisplayName("9. getCurrentUser khi user trong DB không tồn tại -> Ném ResourceNotFoundException")
+    void getCurrentUser_whenUserNotFoundInDb_shouldThrowResourceNotFoundException() {
+        when(userRepository.findById(testUser.getId())).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> wishlistService.getWishlist())
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Người dùng không tồn tại với ID: " + testUser.getId());
     }
 }

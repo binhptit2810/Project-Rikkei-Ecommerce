@@ -176,5 +176,51 @@ class Auth0TokenValidatorTest {
         assertEquals("", Auth0TokenValidator.normalizeDomain(null));
         assertEquals("", Auth0TokenValidator.normalizeDomain("   "));
     }
+
+    @Test
+    @DisplayName("TC-VAL-10: Lỗi hệ thống ngoài JwtException trong decode -> Ném BusinessException không thể xác thực")
+    void validateToken_GeneralException_ThrowsBusinessException() {
+        String token = "general.error.token";
+        when(mockDecoder.decode(token)).thenThrow(new IllegalStateException("Lỗi đường truyền JWKS"));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> validator.validateToken(token));
+        assertTrue(ex.getMessage().contains("Không thể xác thực danh tính từ Auth0"));
+    }
+
+    @Test
+    @DisplayName("TC-VAL-11: getOrBuildDecoder khởi tạo decoder và cache lại cho các lần gọi sau")
+    void getOrBuildDecoder_BuildsAndCachesDecoder() {
+        Auth0TokenValidator validatorWithConfig = new Auth0TokenValidator("dev-test.us.auth0.com", "test-client-id");
+        NimbusJwtDecoder decoder1 = validatorWithConfig.getOrBuildDecoder();
+        assertNotNull(decoder1);
+        NimbusJwtDecoder decoder2 = validatorWithConfig.getOrBuildDecoder();
+        assertSame(decoder1, decoder2);
+    }
+
+    @Test
+    @DisplayName("TC-VAL-12: validateToken khi name và picture rỗng hoặc null -> Trả về Auth0UserInfo với name và picture null")
+    void validateToken_NullNameAndPicture_ReturnsNullInFields() {
+        String token = "valid.null.fields.token";
+        Jwt jwt = Jwt.withTokenValue(token)
+                .header("alg", "RS256")
+                .issuer("https://" + DOMAIN + "/")
+                .audience(List.of(CLIENT_ID))
+                .subject("google-oauth2|123456")
+                .claim("email", "USER@EXAMPLE.COM")
+                .claim("email_verified", true)
+                .claim("name", "   ")
+                .claim("picture", "")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
+
+        when(mockDecoder.decode(token)).thenReturn(jwt);
+
+        Auth0UserInfo userInfo = validator.validateToken(token);
+        assertNotNull(userInfo);
+        assertEquals("user@example.com", userInfo.getEmail());
+        assertNull(userInfo.getName());
+        assertNull(userInfo.getPicture());
+    }
 }
 
