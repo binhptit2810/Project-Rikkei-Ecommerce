@@ -3,8 +3,8 @@ import uploadService from './uploadService'
 
 /**
  * Service quản lý Đánh giá & Nhận xét sản phẩm (Review Service).
- * Phụ trách: Đỗ Đức Mạnh (DDM) & Đỗ Hoàng Anh (DHA)
- * Task ID: [TSK-D14-DHA] Thiết Kế UI Upload Ảnh Đánh Giá, Phản Hồi Admin & Trang Quản Lý Đánh Giá
+ * Phụ trách: Đỗ Đức Mạnh (DDM), Đỗ Hoàng Anh (DHA), Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D11-DDM], [TSK-D14-DHA] & [TSK-D14-CCT]
  *
  * Tích hợp toàn diện với ReviewController & AdminReviewController:
  * - Customer APIs:
@@ -13,13 +13,15 @@ import uploadService from './uploadService'
  *   + POST   /api/v1/products/{productId}/reviews          — Gửi đánh giá mới (kèm tối đa 3 ảnh)
  *   + PUT    /api/v1/products/{productId}/reviews/{id}     — Chỉnh sửa đánh giá (kèm ảnh)
  *   + DELETE /api/v1/products/{productId}/reviews/{id}     — Xóa đánh giá
- *   + POST   /api/v1/reviews/upload                        — Tải ảnh đánh giá lên máy chủ
+ *   + POST   /api/v1/reviews/upload                        — Tải ảnh đánh giá lên máy chủ (DHA)
+ *   + POST   /api/v1/reviews/{reviewId}/images             — Tải ảnh đính kèm theo review (CCT)
  *
  * - Admin APIs:
  *   + GET    /api/v1/admin/reviews                         — Lấy toàn bộ đánh giá có phân trang & lọc
  *   + POST   /api/v1/admin/reviews/{id}/reply              — Phản hồi đánh giá của khách
  *   + PUT    /api/v1/admin/reviews/{id}/reply              — Cập nhật câu phản hồi đánh giá
  *   + PATCH  /api/v1/admin/reviews/{id}/visibility         — Bật/Tắt trạng thái ẩn/hiện đánh giá
+ *   + PUT    /api/v1/admin/reviews/{id}/toggle-status      — Bật/Tắt trạng thái ẩn/hiện đánh giá
  *   + DELETE /api/v1/admin/reviews/{id}                    — Xóa đánh giá (Admin)
  */
 export const reviewService = {
@@ -88,7 +90,7 @@ export const reviewService = {
   },
 
   /**
-   * Tải ảnh đánh giá lên máy chủ.
+   * Tải 1 ảnh đánh giá lên máy chủ.
    * @param {File} file
    * @returns {Promise<string>}
    */
@@ -98,10 +100,32 @@ export const reviewService = {
 
   /**
    * Tải lên danh sách nhiều ảnh đánh giá (tối đa 3 ảnh).
-   * @param {File[]} files
-   * @returns {Promise<string[]>}
+   * Hỗ trợ 2 chữ ký hàm:
+   * 1. uploadReviewImages(files): Trả về mảng url string[] (DHA)
+   * 2. uploadReviewImages(reviewId, files): Đính kèm trực tiếp vào reviewId (CCT)
    */
-  async uploadReviewImages(files) {
+  async uploadReviewImages(arg1, arg2) {
+    // Nếu gọi theo dạng: uploadReviewImages(reviewId, files)
+    if (arg2 !== undefined) {
+      const reviewId = arg1
+      const files = arg2
+      const formData = new FormData()
+      if (Array.isArray(files)) {
+        files.forEach((f) => formData.append('files', f))
+      } else if (files) {
+        formData.append('files', files)
+      }
+
+      const response = await apiClient.post(`/reviews/${reviewId}/images`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      })
+      return response.data
+    }
+
+    // Nếu gọi theo dạng: uploadReviewImages(files)
+    const files = arg1
     return uploadService.uploadReviewImages(files)
   },
 
@@ -111,7 +135,7 @@ export const reviewService = {
 
   /**
    * Lấy toàn bộ danh sách đánh giá của hệ thống cho Admin (có phân trang & bộ lọc).
-   * @param {Object} params { page, size, sortBy, sortDir, productId, rating, isHidden }
+   * @param {Object} params { page, size, sortBy, sortDir, productId, rating, isHidden, isVisible }
    * @returns {Promise<Object>} ApiResponse chứa PageResponse<ReviewResponse>
    */
   async getAllReviewsForAdmin(params = {}) {
@@ -123,14 +147,32 @@ export const reviewService = {
       productId = null,
       rating = null,
       isHidden = null,
+      isVisible = null,
     } = params
 
     const cleanParams = { page, size, sortBy, sortDir }
     if (productId != null) cleanParams.productId = productId
     if (rating != null) cleanParams.rating = rating
     if (isHidden != null) cleanParams.isHidden = isHidden
+    if (isVisible != null) cleanParams.isVisible = isVisible
 
     const response = await apiClient.get('/admin/reviews', { params: cleanParams })
+    return response.data
+  },
+
+  /**
+   * Lấy danh sách tất cả đánh giá phục vụ Quản trị viên (Admin - [TSK-D14-CCT]).
+   * @param {number} [page=0] Số trang
+   * @param {number} [size=10] Kích thước trang
+   * @param {boolean|null} [isVisible=null] Lọc theo trạng thái hiển thị
+   * @returns {Promise<Object>} ApiResponse chứa PageResponse<ReviewResponse>
+   */
+  async getAdminReviews(page = 0, size = 10, isVisible = null) {
+    const params = { page, size }
+    if (isVisible !== null && isVisible !== undefined && isVisible !== '') {
+      params.isVisible = isVisible
+    }
+    const response = await apiClient.get('/admin/reviews', { params })
     return response.data
   },
 

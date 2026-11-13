@@ -234,6 +234,16 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Lỗi dung lượng tệp tin hoặc tổng yêu cầu tải lên vượt quá giới hạn cho phép [TSK-D14-CCT].
+     */
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSizeExceeded(org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        log.warn("Max upload size exceeded: {}", ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("Dung lượng tệp tin hoặc tổng yêu cầu tải lên vượt quá giới hạn cho phép"));
+    }
+
+    /**
      * Lỗi Redis không khả dụng hoặc truy vấn quá thời gian — trả 503 SERVICE UNAVAILABLE.
      */
     @ExceptionHandler({

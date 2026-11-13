@@ -3,12 +3,15 @@ package com.example.ecommerce.service.impl;
 import com.example.ecommerce.dto.request.AdminReplyRequest;
 import com.example.ecommerce.dto.request.ReviewCreateRequest;
 import com.example.ecommerce.dto.request.ReviewRequest;
+import com.example.ecommerce.dto.response.FileUploadResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductRatingSummaryResponse;
+import com.example.ecommerce.dto.response.ReviewImageResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import com.example.ecommerce.entity.OrderStatus;
 import com.example.ecommerce.entity.Product;
 import com.example.ecommerce.entity.Review;
+import com.example.ecommerce.entity.ReviewImage;
 import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
 import com.example.ecommerce.exception.BadRequestException;
@@ -17,9 +20,11 @@ import com.example.ecommerce.exception.DuplicateResourceException;
 import com.example.ecommerce.exception.ResourceNotFoundException;
 import com.example.ecommerce.repository.OrderItemRepository;
 import com.example.ecommerce.repository.ProductRepository;
+import com.example.ecommerce.repository.ReviewImageRepository;
 import com.example.ecommerce.repository.ReviewRepository;
 import com.example.ecommerce.repository.UserRepository;
 import com.example.ecommerce.security.CustomUserDetails;
+import com.example.ecommerce.service.FileStorageService;
 import com.example.ecommerce.service.ReviewService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,16 +37,21 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.util.StringUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * Triển khai nghiệp vụ Đánh giá & Nhận xét sản phẩm.
- * Phụ trách: Đỗ Đức Mạnh (DDM)
- * Task ID: [TSK-D11-DDM] & [TSK-D14-DDM] Xây Dựng API Chỉnh Sửa, Xóa Đánh Giá & Admin Phản Hồi Đánh Giá
+ * Phụ trách: Đỗ Đức Mạnh (DDM), Đỗ Hoàng Anh (DHA), Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D11-DDM], [TSK-D14-DHA] & [TSK-D14-CCT]
  */
 @Service
 @RequiredArgsConstructor
@@ -52,6 +62,8 @@ public class ReviewServiceImpl implements ReviewService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final OrderItemRepository orderItemRepository;
+    private final ReviewImageRepository reviewImageRepository;
+    private final FileStorageService fileStorageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -69,7 +81,8 @@ public class ReviewServiceImpl implements ReviewService {
             );
         }
 
-        Page<Review> reviewPage = reviewRepository.findByProductId(productId, sortedPageable);
+        // Chỉ trả về các đánh giá hiển thị công khai (isVisible = true)
+        Page<Review> reviewPage = reviewRepository.findByProductIdAndIsVisibleTrue(productId, sortedPageable);
         return PageResponse.from(reviewPage, ReviewResponse::fromEntity);
     }
 
@@ -136,28 +149,41 @@ public class ReviewServiceImpl implements ReviewService {
             throw new DuplicateResourceException("Bạn đã đánh giá sản phẩm này rồi");
         }
 
-        // 3. Lưu đánh giá mới vào CSDL
-        String imageString = null;
-        if (request.getImages() != null && !request.getImages().isEmpty()) {
-            imageString = String.join(",", request.getImages());
-        }
-
+        // 3. Lưu đánh giá mới vào CSDL (mặc định isVisible = true, isHidden = false)
         Review review = Review.builder()
                 .product(product)
                 .user(currentUser)
                 .rating(request.getRating())
                 .comment(request.getComment() != null ? request.getComment().trim() : "")
-                .images(imageString)
+                .isVisible(true)
                 .isHidden(false)
+                .images(new ArrayList<>())
                 .build();
-        Review savedReview = reviewRepository.save(review);
-        reviewRepository.flush();
 
-        // 4. Tự động tính toán lại ratingAverage và totalReviews, cập nhật vào Product
+        // 4. Nếu có danh sách ảnh đính kèm ban đầu
+        if (request.getImages() != null && !request.getImages().isEmpty()) {
+            if (request.getImages().size() > 3) {
+                throw new BadRequestException("Mỗi đánh giá chỉ được đính kèm tối đa 3 ảnh");
+            }
+            for (String url : request.getImages()) {
+                if (url != null && !url.trim().isEmpty()) {
+                    ReviewImage ri = ReviewImage.builder()
+                            .review(review)
+                            .imageUrl(url.trim())
+                            .imagePath(url.trim())
+                            .build();
+                    review.addImage(ri);
+                }
+            }
+        }
+
+        Review savedReview = reviewRepository.save(review);
+
+        // 5. Tính toán lại rating_average và total_reviews của sản phẩm
         recalculateProductRating(product);
 
-        log.info("Created review #{} for product #{}: rating={}, newAvg={}, totalReviews={}",
-                savedReview.getId(), productId, request.getRating(), product.getRatingAverage(), product.getTotalReviews());
+        log.info("User {} created review #{} for product {} with rating {}",
+                currentUser.getId(), savedReview.getId(), productId, savedReview.getRating());
 
         return ReviewResponse.fromEntity(savedReview);
     }
@@ -174,37 +200,44 @@ public class ReviewServiceImpl implements ReviewService {
                 .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
 
         if (!review.getProduct().getId().equals(productId)) {
-            throw new ResourceNotFoundException("Đánh giá #" + reviewId + " không thuộc về sản phẩm #" + productId);
+            throw new BadRequestException("Đánh giá #" + reviewId + " không thuộc về sản phẩm #" + productId);
         }
 
-        // Chỉ đúng user đã tạo đánh giá này mới được sửa
         if (!review.getUser().getId().equals(currentUser.getId())) {
             throw new AccessDeniedException("Bạn không có quyền chỉnh sửa đánh giá này");
         }
 
-        if (request.getRating() == null || request.getRating() < 1 || request.getRating() > 5) {
-            throw new BadRequestException("Số sao đánh giá phải từ 1 đến 5");
-        }
-        if (request.getComment() == null || request.getComment().trim().isEmpty()) {
-            throw new BadRequestException("Nội dung đánh giá không được để trống");
-        }
-
         review.setRating(request.getRating());
-        review.setComment(request.getComment().trim());
-        if (request.getImages() != null) {
-            review.setImages(String.join(",", request.getImages()));
-        }
-        review.setUpdatedAt(LocalDateTime.now());
-        Review savedReview = reviewRepository.save(review);
-        reviewRepository.flush();
+        review.setComment(request.getComment() != null ? request.getComment().trim() : "");
 
-        // Bắt buộc tính lại rating_average của sản phẩm
+        if (request.getImages() != null) {
+            if (request.getImages().size() > 3) {
+                throw new BadRequestException("Mỗi đánh giá chỉ được đính kèm tối đa 3 ảnh");
+            }
+            if (review.getImages() == null) {
+                review.setImages(new ArrayList<>());
+            } else {
+                review.getImages().clear();
+            }
+            for (String url : request.getImages()) {
+                if (url != null && !url.trim().isEmpty()) {
+                    ReviewImage ri = ReviewImage.builder()
+                            .review(review)
+                            .imageUrl(url.trim())
+                            .imagePath(url.trim())
+                            .build();
+                    review.addImage(ri);
+                }
+            }
+        }
+
+        Review updatedReview = reviewRepository.save(review);
         recalculateProductRating(product);
 
-        log.info("User #{} updated review #{} for product #{}: newRating={}",
-                currentUser.getId(), reviewId, productId, request.getRating());
+        log.info("User #{} updated review #{} for product #{}: new rating={}",
+                currentUser.getId(), reviewId, productId, updatedReview.getRating());
 
-        return ReviewResponse.fromEntity(savedReview);
+        return ReviewResponse.fromEntity(updatedReview);
     }
 
     @Override
@@ -219,20 +252,21 @@ public class ReviewServiceImpl implements ReviewService {
                 .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
 
         if (!review.getProduct().getId().equals(productId)) {
-            throw new ResourceNotFoundException("Đánh giá #" + reviewId + " không thuộc về sản phẩm #" + productId);
+            throw new BadRequestException("Đánh giá #" + reviewId + " không thuộc về sản phẩm #" + productId);
         }
 
-        // Cho phép chính chủ tạo review HOẶC người dùng có role ADMIN thực hiện xóa
         boolean isOwner = review.getUser().getId().equals(currentUser.getId());
         boolean isAdmin = currentUser.getRole() == Role.ADMIN;
         if (!isOwner && !isAdmin) {
             throw new AccessDeniedException("Bạn không có quyền xóa đánh giá này");
         }
 
+        List<String> imagePaths = collectReviewImagePaths(review);
+
         reviewRepository.delete(review);
         reviewRepository.flush();
 
-        // Tính lại rating_average và total_reviews của sản phẩm
+        registerPostCommitImageCleanup(imagePaths);
         recalculateProductRating(product);
 
         log.info("User #{} (role={}) deleted review #{} for product #{}",
@@ -258,6 +292,86 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
+    @Transactional
+    public List<ReviewImageResponse> uploadReviewImages(Long reviewId, List<MultipartFile> files) {
+        User currentUser = getCurrentUser();
+
+        Review review = reviewRepository.findByIdForUpdate(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
+
+        if (Boolean.FALSE.equals(review.getIsVisible()) || Boolean.TRUE.equals(review.getIsHidden())) {
+            throw new BadRequestException("Không thể tải lên hình ảnh cho đánh giá đã bị ẩn");
+        }
+
+        if (!review.getUser().getId().equals(currentUser.getId())) {
+            throw new AccessDeniedException("Bạn không có quyền đăng tải hình ảnh cho đánh giá của người khác");
+        }
+
+        if (files == null || files.isEmpty()) {
+            throw new BadRequestException("Vui lòng chọn ít nhất 1 tệp hình ảnh để tải lên");
+        }
+
+        int currentImagesCount = reviewImageRepository.countByReviewId(reviewId);
+        int newImagesCount = files.size();
+
+        if (currentImagesCount + newImagesCount > 3) {
+            throw new BadRequestException("Mỗi đánh giá chỉ được đính kèm tối đa 3 ảnh. Bạn đã có "
+                    + currentImagesCount + " ảnh, không thể thêm " + newImagesCount + " ảnh nữa.");
+        }
+
+        List<byte[]> validatedBytesList = new ArrayList<>();
+        for (MultipartFile file : files) {
+            byte[] fileBytes = fileStorageService.validateReviewImage(file);
+            validatedBytesList.add(fileBytes);
+        }
+
+        List<FileUploadResponse> uploadedFiles = new ArrayList<>();
+        try {
+            for (int i = 0; i < files.size(); i++) {
+                MultipartFile file = files.get(i);
+                byte[] bytes = validatedBytesList.get(i);
+                FileUploadResponse uploadRes = fileStorageService.storeReviewImage(file, bytes);
+                uploadedFiles.add(uploadRes);
+            }
+
+            List<ReviewImage> reviewImagesToSave = new ArrayList<>();
+            for (FileUploadResponse upload : uploadedFiles) {
+                ReviewImage reviewImage = ReviewImage.builder()
+                        .review(review)
+                        .imageUrl(upload.getUrl())
+                        .imagePath(upload.getFileName())
+                        .build();
+                reviewImagesToSave.add(reviewImage);
+            }
+
+            List<ReviewImage> savedImages = reviewImageRepository.saveAll(reviewImagesToSave);
+            for (ReviewImage img : savedImages) {
+                review.addImage(img);
+            }
+
+            log.info("User {} uploaded {} images for review #{}", currentUser.getId(), savedImages.size(), reviewId);
+
+            return savedImages.stream()
+                    .map(ReviewImageResponse::fromEntity)
+                    .toList();
+
+        } catch (Exception ex) {
+            log.error("Lỗi khi lưu ảnh đánh giá vào CSDL, tiến hành dọn sạch {} tệp vừa tải lên...", uploadedFiles.size(), ex);
+            for (FileUploadResponse upload : uploadedFiles) {
+                try {
+                    fileStorageService.deleteFile(upload.getFileName());
+                } catch (Exception delEx) {
+                    log.warn("Không thể dọn dẹp tệp ảnh mồ côi: {}", upload.getFileName(), delEx);
+                }
+            }
+            if (ex instanceof RuntimeException re) {
+                throw re;
+            }
+            throw new BusinessException("Lỗi trong quá trình lưu trữ hình ảnh đánh giá: " + ex.getMessage());
+        }
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public PageResponse<ReviewResponse> getAllReviewsForAdmin(Pageable pageable, Long productId, Integer rating, Boolean isHidden) {
         Pageable sortedPageable = pageable;
@@ -274,20 +388,10 @@ public class ReviewServiceImpl implements ReviewService {
     }
 
     @Override
-    @Transactional
-    public void deleteReviewByAdmin(Long reviewId) {
-        Review review = reviewRepository.findById(reviewId)
-                .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
-        Product product = review.getProduct();
-
-        reviewRepository.delete(review);
-        reviewRepository.flush();
-
-        if (product != null) {
-            recalculateProductRating(product);
-        }
-
-        log.info("Admin deleted review #{}", reviewId);
+    @Transactional(readOnly = true)
+    public PageResponse<ReviewResponse> getAllReviewsForAdmin(Boolean isVisible, Pageable pageable) {
+        Page<Review> reviewPage = reviewRepository.findAllForAdmin(isVisible, pageable);
+        return PageResponse.from(reviewPage, ReviewResponse::fromEntity);
     }
 
     @Override
@@ -296,17 +400,99 @@ public class ReviewServiceImpl implements ReviewService {
         Review review = reviewRepository.findById(reviewId)
                 .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
 
-        boolean currentHidden = Boolean.TRUE.equals(review.getIsHidden());
-        review.setIsHidden(!currentHidden);
+        boolean currentVisible = Boolean.TRUE.equals(review.getIsVisible());
+        boolean nextVisible = !currentVisible;
+        review.setIsVisible(nextVisible);
+        review.setIsHidden(!nextVisible);
+
         Review saved = reviewRepository.save(review);
 
-        log.info("Admin toggled review #{} visibility: isHidden={}", reviewId, saved.getIsHidden());
+        if (saved.getProduct() != null) {
+            recalculateProductRating(saved.getProduct());
+        }
+
+        log.info("Admin {} toggled review #{} visibility: isVisible={}, isHidden={}",
+                getAdminIdentifier(), reviewId, saved.getIsVisible(), saved.getIsHidden());
+
         return ReviewResponse.fromEntity(saved);
     }
 
-    /**
-     * Tính toán lại điểm trung bình rating_average và tổng số lượt đánh giá total_reviews.
-     */
+    @Override
+    @Transactional
+    public void deleteReviewByAdmin(Long reviewId) {
+        Review review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new ResourceNotFoundException("Đánh giá không tồn tại với ID: " + reviewId));
+        Product product = review.getProduct();
+
+        List<String> imagePaths = collectReviewImagePaths(review);
+
+        reviewRepository.delete(review);
+        reviewRepository.flush();
+
+        registerPostCommitImageCleanup(imagePaths);
+
+        if (product != null) {
+            recalculateProductRating(product);
+        }
+
+        log.info("Admin {} permanently deleted review #{} and scheduled cleanup for {} images",
+                getAdminIdentifier(), reviewId, imagePaths.size());
+    }
+
+    private List<String> collectReviewImagePaths(Review review) {
+        List<String> paths = new ArrayList<>();
+        if (review.getImages() != null && !review.getImages().isEmpty()) {
+            for (ReviewImage img : review.getImages()) {
+                if (StringUtils.hasText(img.getImagePath())) {
+                    paths.add(img.getImagePath());
+                } else if (StringUtils.hasText(img.getImageUrl())) {
+                    paths.add(img.getImageUrl());
+                }
+            }
+        } else if (reviewImageRepository != null && review.getId() != null) {
+            List<ReviewImage> dbImages = reviewImageRepository.findByReviewIdOrderByCreatedAtAsc(review.getId());
+            if (dbImages != null) {
+                for (ReviewImage img : dbImages) {
+                    if (StringUtils.hasText(img.getImagePath())) {
+                        paths.add(img.getImagePath());
+                    } else if (StringUtils.hasText(img.getImageUrl())) {
+                        paths.add(img.getImageUrl());
+                    }
+                }
+            }
+        }
+        return paths;
+    }
+
+    private void registerPostCommitImageCleanup(List<String> imagePaths) {
+        if (imagePaths == null || imagePaths.isEmpty() || fileStorageService == null) {
+            return;
+        }
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    for (String path : imagePaths) {
+                        boolean success = fileStorageService.deleteFile(path);
+                        if (!success) {
+                            log.error("Không thể xóa tệp tin ảnh đánh giá khỏi Local Storage sau commit: {}", path);
+                        }
+                    }
+                }
+            });
+        } else {
+            for (String path : imagePaths) {
+                fileStorageService.deleteFile(path);
+            }
+        }
+    }
+
+    private String getAdminIdentifier() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return (auth != null && auth.getName() != null) ? auth.getName() : "ADMIN";
+    }
+
     private void recalculateProductRating(Product product) {
         Long productId = product.getId();
         Double avg = reviewRepository.calculateAverageRating(productId);
@@ -321,9 +507,6 @@ public class ReviewServiceImpl implements ReviewService {
         productRepository.save(product);
     }
 
-    /**
-     * Lấy thông tin người dùng đang đăng nhập từ SecurityContext.
-     */
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
@@ -340,4 +523,3 @@ public class ReviewServiceImpl implements ReviewService {
                 .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại với email: " + email));
     }
 }
-

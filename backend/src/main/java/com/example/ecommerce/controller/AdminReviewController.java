@@ -15,9 +15,13 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 /**
- * Controller quản trị đánh giá sản phẩm dành cho Admin.
- * Phụ trách: Đỗ Đức Mạnh (DDM) & Đỗ Hoàng Anh (DHA)
- * Task ID: [TSK-D14-DHA] Thiết Kế UI Upload Ảnh Đánh Giá, Phản Hồi Admin & Trang Quản Lý Đánh Giá
+ * Controller quản trị Đánh giá & Nhận xét sản phẩm dành riêng cho Quản trị viên (Admin).
+ * Phụ trách: Đỗ Đức Mạnh (DDM), Đỗ Hoàng Anh (DHA), Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D11-DDM], [TSK-D14-DHA] & [TSK-D14-CCT]
+ *
+ * Tất cả endpoint yêu cầu quyền ADMIN:
+ * - Bảo vệ Filter Chain: /api/v1/admin/** (hasRole('ADMIN'))
+ * - Bảo vệ Method Security: @PreAuthorize("hasRole('ADMIN')")
  */
 @RestController
 @RequestMapping("/api/v1/admin/reviews")
@@ -39,14 +43,22 @@ public class AdminReviewController {
             @RequestParam(defaultValue = "desc") String sortDir,
             @RequestParam(required = false) Long productId,
             @RequestParam(required = false) Integer rating,
+            @RequestParam(required = false) Boolean isVisible,
             @RequestParam(required = false) Boolean isHidden) {
 
+        int pageIndex = Math.max(0, page);
+        int pageSize = size <= 0 ? 10 : Math.min(size, 100);
         Sort sort = "desc".equalsIgnoreCase(sortDir)
                 ? Sort.by(sortBy).descending()
                 : Sort.by(sortBy).ascending();
-        Pageable pageable = PageRequest.of(page, size, sort);
+        Pageable pageable = PageRequest.of(pageIndex, pageSize, sort);
 
-        PageResponse<ReviewResponse> response = reviewService.getAllReviewsForAdmin(pageable, productId, rating, isHidden);
+        Boolean effectiveHidden = isHidden;
+        if (effectiveHidden == null && isVisible != null) {
+            effectiveHidden = !isVisible;
+        }
+
+        PageResponse<ReviewResponse> response = reviewService.getAllReviewsForAdmin(pageable, productId, rating, effectiveHidden);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -77,7 +89,7 @@ public class AdminReviewController {
     }
 
     /**
-     * Admin bật/tắt trạng thái ẩn hoặc hiện của đánh giá.
+     * Admin bật/tắt trạng thái ẩn hoặc hiện của đánh giá (chuẩn PATCH).
      * PATCH /api/v1/admin/reviews/{reviewId}/visibility
      */
     @PatchMapping("/{reviewId}/visibility")
@@ -89,7 +101,22 @@ public class AdminReviewController {
     }
 
     /**
-     * Admin xóa đánh giá khỏi hệ thống.
+     * Chuyển đổi trạng thái hiển thị công khai (ẩn / hiện) của đánh giá (chuẩn PUT).
+     * PUT /api/v1/admin/reviews/{id}/toggle-status
+     */
+    @PutMapping("/{id}/toggle-status")
+    public ResponseEntity<ApiResponse<ReviewResponse>> toggleReviewVisibilityStatus(
+            @PathVariable Long id) {
+
+        ReviewResponse response = reviewService.toggleReviewVisibility(id);
+        String message = Boolean.TRUE.equals(response.getIsVisible())
+                ? "Hiển thị đánh giá thành công"
+                : "Ẩn đánh giá thành công";
+        return ResponseEntity.ok(ApiResponse.success(message, response));
+    }
+
+    /**
+     * Admin xóa vĩnh viễn đánh giá sản phẩm và dọn dẹp các tệp ảnh khỏi storage.
      * DELETE /api/v1/admin/reviews/{reviewId}
      */
     @DeleteMapping("/{reviewId}")
@@ -100,4 +127,3 @@ public class AdminReviewController {
         return ResponseEntity.ok(ApiResponse.success("Xóa đánh giá thành công", null));
     }
 }
-

@@ -16,19 +16,21 @@ import {
  */
 export const resolveImageUrl = (url) => {
   if (!url) return ''
+  const actualUrl = typeof url === 'object' && url !== null ? (url.imageUrl || url.url || '') : url
+  if (!actualUrl || typeof actualUrl !== 'string') return ''
   if (
-    url.startsWith('http://') ||
-    url.startsWith('https://') ||
-    url.startsWith('blob:') ||
-    url.startsWith('data:')
+    actualUrl.startsWith('http://') ||
+    actualUrl.startsWith('https://') ||
+    actualUrl.startsWith('blob:') ||
+    actualUrl.startsWith('data:')
   ) {
-    return url
+    return actualUrl
   }
 
   // Nếu là đường dẫn tương đối từ backend server
   const apiBase = import.meta.env.VITE_API_URL || 'http://localhost:8080'
   const cleanBase = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase
-  const cleanPath = url.startsWith('/') ? url : `/${url}`
+  const cleanPath = actualUrl.startsWith('/') ? actualUrl : `/${actualUrl}`
 
   // Tránh trùng lặp /api/v1 nếu API_URL đã chứa /api/v1
   if (cleanBase.endsWith('/api/v1') && cleanPath.startsWith('/api/v1/')) {
