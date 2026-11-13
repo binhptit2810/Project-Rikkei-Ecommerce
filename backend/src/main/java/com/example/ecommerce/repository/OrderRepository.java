@@ -12,6 +12,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -49,6 +50,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     long countByPaymentStatus(com.example.ecommerce.entity.PaymentStatus paymentStatus);
 
+    long countByPaymentStatusAndOrderStatusNot(com.example.ecommerce.entity.PaymentStatus paymentStatus, OrderStatus orderStatus);
+
     @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE o.orderStatus = :orderStatus")
     BigDecimal sumTotalAmountByOrderStatus(@Param("orderStatus") OrderStatus orderStatus);
 
@@ -62,6 +65,20 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     default BigDecimal sumActualRevenue(com.example.ecommerce.entity.PaymentStatus paymentStatus, OrderStatus cancelledStatus) {
         return sumActualRevenue(paymentStatus, OrderStatus.COMPLETED, cancelledStatus);
     }
+
+    @Query("SELECT COALESCE(SUM(o.totalAmount), 0) FROM Order o WHERE " +
+           "(o.paymentStatus = :paymentStatus OR o.orderStatus = :completedStatus) " +
+           "AND o.orderStatus <> :cancelledStatus " +
+           "AND o.createdAt >= :startDate AND o.createdAt <= :endDate")
+    BigDecimal sumRevenueBetween(@Param("startDate") LocalDateTime startDate,
+                                 @Param("endDate") LocalDateTime endDate,
+                                 @Param("paymentStatus") com.example.ecommerce.entity.PaymentStatus paymentStatus,
+                                 @Param("completedStatus") OrderStatus completedStatus,
+                                 @Param("cancelledStatus") OrderStatus cancelledStatus);
+
+    @Query("SELECT o FROM Order o WHERE o.createdAt >= :startDate AND o.createdAt <= :endDate ORDER BY o.createdAt ASC")
+    List<Order> findOrdersBetween(@Param("startDate") LocalDateTime startDate,
+                                  @Param("endDate") LocalDateTime endDate);
 
     @Query("SELECT o FROM Order o WHERE " +
             "(:status IS NULL OR o.orderStatus = :status) AND " +

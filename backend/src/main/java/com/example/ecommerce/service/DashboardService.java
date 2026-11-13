@@ -2,31 +2,36 @@ package com.example.ecommerce.service;
 
 import com.example.ecommerce.dto.response.DashboardStatsResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
-import com.example.ecommerce.entity.InventoryTransactionType;
-import com.example.ecommerce.entity.OrderStatus;
-import com.example.ecommerce.entity.PaymentStatus;
-import com.example.ecommerce.entity.Product;
-import com.example.ecommerce.entity.Role;
-import com.example.ecommerce.repository.InventoryTransactionRepository;
-import com.example.ecommerce.repository.OrderRepository;
-import com.example.ecommerce.repository.ProductRepository;
-import com.example.ecommerce.repository.UserRepository;
+import com.example.ecommerce.entity.*;
+import com.example.ecommerce.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Service tổng hợp chỉ số thống kê cho Quản trị viên (Admin Dashboard Module).
+ * Service tổng hợp và tính toán các chỉ số kinh doanh phục vụ Bảng điều khiển Quản trị viên (Admin Dashboard Module).
  * Phụ trách: Đặng Thanh Bình (Thành viên 4 - DTB)
  * Phối hợp: Vũ Đức Huy Hoàng [VDHH]
  *
  * Tiêu chí nghiệm thu (DoD):
- * - API Dashboard trả đủ chỉ số: tổng đơn hàng, doanh thu thực tế, đơn chờ duyệt.
- * - Truy vấn danh sách các sản phẩm có nguy cơ hết hàng (mặc định stock_quantity <= 5).
+ * 1. Tổng doanh thu hôm nay, tuần này, tháng này, năm nay.
+ * 2. Tổng số đơn hàng (Chờ xử lý, Đã thanh toán, Đã giao, Đã hủy).
+ * 3. Doanh thu theo từng ngày trong tháng phục vụ vẽ biểu đồ (Chart Data).
+ * 4. Tỷ lệ thanh toán: COD vs VNPay Online.
  */
 @Service
 @RequiredArgsConstructor
@@ -39,12 +44,13 @@ public class DashboardService {
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
+    private final PaymentRepository paymentRepository;
 
     /**
-     * Thu thập toàn bộ chỉ số thống kê tổng quan hệ thống cho Admin Dashboard.
+     * Thu thập toàn bộ chỉ số thống kê kinh doanh và tổng quan hệ thống cho Admin Dashboard.
      *
      * @param lowStockThreshold Ngưỡng cảnh báo tồn kho thấp (mặc định <= 5)
-     * @return DashboardStatsResponse chứa toàn bộ số liệu thống kê
+     * @return DashboardStatsResponse chứa toàn bộ số liệu thống kê chuẩn xác
      */
     @Transactional(readOnly = true)
     public DashboardStatsResponse getDashboardStats(Integer lowStockThreshold) {
@@ -54,8 +60,35 @@ public class DashboardService {
 
         log.info("Thu thập số liệu thống kê Admin Dashboard (ngưỡng tồn kho <= {})", threshold);
 
-        // 1. Thống kê đơn hàng & Doanh thu thực tế (chỉ tính đơn PAID hoặc COMPLETED và không bị CANCELLED)
+        // =========================================================================
+        // 1. THỐNG KÊ ĐƠN HÀNG (CHỜ XỬ LÝ, ĐÃ THANH TOÁN, ĐÃ GIAO, ĐÃ HỦY)
+        // =========================================================================
         long totalOrders = orderRepository.count();
+        long pendingOrders = orderRepository.countByOrderStatus(OrderStatus.PENDING);
+        long confirmedOrders = orderRepository.countByOrderStatus(OrderStatus.CONFIRMED);
+        long processingOrders = orderRepository.countByOrderStatus(OrderStatus.PROCESSING);
+        long shippingOrders = orderRepository.countByOrderStatus(OrderStatus.SHIPPING);
+        long completedOrders = orderRepository.countByOrderStatus(OrderStatus.COMPLETED);
+        long deliveredOrders = completedOrders; // Đã giao thành công
+        long cancelledOrders = orderRepository.countByOrderStatus(OrderStatus.CANCELLED);
+        long paidOrders = orderRepository.countByPaymentStatusAndOrderStatusNot(PaymentStatus.PAID, OrderStatus.CANCELLED);
+
+        // =========================================================================
+        // 2. THỐNG KÊ DOANH THU THEO KỲ (HÔM NAY, TUẦN NÀY, THÁNG NÀY, NĂM NAY)
+        // =========================================================================
+        LocalDate today = LocalDate.now();
+        LocalDateTime startOfToday = today.atStartOfDay();
+        LocalDateTime endOfToday = today.atTime(LocalTime.MAX);
+
+        LocalDateTime startOfWeek = today.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY)).atStartOfDay();
+        LocalDateTime endOfWeek = endOfToday;
+
+        LocalDateTime startOfMonth = today.withDayOfMonth(1).atStartOfDay();
+        LocalDateTime endOfMonth = endOfToday;
+
+        LocalDateTime startOfYear = today.withDayOfYear(1).atStartOfDay();
+        LocalDateTime endOfYear = endOfToday;
+
         BigDecimal actualRevenue = orderRepository.sumActualRevenue(
                 PaymentStatus.PAID,
                 OrderStatus.COMPLETED,
@@ -65,14 +98,121 @@ public class DashboardService {
             actualRevenue = BigDecimal.ZERO;
         }
 
-        long pendingOrders = orderRepository.countByOrderStatus(OrderStatus.PENDING);
-        long confirmedOrders = orderRepository.countByOrderStatus(OrderStatus.CONFIRMED);
-        long processingOrders = orderRepository.countByOrderStatus(OrderStatus.PROCESSING);
-        long shippingOrders = orderRepository.countByOrderStatus(OrderStatus.SHIPPING);
-        long completedOrders = orderRepository.countByOrderStatus(OrderStatus.COMPLETED);
-        long cancelledOrders = orderRepository.countByOrderStatus(OrderStatus.CANCELLED);
+        BigDecimal revenueToday = orderRepository.sumRevenueBetween(
+                startOfToday, endOfToday, PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
+        if (revenueToday == null) {
+            revenueToday = BigDecimal.ZERO;
+        }
 
-        // 2. Thống kê tồn kho & sản phẩm có nguy cơ hết hàng
+        BigDecimal revenueThisWeek = orderRepository.sumRevenueBetween(
+                startOfWeek, endOfWeek, PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
+        if (revenueThisWeek == null) {
+            revenueThisWeek = BigDecimal.ZERO;
+        }
+
+        BigDecimal revenueThisMonth = orderRepository.sumRevenueBetween(
+                startOfMonth, endOfMonth, PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
+        if (revenueThisMonth == null) {
+            revenueThisMonth = BigDecimal.ZERO;
+        }
+
+        BigDecimal revenueThisYear = orderRepository.sumRevenueBetween(
+                startOfYear, endOfYear, PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
+        if (revenueThisYear == null) {
+            revenueThisYear = BigDecimal.ZERO;
+        }
+
+        // =========================================================================
+        // 3. DOANH THU THEO TỪNG NGÀY TRONG THÁNG PHỤC VỤ VẼ BIỂU ĐỒ (CHART DATA)
+        // =========================================================================
+        YearMonth currentYearMonth = YearMonth.from(today);
+        int daysInMonth = currentYearMonth.lengthOfMonth();
+
+        Map<Integer, DashboardStatsResponse.DailyRevenuePoint> dailyMap = new LinkedHashMap<>();
+        for (int d = 1; d <= daysInMonth; d++) {
+            LocalDate date = currentYearMonth.atDay(d);
+            dailyMap.put(d, DashboardStatsResponse.DailyRevenuePoint.builder()
+                    .date(date.format(DateTimeFormatter.ISO_LOCAL_DATE))
+                    .day(d)
+                    .revenue(BigDecimal.ZERO)
+                    .orderCount(0L)
+                    .build());
+        }
+
+        LocalDateTime monthStart = currentYearMonth.atDay(1).atStartOfDay();
+        LocalDateTime monthEnd = currentYearMonth.atEndOfMonth().atTime(LocalTime.MAX);
+        List<Order> monthOrders = orderRepository.findOrdersBetween(monthStart, monthEnd);
+
+        if (monthOrders != null) {
+            for (Order order : monthOrders) {
+                if (order.getCreatedAt() != null) {
+                    int day = order.getCreatedAt().getDayOfMonth();
+                    DashboardStatsResponse.DailyRevenuePoint point = dailyMap.get(day);
+                    if (point != null) {
+                        point.setOrderCount(point.getOrderCount() + 1);
+                        boolean isValidRevenue = (order.getPaymentStatus() == PaymentStatus.PAID
+                                || order.getOrderStatus() == OrderStatus.COMPLETED)
+                                && order.getOrderStatus() != OrderStatus.CANCELLED;
+                        if (isValidRevenue && order.getTotalAmount() != null) {
+                            point.setRevenue(point.getRevenue().add(order.getTotalAmount()));
+                        }
+                    }
+                }
+            }
+        }
+        List<DashboardStatsResponse.DailyRevenuePoint> dailyRevenue = new ArrayList<>(dailyMap.values());
+
+        // =========================================================================
+        // 4. TỶ LỆ THANH TOÁN: COD VS VNPAY ONLINE
+        // =========================================================================
+        long codCount = paymentRepository.countByPaymentMethod(PaymentMethod.COD);
+        BigDecimal codRevenue = paymentRepository.sumRevenueByPaymentMethod(
+                PaymentMethod.COD, PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
+        if (codRevenue == null) {
+            codRevenue = BigDecimal.ZERO;
+        }
+
+        long vnpayCount = paymentRepository.countByPaymentMethod(PaymentMethod.VNPAY);
+        BigDecimal vnpayRevenue = paymentRepository.sumRevenueByPaymentMethod(
+                PaymentMethod.VNPAY, PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
+        if (vnpayRevenue == null) {
+            vnpayRevenue = BigDecimal.ZERO;
+        }
+
+        long simulatedCount = paymentRepository.countByPaymentMethod(PaymentMethod.SIMULATED);
+        BigDecimal simulatedRevenue = paymentRepository.sumRevenueByPaymentMethod(
+                PaymentMethod.SIMULATED, PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
+        if (simulatedRevenue == null) {
+            simulatedRevenue = BigDecimal.ZERO;
+        }
+
+        long onlineCount = vnpayCount + simulatedCount;
+        BigDecimal onlineRevenue = vnpayRevenue.add(simulatedRevenue);
+
+        long totalPaymentCount = codCount + onlineCount;
+        BigDecimal totalPaymentRevenue = codRevenue.add(onlineRevenue);
+
+        double codPercentage = 0.0;
+        double vnpayPercentage = 0.0;
+        if (totalPaymentCount > 0) {
+            codPercentage = Math.round(((double) codCount / totalPaymentCount) * 1000.0) / 10.0;
+            vnpayPercentage = Math.round(((double) onlineCount / totalPaymentCount) * 1000.0) / 10.0;
+        }
+
+        DashboardStatsResponse.PaymentDistribution paymentDistribution = DashboardStatsResponse.PaymentDistribution.builder()
+                .codCount(codCount)
+                .codRevenue(codRevenue)
+                .codPercentage(codPercentage)
+                .vnpayCount(onlineCount)
+                .vnpayRevenue(onlineRevenue)
+                .vnpayPercentage(vnpayPercentage)
+                .totalCount(totalPaymentCount)
+                .totalRevenue(totalPaymentRevenue)
+                .build();
+
+        // =========================================================================
+        // 5. CÁC CHỈ SỐ BỔ TRỢ (TỒN KHO, ĐỐI SOÁT NHẬT KÝ KHO, NGƯỜI DÙNG)
+        // =========================================================================
         long totalProducts = productRepository.count();
         long lowStockCount = productRepository.countByStockQuantityLessThanEqual(threshold);
         List<Product> lowStockEntities = productRepository.findByStockQuantityLessThanEqualOrderByStockQuantityAsc(threshold);
@@ -80,12 +220,10 @@ public class DashboardService {
                 .map(ProductResponse::fromEntity)
                 .toList();
 
-        // 3. Đối soát các bản ghi nhật ký kho
         long orderPlacedCount = inventoryTransactionRepository.countByTransactionType(InventoryTransactionType.ORDER_PLACED);
         long orderCancelledCount = inventoryTransactionRepository.countByTransactionType(InventoryTransactionType.ORDER_CANCELLED);
         long manualImportCount = inventoryTransactionRepository.countByTransactionType(InventoryTransactionType.MANUAL_IMPORT);
 
-        // 4. Thống kê người dùng
         long totalUsers = userRepository.count();
         long totalCustomers = userRepository.countByRole(Role.CUSTOMER);
 
@@ -93,12 +231,20 @@ public class DashboardService {
                 .totalOrders(totalOrders)
                 .actualRevenue(actualRevenue)
                 .totalRevenue(actualRevenue)
+                .revenueToday(revenueToday)
+                .revenueThisWeek(revenueThisWeek)
+                .revenueThisMonth(revenueThisMonth)
+                .revenueThisYear(revenueThisYear)
                 .pendingOrders(pendingOrders)
+                .paidOrders(paidOrders)
+                .deliveredOrders(deliveredOrders)
+                .completedOrders(completedOrders)
+                .cancelledOrders(cancelledOrders)
                 .confirmedOrders(confirmedOrders)
                 .processingOrders(processingOrders)
                 .shippingOrders(shippingOrders)
-                .completedOrders(completedOrders)
-                .cancelledOrders(cancelledOrders)
+                .dailyRevenue(dailyRevenue)
+                .paymentDistribution(paymentDistribution)
                 .totalProducts(totalProducts)
                 .lowStockCount(lowStockCount)
                 .lowStockProducts(lowStockProducts)
