@@ -122,12 +122,15 @@ class ProductBestSellerTest {
         // Kiểm tra đúng thứ tự totalSold giảm dần theo DoD
         assertThat(response.getContent().get(0).getTotalSold()).isEqualTo(150L);
         assertThat(response.getContent().get(0).getName()).isEqualTo("Áo Polo Nam Tech");
+        assertThat(response.getContent().get(0).getRank()).isEqualTo(1);
 
         assertThat(response.getContent().get(1).getTotalSold()).isEqualTo(80L);
         assertThat(response.getContent().get(1).getName()).isEqualTo("Quần Short Kaki");
+        assertThat(response.getContent().get(1).getRank()).isEqualTo(2);
 
         assertThat(response.getContent().get(2).getTotalSold()).isEqualTo(20L);
         assertThat(response.getContent().get(2).getName()).isEqualTo("Tất Cổ Cao Cotton");
+        assertThat(response.getContent().get(2).getRank()).isEqualTo(3);
 
         for (int i = 0; i < response.getContent().size() - 1; i++) {
             assertThat(response.getContent().get(i).getTotalSold())

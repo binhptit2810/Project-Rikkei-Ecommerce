@@ -67,9 +67,11 @@ public class ProductController {
             @RequestParam(required = false) Integer month,
             @RequestParam(required = false) Integer year,
             @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size) {
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) Integer limit) {
 
-        PageResponse<ProductResponse> bestSellers = productService.getBestSellers(month, year, page, size);
+        int effectiveSize = (limit != null && limit > 0) ? limit : size;
+        PageResponse<ProductResponse> bestSellers = productService.getBestSellers(month, year, page, effectiveSize);
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách Best Seller thành công", bestSellers));
     }
 

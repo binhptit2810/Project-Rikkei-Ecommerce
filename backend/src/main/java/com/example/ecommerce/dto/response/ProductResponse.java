@@ -28,9 +28,22 @@ public class ProductResponse {
     private Double ratingAverage;
     private Integer totalReviews;
     private Long totalSold;
+    private Integer rank;
     private List<ProductVariantResponse> variants;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
+
+    public Long getProductId() {
+        return this.id;
+    }
+
+    public String getProductName() {
+        return this.name;
+    }
+
+    public Long getSoldQuantity() {
+        return this.totalSold;
+    }
 
     public static ProductResponse fromEntity(Product product, Long totalSold) {
         ProductResponse res = fromEntity(product);
