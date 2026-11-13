@@ -19,7 +19,6 @@ import {
 import chatService from '../../services/chatService'
 import orderService from '../../services/orderService'
 import { useAuthStore } from '../../store/useAuthStore'
-import { ChatProductList } from './ChatProductCard'
 import { MiniProductList } from '../chat/MiniProductCard'
 import { ChatOrderStatusCard } from './ChatOrderStatusCard'
 import {

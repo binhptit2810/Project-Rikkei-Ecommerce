@@ -35,6 +35,10 @@ public interface BestSellerProjection {
 
     Long getTotalSold();
 
+    default BigDecimal getTotalRevenue() {
+        return null;
+    }
+
     LocalDateTime getCreatedAt();
 
     LocalDateTime getUpdatedAt();
