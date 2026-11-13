@@ -2,14 +2,11 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   X,
   Ticket,
-  Tag,
   Check,
   AlertCircle,
   Clock,
   Sparkles,
-  ArrowRight,
   RefreshCw,
-  Search,
   Info
 } from 'lucide-react'
 import couponService from '../../services/couponService'
