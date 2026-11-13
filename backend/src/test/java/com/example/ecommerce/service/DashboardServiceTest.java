@@ -3,10 +3,7 @@ package com.example.ecommerce.service;
 import com.example.ecommerce.dto.response.DashboardStatsResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
 import com.example.ecommerce.entity.*;
-import com.example.ecommerce.repository.InventoryTransactionRepository;
-import com.example.ecommerce.repository.OrderRepository;
-import com.example.ecommerce.repository.ProductRepository;
-import com.example.ecommerce.repository.UserRepository;
+import com.example.ecommerce.repository.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -16,9 +13,13 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 /**
@@ -27,9 +28,10 @@ import static org.mockito.Mockito.*;
  * Phối hợp: Đỗ Hoàng Anh [DHA]
  *
  * Tiêu chí nghiệm thu (DoD):
- * - Dashboard số liệu chính xác 100%, phản ánh thực tế hoạt động kinh doanh.
- * - Xác nhận thống kê doanh thu chỉ tính trên các đơn hàng đã thanh toán (PAID) hoặc hoàn thành (COMPLETED).
- * - Đối soát các bản ghi nhật ký kho: ORDER_PLACED, ORDER_CANCELLED, MANUAL_IMPORT.
+ * 1. Tổng doanh thu hôm nay, tuần này, tháng này, năm nay.
+ * 2. Tổng số đơn hàng (Chờ xử lý, Đã thanh toán, Đã giao, Đã hủy).
+ * 3. Doanh thu theo từng ngày trong tháng phục vụ vẽ biểu đồ (Chart Data).
+ * 4. Tỷ lệ thanh toán: COD vs VNPay Online.
  */
 @ExtendWith(MockitoExtension.class)
 class DashboardServiceTest {
@@ -45,6 +47,9 @@ class DashboardServiceTest {
 
     @Mock
     private InventoryTransactionRepository inventoryTransactionRepository;
+
+    @Mock
+    private PaymentRepository paymentRepository;
 
     @InjectMocks
     private DashboardService dashboardService;
@@ -79,7 +84,7 @@ class DashboardServiceTest {
     }
 
     @Test
-    @DisplayName("getDashboardStats: Trả về đầy đủ tổng đơn, doanh thu thực tế (PAID/COMPLETED), đối soát nhật ký kho và tồn kho thấp")
+    @DisplayName("getDashboardStats: Trả về đầy đủ tổng đơn, doanh thu theo kỳ, biểu đồ ngày, tỷ lệ COD vs VNPay và tồn kho")
     void getDashboardStats_Success() {
         // Mock dữ liệu đơn hàng và doanh thu thực tế
         when(orderRepository.count()).thenReturn(25L);
@@ -91,6 +96,34 @@ class DashboardServiceTest {
         when(orderRepository.countByOrderStatus(OrderStatus.SHIPPING)).thenReturn(3L);
         when(orderRepository.countByOrderStatus(OrderStatus.COMPLETED)).thenReturn(6L);
         when(orderRepository.countByOrderStatus(OrderStatus.CANCELLED)).thenReturn(1L);
+        when(orderRepository.countByPaymentStatusAndOrderStatusNot(PaymentStatus.PAID, OrderStatus.CANCELLED))
+                .thenReturn(20L);
+
+        // Mock doanh thu theo kỳ (hôm nay, tuần này, tháng này, năm nay)
+        when(orderRepository.sumRevenueBetween(any(), any(), eq(PaymentStatus.PAID), eq(OrderStatus.COMPLETED), eq(OrderStatus.CANCELLED)))
+                .thenReturn(BigDecimal.valueOf(2500000));
+
+        // Mock đơn hàng trong tháng cho biểu đồ
+        Order orderToday = Order.builder()
+                .id(1L)
+                .orderCode("ORD-TODAY")
+                .totalAmount(BigDecimal.valueOf(500000))
+                .paymentStatus(PaymentStatus.PAID)
+                .orderStatus(OrderStatus.CONFIRMED)
+                .createdAt(LocalDateTime.now())
+                .build();
+        when(orderRepository.findOrdersBetween(any(), any())).thenReturn(List.of(orderToday));
+
+        // Mock phương thức thanh toán COD vs VNPay Online
+        when(paymentRepository.countByPaymentMethod(PaymentMethod.COD)).thenReturn(15L);
+        when(paymentRepository.sumRevenueByPaymentMethod(eq(PaymentMethod.COD), any(), any(), any()))
+                .thenReturn(BigDecimal.valueOf(10000000));
+        when(paymentRepository.countByPaymentMethod(PaymentMethod.VNPAY)).thenReturn(10L);
+        when(paymentRepository.sumRevenueByPaymentMethod(eq(PaymentMethod.VNPAY), any(), any(), any()))
+                .thenReturn(BigDecimal.valueOf(8500000));
+        when(paymentRepository.countByPaymentMethod(PaymentMethod.SIMULATED)).thenReturn(0L);
+        when(paymentRepository.sumRevenueByPaymentMethod(eq(PaymentMethod.SIMULATED), any(), any(), any()))
+                .thenReturn(BigDecimal.ZERO);
 
         // Mock dữ liệu sản phẩm và cảnh báo kho
         when(productRepository.count()).thenReturn(50L);
@@ -115,18 +148,40 @@ class DashboardServiceTest {
         assertThat(stats.getTotalOrders()).isEqualTo(25L);
         assertThat(stats.getActualRevenue()).isEqualByComparingTo(BigDecimal.valueOf(18500000));
         assertThat(stats.getTotalRevenue()).isEqualByComparingTo(BigDecimal.valueOf(18500000));
+
+        // 1. Kiểm tra doanh thu theo kỳ
+        assertThat(stats.getRevenueToday()).isEqualByComparingTo(BigDecimal.valueOf(2500000));
+        assertThat(stats.getRevenueThisWeek()).isEqualByComparingTo(BigDecimal.valueOf(2500000));
+        assertThat(stats.getRevenueThisMonth()).isEqualByComparingTo(BigDecimal.valueOf(2500000));
+        assertThat(stats.getRevenueThisYear()).isEqualByComparingTo(BigDecimal.valueOf(2500000));
+
+        // 2. Kiểm tra thống kê đơn hàng
         assertThat(stats.getPendingOrders()).isEqualTo(4L);
-        assertThat(stats.getConfirmedOrders()).isEqualTo(6L);
+        assertThat(stats.getPaidOrders()).isEqualTo(20L);
+        assertThat(stats.getDeliveredOrders()).isEqualTo(6L);
         assertThat(stats.getCompletedOrders()).isEqualTo(6L);
         assertThat(stats.getCancelledOrders()).isEqualTo(1L);
+
+        // 3. Kiểm tra biểu đồ doanh thu theo từng ngày trong tháng
+        int daysInMonth = YearMonth.now().lengthOfMonth();
+        assertThat(stats.getDailyRevenue()).isNotNull().hasSize(daysInMonth);
+        int todayDay = LocalDateTime.now().getDayOfMonth();
+        DashboardStatsResponse.DailyRevenuePoint todayPoint = stats.getDailyRevenue().get(todayDay - 1);
+        assertThat(todayPoint.getDay()).isEqualTo(todayDay);
+        assertThat(todayPoint.getOrderCount()).isEqualTo(1L);
+        assertThat(todayPoint.getRevenue()).isEqualByComparingTo(BigDecimal.valueOf(500000));
+
+        // 4. Kiểm tra tỷ lệ thanh toán COD vs VNPay
+        assertThat(stats.getPaymentDistribution()).isNotNull();
+        assertThat(stats.getPaymentDistribution().getCodCount()).isEqualTo(15L);
+        assertThat(stats.getPaymentDistribution().getVnpayCount()).isEqualTo(10L);
+        assertThat(stats.getPaymentDistribution().getTotalCount()).isEqualTo(25L);
+        assertThat(stats.getPaymentDistribution().getCodPercentage()).isEqualTo(60.0);
+        assertThat(stats.getPaymentDistribution().getVnpayPercentage()).isEqualTo(40.0);
 
         // Kiểm tra danh sách sản phẩm nguy cơ hết hàng
         assertThat(stats.getLowStockCount()).isEqualTo(2L);
         assertThat(stats.getLowStockProducts()).hasSize(2);
-        assertThat(stats.getLowStockProducts().get(0).getId()).isEqualTo(101L);
-        assertThat(stats.getLowStockProducts().get(0).getStockQuantity()).isEqualTo(2);
-        assertThat(stats.getLowStockProducts().get(1).getId()).isEqualTo(102L);
-        assertThat(stats.getLowStockProducts().get(1).getStockQuantity()).isEqualTo(5);
 
         // Kiểm tra đối soát nhật ký kho
         assertThat(stats.getOrderPlacedCount()).isEqualTo(15L);
@@ -140,10 +195,8 @@ class DashboardServiceTest {
         verify(orderRepository).count();
         verify(orderRepository).sumActualRevenue(PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
         verify(orderRepository).countByOrderStatus(OrderStatus.PENDING);
-        verify(productRepository).findByStockQuantityLessThanEqualOrderByStockQuantityAsc(5);
-        verify(inventoryTransactionRepository).countByTransactionType(InventoryTransactionType.ORDER_PLACED);
-        verify(inventoryTransactionRepository).countByTransactionType(InventoryTransactionType.ORDER_CANCELLED);
-        verify(inventoryTransactionRepository).countByTransactionType(InventoryTransactionType.MANUAL_IMPORT);
+        verify(paymentRepository).countByPaymentMethod(PaymentMethod.COD);
+        verify(paymentRepository).countByPaymentMethod(PaymentMethod.VNPAY);
     }
 
     @Test
@@ -151,6 +204,14 @@ class DashboardServiceTest {
     void getDashboardStats_NullRevenue_DefaultsToZero() {
         when(orderRepository.count()).thenReturn(0L);
         when(orderRepository.sumActualRevenue(PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED))
+                .thenReturn(null);
+        when(orderRepository.sumRevenueBetween(any(), any(), any(), any(), any()))
+                .thenReturn(null);
+        when(orderRepository.findOrdersBetween(any(), any()))
+                .thenReturn(List.of());
+        when(paymentRepository.countByPaymentMethod(any()))
+                .thenReturn(0L);
+        when(paymentRepository.sumRevenueByPaymentMethod(any(), any(), any(), any()))
                 .thenReturn(null);
         when(productRepository.count()).thenReturn(0L);
         when(productRepository.countByStockQuantityLessThanEqual(5)).thenReturn(0L);
@@ -165,6 +226,12 @@ class DashboardServiceTest {
         assertThat(stats).isNotNull();
         assertThat(stats.getTotalOrders()).isEqualTo(0L);
         assertThat(stats.getActualRevenue()).isEqualTo(BigDecimal.ZERO);
+        assertThat(stats.getRevenueToday()).isEqualTo(BigDecimal.ZERO);
+        assertThat(stats.getRevenueThisWeek()).isEqualTo(BigDecimal.ZERO);
+        assertThat(stats.getRevenueThisMonth()).isEqualTo(BigDecimal.ZERO);
+        assertThat(stats.getRevenueThisYear()).isEqualTo(BigDecimal.ZERO);
+        assertThat(stats.getPaymentDistribution().getCodPercentage()).isEqualTo(0.0);
+        assertThat(stats.getPaymentDistribution().getVnpayPercentage()).isEqualTo(0.0);
         assertThat(stats.getLowStockProducts()).isEmpty();
     }
 

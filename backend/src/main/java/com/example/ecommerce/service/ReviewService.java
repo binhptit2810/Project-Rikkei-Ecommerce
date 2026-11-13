@@ -5,6 +5,7 @@ import com.example.ecommerce.dto.request.ReviewCreateRequest;
 import com.example.ecommerce.dto.request.ReviewRequest;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductRatingSummaryResponse;
+import com.example.ecommerce.dto.response.ReviewEligibilityResponse;
 import com.example.ecommerce.dto.response.ReviewImageResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import org.springframework.data.domain.Pageable;
@@ -35,6 +36,15 @@ public interface ReviewService {
      * @return ProductRatingSummaryResponse
      */
     ProductRatingSummaryResponse getProductRatingSummary(Long productId);
+
+    /**
+     * Kiểm tra điều kiện gửi đánh giá của người dùng hiện tại đối với một sản phẩm.
+     * Chỉ người đã mua sản phẩm và đơn hàng ở trạng thái COMPLETED (giao thành công) mới được đánh giá.
+     *
+     * @param productId ID sản phẩm
+     * @return ReviewEligibilityResponse thông tin chi tiết quyền đánh giá
+     */
+    ReviewEligibilityResponse checkReviewEligibility(Long productId);
 
     /**
      * Khách hàng tạo đánh giá mới cho sản phẩm đã mua và hoàn thành giao dịch.

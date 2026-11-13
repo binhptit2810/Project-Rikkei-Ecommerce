@@ -12,14 +12,18 @@ import {
   FileText,
   Lock,
   Tag,
+  Ticket,
+  ChevronRight,
   X,
 } from 'lucide-react'
 import { useCartStore } from '../../store/useCartStore'
 import { useAuthStore } from '../../store/useAuthStore'
+import { useToastStore } from '../../store/useToastStore'
 import orderService from '../../services/orderService'
 import paymentService from '../../services/paymentService'
 import couponService from '../../services/couponService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import VoucherPickerModal from '../../components/checkout/VoucherPickerModal'
 
 export const CheckoutPage = () => {
   const navigate = useNavigate()
@@ -44,6 +48,7 @@ export const CheckoutPage = () => {
   const [appliedCoupon, setAppliedCoupon] = useState(null)
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false)
   const [couponError, setCouponError] = useState(null)
+  const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false)
 
   // Tự động điền thông tin có sẵn từ tài khoản người dùng
   useEffect(() => {
@@ -210,6 +215,15 @@ export const CheckoutPage = () => {
       if (!createdOrder || !createdOrder.id) {
         throw new Error('Dữ liệu đơn hàng phản hồi từ máy chủ không hợp lệ.')
       }
+
+      // Kích hoạt ô thông báo bên phải: Đặt hàng thành công (tự động biến mất sau 2s)
+      useToastStore.getState().showToast({
+        type: 'success',
+        title: 'Đặt hàng thành công!',
+        message: `Mã đơn hàng: #${createdOrder.orderCode || createdOrder.id} • Cảm ơn bạn đã mua hàng!`,
+        link: { to: `/orders/${createdOrder.id}`, label: 'Xem đơn hàng →' },
+        duration: 2000,
+      })
 
       // Xử lý theo phương thức thanh toán
       if (formData.paymentMethod === 'VNPAY' || formData.paymentMethod === 'SIMULATED') {
@@ -685,62 +699,89 @@ export const CheckoutPage = () => {
                   ))}
                 </div>
 
-                {/* Mã giảm giá / Voucher */}
-                <div className="pt-3 border-t border-slate-100">
-                  <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5 mb-2">
-                    <Tag className="w-3.5 h-3.5 text-blue-600" />
-                    <span>Mã giảm giá / Voucher</span>
-                  </label>
-                  {appliedCoupon ? (
-                    <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="font-extrabold text-emerald-800 tracking-wide">{appliedCoupon.code}</span>
-                          <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-800 text-[10px] font-bold">
-                            -{formatPrice(appliedCoupon.discountAmount)}
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-emerald-700 mt-0.5">{appliedCoupon.message}</p>
-                      </div>
+                {/* 🎟️ Mã giảm giá / Voucher (Giao diện Shopee) */}
+                <div className="pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                      <Ticket className="w-3.5 h-3.5 text-orange-500 fill-orange-400" />
+                      <span>Mã giảm giá / Voucher</span>
+                    </label>
+
+                    {appliedCoupon && (
                       <button
                         type="button"
-                        onClick={handleRemoveCoupon}
-                        className="text-slate-400 hover:text-red-600 p-1 font-bold text-xs cursor-pointer"
-                        title="Gỡ mã giảm giá"
+                        onClick={() => setIsVoucherModalOpen(true)}
+                        className="text-xs font-bold text-blue-600 hover:text-blue-700 cursor-pointer"
                       >
-                        <X className="w-4 h-4" />
+                        Chọn mã khác
                       </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-1.5">
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={couponCodeInput}
-                          onChange={(e) => {
-                            setCouponCodeInput(e.target.value.toUpperCase())
-                            if (couponError) setCouponError(null)
-                          }}
-                          disabled={isValidatingCoupon || isSubmitting}
-                          placeholder="Nhập mã (VD: WELCOME10)"
-                          className="flex-1 h-9 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs uppercase font-semibold tracking-wider placeholder:normal-case placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
-                        />
+                    )}
+                  </div>
+
+                  {appliedCoupon ? (
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50/80 border border-emerald-200 flex items-center justify-between text-xs shadow-2xs">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1 pr-2">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                          <Ticket className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-black text-emerald-950 tracking-wider text-xs sm:text-sm">
+                              {appliedCoupon.code}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-200 text-emerald-900 text-[10px] font-black">
+                              -{formatPrice(appliedCoupon.discountAmount)}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-emerald-700 line-clamp-1 mt-0.5 font-medium">
+                            {appliedCoupon.message || 'Mã giảm giá đã được áp dụng'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           type="button"
-                          onClick={handleApplyCoupon}
-                          disabled={isValidatingCoupon || isSubmitting || !couponCodeInput.trim()}
-                          className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 active:scale-95 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs transition-all shrink-0 cursor-pointer flex items-center gap-1"
+                          onClick={() => setIsVoucherModalOpen(true)}
+                          className="text-blue-600 hover:text-blue-700 font-bold text-xs underline cursor-pointer hover:opacity-80"
                         >
-                          {isValidatingCoupon ? <LoadingSpinner size="xs" className="text-white" /> : 'Áp dụng'}
+                          Thay đổi
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleRemoveCoupon}
+                          className="text-slate-400 hover:text-red-600 p-1.5 rounded-full hover:bg-red-50 transition-colors cursor-pointer"
+                          title="Bỏ áp dụng voucher"
+                        >
+                          <X className="w-4 h-4" />
                         </button>
                       </div>
-                      {couponError && (
-                        <p className="text-[11px] text-red-600 font-medium flex items-center gap-1">
-                          <AlertCircle className="w-3 h-3 shrink-0" />
-                          <span>{couponError}</span>
-                        </p>
-                      )}
                     </div>
+                  ) : (
+                    <div
+                      onClick={() => setIsVoucherModalOpen(true)}
+                      className="p-3.5 rounded-2xl border border-dashed border-orange-300 bg-orange-50/40 hover:bg-orange-50 transition-all flex items-center justify-between cursor-pointer group shadow-2xs"
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                          <Ticket className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs sm:text-sm font-bold text-slate-800 group-hover:text-orange-700 transition-colors">
+                          Chọn voucher giảm giá
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 text-orange-600 font-bold text-xs">
+                        <span>Chọn voucher</span>
+                        <ChevronRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+                      </div>
+                    </div>
+                  )}
+
+                  {couponError && (
+                    <p className="text-[11px] text-red-600 font-medium flex items-center gap-1 pt-0.5">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      <span>{couponError}</span>
+                    </p>
                   )}
                 </div>
 
@@ -793,6 +834,19 @@ export const CheckoutPage = () => {
           </div>
         </form>
       </div>
+
+      {/* Modal / Bottom Sheet Chọn Voucher kiểu Shopee */}
+      <VoucherPickerModal
+        isOpen={isVoucherModalOpen}
+        onClose={() => setIsVoucherModalOpen(false)}
+        onSelectVoucher={(data) => {
+          setAppliedCoupon(data)
+          setCouponCodeInput(data.code)
+          setCouponError(null)
+        }}
+        currentCode={appliedCoupon?.code}
+        orderValue={totalPrice}
+      />
     </div>
   )
 }

@@ -69,6 +69,11 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     boolean existsByProductIdAndUserId(Long productId, Long userId);
 
     /**
+     * Tìm bản ghi đánh giá của người dùng cụ thể đối với một sản phẩm.
+     */
+    Optional<Review> findByProductIdAndUserId(Long productId, Long userId);
+
+    /**
      * Tính điểm đánh giá trung bình của sản phẩm (chỉ tính các review đang hiển thị công khai).
      */
     @Query("SELECT AVG(r.rating) FROM Review r WHERE r.product.id = :productId AND (r.isVisible = true OR r.isVisible IS NULL) AND (r.isHidden = false OR r.isHidden IS NULL)")

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import cartService from '../services/cartService'
 import { useAuthStore } from './useAuthStore'
+import { useToastStore } from './useToastStore'
 
 /**
  * Quản lý trạng thái giỏ hàng (Cart Store).
@@ -73,14 +74,15 @@ export const useCartStore = create(
           )
           newItems[existingIndex] = {
             ...current,
+            name: current.name || product.name || product.productName,
             stockQuantity: maxStock,
             quantity: updatedQuantity,
           }
         } else {
           newItems.push({
-            id: product.id,
+            id: product.id ?? product.productId,
             selectedSize: normalizedSize,
-            name: product.name,
+            name: product.name ?? product.productName ?? 'Sản phẩm',
             price: Number(product.price) || 0,
             imageUrl: product.imageUrl || '',
             stockQuantity: maxStock,
@@ -91,7 +93,16 @@ export const useCartStore = create(
         set({ items: newItems })
 
         // Gửi request API lên backend
-        cartService.addToCart(product.id, desiredQty)
+        cartService.addToCart(product.id ?? product.productId, desiredQty)
+
+        // Hiển thị ô thông báo ở góc phải tự động ẩn sau 2s
+        useToastStore.getState().showToast({
+          type: 'cart',
+          title: 'Đã thêm vào giỏ hàng!',
+          message: `Đã thêm "${product.name ?? product.productName ?? 'Sản phẩm'}"${normalizedSize ? ` (Size ${normalizedSize})` : ''} vào giỏ hàng.`,
+          link: { to: '/cart', label: 'Xem giỏ hàng →' },
+          duration: 2000,
+        })
 
         return { success: true }
       },

@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/useAuthStore'
 import CustomerLayout from './components/common/CustomerLayout'
 import AdminLayout from './components/admin/AdminLayout'
+import ScrollToTop from './components/common/ScrollToTop'
+import GlobalToast from './components/common/GlobalToast'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import GuestRoute from './components/auth/GuestRoute'
 import AdminGuestRoute from './components/auth/AdminGuestRoute'
@@ -34,9 +36,13 @@ import AdminVouchersPage from './pages/admin/AdminVouchersPage'
 import AdminReviewsPage from './pages/admin/AdminReviewsPage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
+import WishlistPage from './pages/WishlistPage'
+import { useWishlistStore } from './store/useWishlistStore'
 
 function App() {
-  const { initAuth, isInitializing } = useAuthStore()
+  const { initAuth, isInitializing, isAuthenticated, user } = useAuthStore()
+  const fetchWishlistIds = useWishlistStore((state) => state.fetchWishlistIds)
+  const resetWishlist = useWishlistStore((state) => state.resetWishlist)
   const initRef = useRef(false)
 
   // Khôi phục phiên làm việc khi ứng dụng khởi chạy / reload trang (App Bootstrapping)
@@ -46,6 +52,15 @@ function App() {
       initAuth()
     }
   }, [initAuth])
+
+  // Tải danh sách Wishlist IDs khi người dùng đăng nhập
+  useEffect(() => {
+    if (isAuthenticated && user?.role !== 'ADMIN') {
+      fetchWishlistIds()
+    } else {
+      resetWishlist()
+    }
+  }, [isAuthenticated, user, fetchWishlistIds, resetWishlist])
 
   // Hiển thị màn hình chờ toàn trang khi đang kiểm tra và làm mới token trong memory
   if (isInitializing) {
@@ -59,6 +74,10 @@ function App() {
 
   return (
     <BrowserRouter>
+      {/* Tự động cuộn lên đầu trang khi click sản phẩm, danh mục hoặc chuyển route */}
+      <ScrollToTop />
+      {/* Ô thông báo toàn cục bên phải màn hình (tự động biến mất sau 2s) */}
+      <GlobalToast />
       <Routes>
         {/* 1. Trang Đăng nhập Quản trị viên (Độc lập, không chứa Navbar/Footer mua sắm) */}
         <Route
@@ -149,6 +168,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="CUSTOMER">
                 <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/wishlist"
+            element={
+              <ProtectedRoute requiredRole="CUSTOMER">
+                <WishlistPage />
               </ProtectedRoute>
             }
           />

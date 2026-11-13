@@ -4,6 +4,7 @@ import com.example.ecommerce.dto.request.ReviewCreateRequest;
 import com.example.ecommerce.dto.response.FileUploadResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductRatingSummaryResponse;
+import com.example.ecommerce.dto.response.ReviewEligibilityResponse;
 import com.example.ecommerce.dto.response.ReviewImageResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import com.example.ecommerce.entity.OrderStatus;
@@ -515,5 +516,69 @@ class ReviewServiceTest {
         assertThat(response.getContent()).hasSize(1);
         assertThat(response.getContent().get(0).getId()).isEqualTo(1L);
         assertThat(response.getContent().get(0).getProductName()).isEqualTo("Áo thun nam basic Cotton");
+    }
+
+    @Test
+    @DisplayName("Test 14: checkReviewEligibility trả về canReview = true khi user đã mua sản phẩm (COMPLETED) và chưa đánh giá")
+    void checkReviewEligibility_eligible_returnsCanReviewTrue() {
+        when(productRepository.existsById(10L)).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(orderItemRepository.hasUserPurchasedProductWithStatus(1L, 10L, OrderStatus.COMPLETED)).thenReturn(true);
+        when(reviewRepository.findByProductIdAndUserId(10L, 1L)).thenReturn(Optional.empty());
+
+        ReviewEligibilityResponse response = reviewService.checkReviewEligibility(10L);
+
+        assertThat(response).isNotNull();
+        assertThat(response.isCanReview()).isTrue();
+        assertThat(response.isHasPurchased()).isTrue();
+        assertThat(response.isAlreadyReviewed()).isFalse();
+        assertThat(response.getMyReviewId()).isNull();
+        assertThat(response.getMyReview()).isNull();
+    }
+
+    @Test
+    @DisplayName("Test 15: checkReviewEligibility trả về canReview = false khi user chưa từng mua sản phẩm hoặc đơn hàng chưa giao thành công")
+    void checkReviewEligibility_notPurchased_returnsCanReviewFalse() {
+        when(productRepository.existsById(10L)).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(orderItemRepository.hasUserPurchasedProductWithStatus(1L, 10L, OrderStatus.COMPLETED)).thenReturn(false);
+        when(reviewRepository.findByProductIdAndUserId(10L, 1L)).thenReturn(Optional.empty());
+
+        ReviewEligibilityResponse response = reviewService.checkReviewEligibility(10L);
+
+        assertThat(response).isNotNull();
+        assertThat(response.isCanReview()).isFalse();
+        assertThat(response.isHasPurchased()).isFalse();
+        assertThat(response.isAlreadyReviewed()).isFalse();
+        assertThat(response.getReason()).contains("mua và nhận hàng thành công");
+    }
+
+    @Test
+    @DisplayName("Test 16: checkReviewEligibility trả về alreadyReviewed = true và myReviewId khi user đã từng đánh giá")
+    void checkReviewEligibility_alreadyReviewed_returnsCanReviewFalseAndMyReview() {
+        when(productRepository.existsById(10L)).thenReturn(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(orderItemRepository.hasUserPurchasedProductWithStatus(1L, 10L, OrderStatus.COMPLETED)).thenReturn(true);
+
+        Review existingReview = Review.builder()
+                .id(99L)
+                .product(testProduct)
+                .user(testUser)
+                .rating(5)
+                .comment("Đã đánh giá trước đó")
+                .isVisible(true)
+                .createdAt(LocalDateTime.now())
+                .build();
+        when(reviewRepository.findByProductIdAndUserId(10L, 1L)).thenReturn(Optional.of(existingReview));
+
+        ReviewEligibilityResponse response = reviewService.checkReviewEligibility(10L);
+
+        assertThat(response).isNotNull();
+        assertThat(response.isCanReview()).isFalse();
+        assertThat(response.isHasPurchased()).isTrue();
+        assertThat(response.isAlreadyReviewed()).isTrue();
+        assertThat(response.getMyReviewId()).isEqualTo(99L);
+        assertThat(response.getMyReview()).isNotNull();
+        assertThat(response.getMyReview().getComment()).isEqualTo("Đã đánh giá trước đó");
     }
 }

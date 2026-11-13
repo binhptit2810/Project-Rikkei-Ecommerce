@@ -18,6 +18,7 @@ import LoadingSpinner from '../../components/common/LoadingSpinner'
 import ProductCard from '../../components/common/ProductCard'
 import Pagination from '../../components/common/Pagination'
 import { useCartStore } from '../../store/useCartStore'
+import { useToastStore } from '../../store/useToastStore'
 
 /**
  * Skeleton card hiển thị trạng thái đang tải (Loading State).
@@ -56,10 +57,6 @@ export const ProductListPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Toast Notification state
-  const [toast, setToast] = useState(null)
-  const toastTimeoutRef = useRef(null)
-
   // Pagination state (đồng bộ với URL searchParams)
   const [page, setPage] = useState(parseInt(searchParams.get('page') || '0', 10))
   const [pageSize, setPageSize] = useState(parseInt(searchParams.get('size') || '12', 10))
@@ -93,25 +90,16 @@ export const ProductListPage = () => {
     },
   }
 
-  // Hiển thị Toast Notification và tự động ẩn sau 3 giây
+  // Hiển thị Toast Notification góc phải tự động ẩn sau 2s
   const showToast = (message, type = 'success') => {
-    if (toastTimeoutRef.current) {
-      clearTimeout(toastTimeoutRef.current)
-    }
-    setToast({ message, type })
-    toastTimeoutRef.current = setTimeout(() => {
-      setToast(null)
-    }, 3000)
+    useToastStore.getState().showToast({
+      title: type === 'error' ? 'Có lỗi xảy ra' : 'Đã thêm vào giỏ hàng!',
+      message,
+      type,
+      duration: 2000,
+      link: type === 'success' ? { to: '/cart', label: 'Xem giỏ hàng →' } : null,
+    })
   }
-
-  // Cleanup timeout khi unmount
-  useEffect(() => {
-    return () => {
-      if (toastTimeoutRef.current) {
-        clearTimeout(toastTimeoutRef.current)
-      }
-    }
-  }, [])
 
   // Xử lý thêm vào giỏ hàng
   const handleAddToCart = async (product) => {
@@ -138,9 +126,8 @@ export const ProductListPage = () => {
       }
       if (res && res.success === false) {
         showToast(res.message || 'Sản phẩm đã hết hàng', 'error')
-      } else {
-        showToast(`Đã thêm "${product.name}" vào giỏ hàng!`, 'success')
       }
+      // Khi addToCart thành công, useCartStore đã tự động hiển thị toast 2s
     } catch (err) {
       console.error('Lỗi khi thêm giỏ hàng:', err)
       showToast('Có lỗi xảy ra khi thêm vào giỏ hàng', 'error')
@@ -224,7 +211,33 @@ export const ProductListPage = () => {
     if (newSortBy !== 'createdAt') p.sortBy = newSortBy
     if (newSortDir !== 'desc') p.sortDir = newSortDir
     setSearchParams(p)
+
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    if (document.documentElement) document.documentElement.scrollTop = 0
+    if (document.body) document.body.scrollTop = 0
   }
+
+  // Đồng bộ URL searchParams khi người dùng chuyển danh mục từ Trang chủ, Navbar, Breadcrumb...
+  useEffect(() => {
+    const urlCatId = searchParams.get('categoryId') || ''
+    const urlKeyword = searchParams.get('keyword') || ''
+    const urlPage = parseInt(searchParams.get('page') || '0', 10)
+    const urlSize = parseInt(searchParams.get('size') || '12', 10)
+    const urlSortBy = searchParams.get('sortBy') || 'createdAt'
+    const urlSortDir = searchParams.get('sortDir') || 'desc'
+
+    setSelectedCategory((prev) => (prev !== urlCatId ? urlCatId : prev))
+    setKeyword((prev) => (prev !== urlKeyword ? urlKeyword : prev))
+    setSearchInput((prev) => (prev !== urlKeyword ? urlKeyword : prev))
+    setPage((prev) => (prev !== urlPage ? urlPage : prev))
+    setPageSize((prev) => (prev !== urlSize ? urlSize : prev))
+    setSortBy((prev) => (prev !== urlSortBy ? urlSortBy : prev))
+    setSortDir((prev) => (prev !== urlSortDir ? urlSortDir : prev))
+
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    if (document.documentElement) document.documentElement.scrollTop = 0
+    if (document.body) document.body.scrollTop = 0
+  }, [searchParams])
 
   const handleSearchSubmit = (e) => {
     e.preventDefault()
@@ -285,47 +298,15 @@ export const ProductListPage = () => {
     setSortBy('createdAt')
     setSortDir('desc')
     setSearchParams({})
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    if (document.documentElement) document.documentElement.scrollTop = 0
+    if (document.body) document.body.scrollTop = 0
   }
 
   const activeCategoryObj = categories.find((c) => c.id.toString() === selectedCategory)
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-1 w-full relative animate-in fade-in duration-200">
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-sm w-full animate-in slide-in-from-bottom-2">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 p-4 flex items-start gap-3">
-            {toast.type === 'error' ? (
-              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            ) : (
-              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-900 leading-snug">
-                {toast.message}
-              </p>
-              {toast.type === 'success' && (
-                <Link
-                  to="/cart"
-                  className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-700 mt-1 transition-colors"
-                >
-                  <span>Xem giỏ hàng</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setToast(null)}
-              className="text-slate-400 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100 transition-colors cursor-pointer"
-              aria-label="Đóng thông báo"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Page Header */}
       <div className="mb-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-200/90">

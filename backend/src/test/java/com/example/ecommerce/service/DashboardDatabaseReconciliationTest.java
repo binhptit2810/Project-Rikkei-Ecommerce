@@ -388,7 +388,73 @@ class DashboardDatabaseReconciliationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.totalOrders").value(2))
                 .andExpect(jsonPath("$.data.pendingOrders").value(1))
+                .andExpect(jsonPath("$.data.paidOrders").value(1))
+                .andExpect(jsonPath("$.data.revenueToday").value(1500000.0))
+                .andExpect(jsonPath("$.data.revenueThisMonth").value(1500000.0))
+                .andExpect(jsonPath("$.data.dailyRevenue").isArray())
+                .andExpect(jsonPath("$.data.paymentDistribution").exists())
                 .andExpect(jsonPath("$.data.actualRevenue").value(1500000.0));
+    }
+
+    @Test
+    @DisplayName("Chỉ số kinh doanh Dashboard: Doanh thu theo kỳ, trạng thái đơn, biểu đồ ngày, tỷ lệ COD vs VNPay")
+    void testDashboardBusinessMetrics_TimeframeRevenue_OrderStatus_ChartData_PaymentRatio() {
+        // Đơn 1: COD, hoàn thành COMPLETED, 600,000
+        Order orderCod = createTestOrder("ORD-COD-METRIC", BigDecimal.valueOf(600000), OrderStatus.COMPLETED, PaymentStatus.PAID);
+        Payment paymentCod = Payment.builder()
+                .order(orderCod)
+                .paymentMethod(PaymentMethod.COD)
+                .status(PaymentStatus.PAID)
+                .amount(BigDecimal.valueOf(600000))
+                .transactionCode("TXN-COD-METRIC")
+                .build();
+        paymentRepository.save(paymentCod);
+
+        // Đơn 2: VNPay Online, đã thanh toán PAID, 400,000
+        Order orderVnpay = createTestOrder("ORD-VNP-METRIC", BigDecimal.valueOf(400000), OrderStatus.CONFIRMED, PaymentStatus.PAID);
+        Payment paymentVnpay = Payment.builder()
+                .order(orderVnpay)
+                .paymentMethod(PaymentMethod.VNPAY)
+                .status(PaymentStatus.PAID)
+                .amount(BigDecimal.valueOf(400000))
+                .transactionCode("TXN-VNP-METRIC")
+                .build();
+        paymentRepository.save(paymentVnpay);
+
+        // Đơn 3: PENDING chờ xử lý, chưa thanh toán UNPAID, 200,000
+        createTestOrder("ORD-PEND-METRIC", BigDecimal.valueOf(200000), OrderStatus.PENDING, PaymentStatus.UNPAID);
+
+        // Đơn 4: CANCELLED đã hủy, 100,000
+        createTestOrder("ORD-CANC-METRIC", BigDecimal.valueOf(100000), OrderStatus.CANCELLED, PaymentStatus.UNPAID);
+
+        DashboardStatsResponse stats = dashboardService.getDashboardStats(5);
+
+        // 1. Doanh thu theo kỳ: Đơn 1 (600k) + Đơn 2 (400k) = 1,000,000
+        assertThat(stats.getRevenueToday()).isEqualByComparingTo(BigDecimal.valueOf(1000000));
+        assertThat(stats.getRevenueThisWeek()).isEqualByComparingTo(BigDecimal.valueOf(1000000));
+        assertThat(stats.getRevenueThisMonth()).isEqualByComparingTo(BigDecimal.valueOf(1000000));
+        assertThat(stats.getRevenueThisYear()).isEqualByComparingTo(BigDecimal.valueOf(1000000));
+
+        // 2. Trạng thái đơn hàng: Chờ xử lý = 1, Đã thanh toán = 2, Đã giao = 1, Đã hủy = 1
+        assertThat(stats.getPendingOrders()).isEqualTo(1L);
+        assertThat(stats.getPaidOrders()).isEqualTo(2L);
+        assertThat(stats.getDeliveredOrders()).isEqualTo(1L);
+        assertThat(stats.getCompletedOrders()).isEqualTo(1L);
+        assertThat(stats.getCancelledOrders()).isEqualTo(1L);
+
+        // 3. Biểu đồ ngày trong tháng
+        assertThat(stats.getDailyRevenue()).isNotNull().isNotEmpty();
+        int todayDay = LocalDateTime.now().getDayOfMonth();
+        DashboardStatsResponse.DailyRevenuePoint todayPoint = stats.getDailyRevenue().get(todayDay - 1);
+        assertThat(todayPoint.getOrderCount()).isEqualTo(4L);
+        assertThat(todayPoint.getRevenue()).isEqualByComparingTo(BigDecimal.valueOf(1000000));
+
+        // 4. Tỷ lệ thanh toán COD vs VNPay: 1 COD vs 1 VNPay -> 50.0% COD, 50.0% VNPay
+        assertThat(stats.getPaymentDistribution()).isNotNull();
+        assertThat(stats.getPaymentDistribution().getCodCount()).isEqualTo(1L);
+        assertThat(stats.getPaymentDistribution().getVnpayCount()).isEqualTo(1L);
+        assertThat(stats.getPaymentDistribution().getCodPercentage()).isEqualTo(50.0);
+        assertThat(stats.getPaymentDistribution().getVnpayPercentage()).isEqualTo(50.0);
     }
 
     // Helper tạo đơn hàng test

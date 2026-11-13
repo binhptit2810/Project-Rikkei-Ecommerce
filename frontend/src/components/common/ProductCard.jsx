@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { ShoppingBag, ShoppingCart, Star, Heart, Eye } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAuthStore } from '../../store/useAuthStore'
+import { useWishlistStore } from '../../store/useWishlistStore'
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=80'
 
@@ -35,6 +36,36 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
     product.stockQuantity === undefined ||
     product.stockQuantity === null ||
     Number(product.stockQuantity) <= 0
+
+  const isLiked = useWishlistStore((state) => state.isInWishlist(product.id))
+  const toggleWishlist = useWishlistStore((state) => state.toggleWishlist)
+
+  // Xử lý sự kiện click icon Trái tim Yêu thích [TSK-D15-DDM]
+  const handleWishlistClick = async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    if (!isAuthenticated) {
+      navigate('/login', {
+        state: {
+          from: { pathname: `/products/${product.id}` },
+          message: 'Vui lòng đăng nhập để lưu sản phẩm vào danh sách yêu thích.',
+        },
+      })
+      return
+    }
+
+    if (user?.role === 'ADMIN') {
+      alert('Tài khoản Quản trị viên (ADMIN) không sử dụng phân hệ yêu thích.')
+      return
+    }
+
+    try {
+      await toggleWishlist(product.id, product)
+    } catch (err) {
+      // Toast thông báo lỗi đã được xử lý trong store
+    }
+  }
 
   // Định dạng giá chuẩn VNĐ
   const formattedPrice = new Intl.NumberFormat('vi-VN', {
@@ -111,11 +142,11 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
             </div>
           )}
 
-          {/* Badge Trái: BEST SELLER hoặc HOT */}
+          {/* Badge Trái: BEST SELLER hoặc HOT & Giảm giá */}
           <div className="absolute top-3 left-3 flex flex-col gap-1 z-10">
             {product.stockQuantity > 5 ? (
               <span className="bg-orange-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider shadow-xs">
-                BEST SELLER
+                BÁN CHẠY
               </span>
             ) : isOutOfStock ? (
               <span className="bg-slate-900 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider shadow-xs">
@@ -126,14 +157,32 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
                 SẮP HẾT
               </span>
             )}
+            {!isOutOfStock && (
+              <span className="bg-emerald-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-md shadow-xs w-fit">
+                -15%
+              </span>
+            )}
           </div>
 
-          {/* Badge Phải: Giảm giá -15% */}
-          {!isOutOfStock && (
-            <span className="absolute top-3 right-3 bg-emerald-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-md shadow-xs z-10">
-              -15%
-            </span>
-          )}
+          {/* Nút Trái tim yêu thích ở góc trên bên phải ảnh sản phẩm [TSK-D15-DDM] */}
+          <motion.button
+            whileHover={shouldReduceMotion ? {} : { scale: 1.15 }}
+            whileTap={shouldReduceMotion ? {} : { scale: 0.9 }}
+            type="button"
+            onClick={handleWishlistClick}
+            className={`absolute top-3 right-3 z-20 w-8.5 h-8.5 rounded-full flex items-center justify-center transition-all shadow-sm cursor-pointer ${
+              isLiked
+                ? 'bg-red-50 text-red-500 hover:bg-red-100 shadow-red-500/20'
+                : 'bg-white/90 hover:bg-white text-slate-400 hover:text-red-500 border border-slate-200/60'
+            }`}
+            title={isLiked ? 'Bỏ yêu thích' : 'Thêm vào yêu thích'}
+          >
+            <Heart
+              className={`w-4.5 h-4.5 transition-colors ${
+                isLiked ? 'text-red-500 fill-red-500 scale-105' : 'text-slate-400 hover:text-red-500'
+              }`}
+            />
+          </motion.button>
 
           {/* Hover Action Buttons (TechNova Image 5) */}
           <div className="absolute right-3 top-1/2 -translate-y-1/2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10">
@@ -141,14 +190,17 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
               whileHover={shouldReduceMotion ? {} : { scale: 1.15 }}
               whileTap={shouldReduceMotion ? {} : { scale: 0.9 }}
               type="button"
-              onClick={(e) => {
-                e.preventDefault()
-                e.stopPropagation()
-              }}
-              className="w-8 h-8 rounded-full bg-white/95 hover:bg-white text-slate-700 shadow-md flex items-center justify-center cursor-pointer"
-              title="Yêu thích"
+              onClick={handleWishlistClick}
+              className={`w-8 h-8 rounded-full bg-white/95 hover:bg-white shadow-md flex items-center justify-center cursor-pointer transition-colors ${
+                isLiked ? 'text-red-500' : 'text-slate-700'
+              }`}
+              title={isLiked ? 'Bỏ yêu thích' : 'Yêu thích'}
             >
-              <Heart className="w-4 h-4 text-slate-600 hover:text-red-500 transition-colors" />
+              <Heart
+                className={`w-4 h-4 transition-colors ${
+                  isLiked ? 'text-red-500 fill-red-500' : 'text-slate-600 hover:text-red-500'
+                }`}
+              />
             </motion.button>
             <motion.button
               whileHover={shouldReduceMotion ? {} : { scale: 1.15 }}

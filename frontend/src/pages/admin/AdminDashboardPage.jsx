@@ -18,6 +18,12 @@ import {
   Truck,
   Check,
   XCircle,
+  CreditCard,
+  Wallet,
+  Calendar,
+  BarChart3,
+  DollarSign,
+  PieChart,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 import adminUserService from '../../services/adminUserService'
@@ -44,12 +50,29 @@ export const AdminDashboardPage = () => {
     totalOrders: 0,
     actualRevenue: 0,
     totalRevenue: 0,
+    revenueToday: 0,
+    revenueThisWeek: 0,
+    revenueThisMonth: 0,
+    revenueThisYear: 0,
     pendingOrders: 0,
+    paidOrders: 0,
+    deliveredOrders: 0,
     confirmedOrders: 0,
     processingOrders: 0,
     shippingOrders: 0,
     completedOrders: 0,
     cancelledOrders: 0,
+    dailyRevenue: [],
+    paymentDistribution: {
+      codCount: 0,
+      codRevenue: 0,
+      codPercentage: 0,
+      vnpayCount: 0,
+      vnpayRevenue: 0,
+      vnpayPercentage: 0,
+      totalCount: 0,
+      totalRevenue: 0,
+    },
     totalProducts: 0,
     lowStockCount: 0,
     lowStockProducts: [],
@@ -64,6 +87,7 @@ export const AdminDashboardPage = () => {
   const [currentAdminProfile, setCurrentAdminProfile] = useState(null)
   const [isLoading, setIsLoading] = useState(true)
   const [fetchError, setFetchError] = useState(null)
+  const [hoveredDay, setHoveredDay] = useState(null)
 
   /**
    * Tải toàn bộ dữ liệu thống kê bảng điều khiển từ Backend API
@@ -423,6 +447,337 @@ export const AdminDashboardPage = () => {
           </div>
         </div>
       )}
+
+      {/* 3.1. CHỈ SỐ DOANH THU THEO KỲ: HÔM NAY - TUẦN NÀY - THÁNG NÀY - NĂM NAY */}
+      <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-5 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 mb-4 border-b border-zinc-100">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center justify-center shrink-0">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-sm sm:text-base font-semibold text-zinc-950 font-mono">
+                Doanh thu theo Chu kỳ Kinh doanh
+              </h3>
+              <p className="text-xs text-zinc-500">
+                Chỉ số doanh thu thực thu theo từng mốc thời gian: Hôm nay, Tuần này, Tháng này và Năm nay.
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-mono text-zinc-500 bg-zinc-50 px-2.5 py-1 rounded-md border border-zinc-200 shrink-0">
+            Cập nhật theo thời gian thực
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
+          {/* Hôm nay */}
+          <div className="p-4 rounded-xl bg-zinc-50/70 border border-zinc-200/80 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
+              <span className="font-medium uppercase tracking-wider">Hôm nay</span>
+              <Calendar className="w-3.5 h-3.5 text-zinc-400" />
+            </div>
+            <div className="text-xl font-bold text-zinc-950 tabular-nums">
+              {formatCurrency(dashboardStats.revenueToday)}
+            </div>
+            <p className="text-[11px] text-zinc-400 mt-1">
+              Từ 00:00:00 hôm nay
+            </p>
+          </div>
+
+          {/* Tuần này */}
+          <div className="p-4 rounded-xl bg-zinc-50/70 border border-zinc-200/80 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
+              <span className="font-medium uppercase tracking-wider">Tuần này</span>
+              <BarChart3 className="w-3.5 h-3.5 text-indigo-500" />
+            </div>
+            <div className="text-xl font-bold text-indigo-950 tabular-nums">
+              {formatCurrency(dashboardStats.revenueThisWeek)}
+            </div>
+            <p className="text-[11px] text-zinc-400 mt-1">
+              Từ Thứ Hai đầu tuần
+            </p>
+          </div>
+
+          {/* Tháng này */}
+          <div className="p-4 rounded-xl bg-zinc-50/70 border border-zinc-200/80 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
+              <span className="font-medium uppercase tracking-wider">Tháng này</span>
+              <DollarSign className="w-3.5 h-3.5 text-emerald-500" />
+            </div>
+            <div className="text-xl font-bold text-emerald-950 tabular-nums">
+              {formatCurrency(dashboardStats.revenueThisMonth)}
+            </div>
+            <p className="text-[11px] text-zinc-400 mt-1">
+              Từ ngày 01 tháng này
+            </p>
+          </div>
+
+          {/* Năm nay */}
+          <div className="p-4 rounded-xl bg-zinc-50/70 border border-zinc-200/80 hover:bg-zinc-50 transition-colors">
+            <div className="flex items-center justify-between text-xs text-zinc-500 mb-1">
+              <span className="font-medium uppercase tracking-wider">Năm nay</span>
+              <TrendingUp className="w-3.5 h-3.5 text-blue-500" />
+            </div>
+            <div className="text-xl font-bold text-blue-950 tabular-nums">
+              {formatCurrency(dashboardStats.revenueThisYear)}
+            </div>
+            <p className="text-[11px] text-zinc-400 mt-1">
+              Lũy kế từ 01/01
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 3.2. BỐN CHỈ SỐ TRẠNG THÁI ĐƠN HÀNG TRỌNG TÂM (CHỜ XỬ LÝ, ĐÃ THANH TOÁN, ĐÃ GIAO, ĐÃ HỦY) */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6 font-mono">
+        {/* Chờ xử lý */}
+        <div className="bg-white p-4 rounded-xl border border-amber-200/80 shadow-xs bg-gradient-to-br from-amber-50/40 to-white">
+          <div className="flex items-center justify-between text-xs text-amber-800 mb-1">
+            <span className="font-medium uppercase">Chờ xử lý</span>
+            <Clock className="w-3.5 h-3.5 text-amber-600" />
+          </div>
+          <div className="text-2xl font-bold text-zinc-950 tabular-nums">
+            {dashboardStats.pendingOrders ?? 0}
+          </div>
+          <span className="text-[11px] text-amber-700/80 mt-0.5 block">Đơn hàng PENDING</span>
+        </div>
+
+        {/* Đã thanh toán */}
+        <div className="bg-white p-4 rounded-xl border border-emerald-200/80 shadow-xs bg-gradient-to-br from-emerald-50/40 to-white">
+          <div className="flex items-center justify-between text-xs text-emerald-800 mb-1">
+            <span className="font-medium uppercase">Đã thanh toán</span>
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+          </div>
+          <div className="text-2xl font-bold text-zinc-950 tabular-nums">
+            {dashboardStats.paidOrders ?? 0}
+          </div>
+          <span className="text-[11px] text-emerald-700/80 mt-0.5 block">Đơn hàng PAID</span>
+        </div>
+
+        {/* Đã giao */}
+        <div className="bg-white p-4 rounded-xl border border-blue-200/80 shadow-xs bg-gradient-to-br from-blue-50/40 to-white">
+          <div className="flex items-center justify-between text-xs text-blue-800 mb-1">
+            <span className="font-medium uppercase">Đã giao</span>
+            <Truck className="w-3.5 h-3.5 text-blue-600" />
+          </div>
+          <div className="text-2xl font-bold text-zinc-950 tabular-nums">
+            {dashboardStats.deliveredOrders || dashboardStats.completedOrders || 0}
+          </div>
+          <span className="text-[11px] text-blue-700/80 mt-0.5 block">Đơn COMPLETED</span>
+        </div>
+
+        {/* Đã hủy */}
+        <div className="bg-white p-4 rounded-xl border border-rose-200/80 shadow-xs bg-gradient-to-br from-rose-50/40 to-white">
+          <div className="flex items-center justify-between text-xs text-rose-800 mb-1">
+            <span className="font-medium uppercase">Đã hủy</span>
+            <XCircle className="w-3.5 h-3.5 text-rose-600" />
+          </div>
+          <div className="text-2xl font-bold text-zinc-950 tabular-nums">
+            {dashboardStats.cancelledOrders ?? 0}
+          </div>
+          <span className="text-[11px] text-rose-700/80 mt-0.5 block">Đơn CANCELLED</span>
+        </div>
+      </div>
+
+      {/* 3.3. BIỂU ĐỒ DOANH THU THEO NGÀY TRONG THÁNG (CHART DATA) & TỶ LỆ THANH TOÁN (COD VS VNPAY) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+        {/* Biểu đồ Doanh thu theo từng ngày trong tháng (7/12) */}
+        <div className="lg:col-span-7 bg-white rounded-xl border border-zinc-200 shadow-sm p-6 flex flex-col justify-between">
+          <div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-4 mb-4 border-b border-zinc-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 flex items-center justify-center shrink-0">
+                  <BarChart3 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-semibold text-zinc-950 font-mono">
+                    Doanh thu theo ngày trong tháng (Chart Data)
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Tháng {new Date().getMonth() + 1}/{new Date().getFullYear()} - Thống kê thực thu theo từng ngày
+                  </p>
+                </div>
+              </div>
+              {hoveredDay ? (
+                <div className="text-right font-mono bg-indigo-50/80 border border-indigo-200 px-2.5 py-1 rounded-md">
+                  <span className="text-[11px] text-indigo-700 block font-semibold">
+                    Ngày {hoveredDay.day}: {formatCurrency(hoveredDay.revenue)}
+                  </span>
+                  <span className="text-[10px] text-indigo-600">
+                    {hoveredDay.orderCount} đơn hàng
+                  </span>
+                </div>
+              ) : (
+                <span className="text-xs font-mono text-zinc-500 bg-zinc-50 px-2.5 py-1 rounded-md border border-zinc-200 shrink-0">
+                  Rà chuột lên cột để xem
+                </span>
+              )}
+            </div>
+
+            {/* Vùng vẽ biểu đồ SVG Bar Chart */}
+            <div className="relative pt-4 pb-2">
+              {dashboardStats.dailyRevenue && dashboardStats.dailyRevenue.length > 0 ? (
+                <div>
+                  {/* Container các thanh biểu đồ */}
+                  <div className="h-44 flex items-end gap-1 sm:gap-1.5 px-1 border-b border-zinc-200">
+                    {(() => {
+                      const maxRev = Math.max(
+                        ...dashboardStats.dailyRevenue.map((p) => Number(p.revenue) || 0),
+                        1
+                      )
+                      const currentDay = new Date().getDate()
+
+                      return dashboardStats.dailyRevenue.map((point) => {
+                        const rev = Number(point.revenue) || 0
+                        const isToday = point.day === currentDay
+                        const isHovered = hoveredDay?.day === point.day
+                        const heightPct = Math.max(
+                          (rev / maxRev) * 100,
+                          point.orderCount > 0 ? 8 : 3
+                        )
+
+                        return (
+                          <div
+                            key={point.day}
+                            onMouseEnter={() => setHoveredDay(point)}
+                            onMouseLeave={() => setHoveredDay(null)}
+                            className="flex-1 flex flex-col items-center justify-end h-full cursor-pointer group relative"
+                          >
+                            <div
+                              style={{ height: `${heightPct}%` }}
+                              className={`w-full rounded-t transition-all duration-200 ${
+                                isHovered
+                                  ? 'bg-violet-600'
+                                  : isToday
+                                  ? 'bg-emerald-500'
+                                  : rev > 0
+                                  ? 'bg-indigo-500 group-hover:bg-indigo-600'
+                                  : 'bg-zinc-200/80 group-hover:bg-zinc-300'
+                              }`}
+                            />
+                          </div>
+                        )
+                      })
+                    })()}
+                  </div>
+
+                  {/* Trục hoành ngày (1, 5, 10, 15, 20, 25, ngày cuối) */}
+                  <div className="flex justify-between items-center text-[10px] font-mono text-zinc-400 mt-2 px-1">
+                    <span>N01</span>
+                    <span>N05</span>
+                    <span>N10</span>
+                    <span>N15</span>
+                    <span>N20</span>
+                    <span>N25</span>
+                    <span>N{dashboardStats.dailyRevenue.length}</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="h-44 flex items-center justify-center text-xs text-zinc-400 font-mono">
+                  Đang tổng hợp dữ liệu biểu đồ...
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-500 font-mono">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block"></span> Hôm nay
+              <span className="w-2.5 h-2.5 rounded-sm bg-indigo-500 inline-block ml-2"></span> Có doanh thu
+            </span>
+            <span>Tổng tháng: <strong className="text-zinc-950">{formatCurrency(dashboardStats.revenueThisMonth || dashboardStats.actualRevenue)}</strong></span>
+          </div>
+        </div>
+
+        {/* Tỷ lệ thanh toán: COD vs VNPay Online (5/12) */}
+        <div className="lg:col-span-5 bg-white rounded-xl border border-zinc-200 shadow-sm p-6 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-zinc-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-700 border border-amber-200 flex items-center justify-center shrink-0">
+                  <PieChart className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-semibold text-zinc-950 font-mono">
+                    Tỷ lệ thanh toán (COD vs VNPay)
+                  </h3>
+                  <p className="text-xs text-zinc-500">
+                    Phân bổ phương thức thanh toán toàn hệ thống
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Hai thẻ chi tiết phương thức thanh toán */}
+            <div className="space-y-3 font-mono">
+              {/* Thẻ COD */}
+              <div className="p-3.5 rounded-lg border border-amber-200 bg-amber-50/50 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-md bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 border border-amber-300">
+                    <Wallet className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-semibold text-zinc-950 text-xs">Thanh toán COD</div>
+                    <div className="text-[11px] text-zinc-500">
+                      {dashboardStats.paymentDistribution?.codCount ?? 0} đơn hàng &bull; {formatCurrency(dashboardStats.paymentDistribution?.codRevenue)}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                    {dashboardStats.paymentDistribution?.codPercentage ?? 0}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Thẻ VNPay Online */}
+              <div className="p-3.5 rounded-lg border border-blue-200 bg-blue-50/50 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-md bg-blue-100 text-blue-800 flex items-center justify-center shrink-0 border border-blue-300">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-semibold text-zinc-950 text-xs">VNPay Online</div>
+                    <div className="text-[11px] text-zinc-500">
+                      {dashboardStats.paymentDistribution?.vnpayCount ?? 0} đơn hàng &bull; {formatCurrency(dashboardStats.paymentDistribution?.vnpayRevenue)}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-bold bg-blue-100 text-blue-900 border border-blue-300">
+                    {dashboardStats.paymentDistribution?.vnpayPercentage ?? 0}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Thanh tiến độ trực quan phân bổ tỷ lệ COD vs VNPay */}
+              <div className="pt-2">
+                <div className="flex justify-between text-[11px] text-zinc-500 mb-1 font-mono">
+                  <span>COD ({dashboardStats.paymentDistribution?.codPercentage ?? 0}%)</span>
+                  <span>VNPay ({dashboardStats.paymentDistribution?.vnpayPercentage ?? 0}%)</span>
+                </div>
+                <div className="w-full h-3 bg-zinc-200 rounded-full overflow-hidden flex">
+                  <div
+                    style={{ width: `${dashboardStats.paymentDistribution?.codPercentage ?? 50}%` }}
+                    className="bg-amber-500 transition-all duration-700"
+                    title={`COD: ${dashboardStats.paymentDistribution?.codPercentage ?? 0}%`}
+                  />
+                  <div
+                    style={{ width: `${dashboardStats.paymentDistribution?.vnpayPercentage ?? 50}%` }}
+                    className="bg-blue-600 transition-all duration-700"
+                    title={`VNPay: ${dashboardStats.paymentDistribution?.vnpayPercentage ?? 0}%`}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-zinc-100 flex items-center justify-between text-xs text-zinc-500 font-mono mt-4">
+            <span>Tổng giao dịch: <strong>{dashboardStats.paymentDistribution?.totalCount ?? 0}</strong> đơn</span>
+            <span className="text-emerald-700 font-medium">Đối soát 100%</span>
+          </div>
+        </div>
+      </div>
 
       {/* 4. BIỂU ĐỒ TRỰC QUAN TÌNH TRẠNG ĐƠN HÀNG (ORDER STATUS SUMMARY CHART) */}
       <div className="bg-white rounded-xl border border-zinc-200 shadow-sm p-6 mb-6">

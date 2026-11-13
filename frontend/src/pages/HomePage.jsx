@@ -4,11 +4,7 @@ import {
   ArrowRight, 
   ShoppingBag,  
   CheckCircle2, 
-  Layers, 
   Server, 
-  Database, 
-  Users, 
-  Activity, 
   Zap,
   Truck,
   RotateCcw,
@@ -28,10 +24,10 @@ import {
 import { motion, useReducedMotion, AnimatePresence } from 'framer-motion'
 import productService from '../services/productService'
 import categoryService from '../services/categoryService'
-import apiClient from '../services/apiClient'
 import { useAuthStore } from '../store/useAuthStore'
 import { useCartStore } from '../store/useCartStore'
 import ProductCard from '../components/common/ProductCard'
+import BestSellerSection from '../components/products/BestSellerSection'
 
 // Các thương hiệu đối tác nổi tiếng (Brand Ticker)
 const BRAND_PARTNERS = [
@@ -41,11 +37,11 @@ const BRAND_PARTNERS = [
 
 // Bảng màu & biểu tượng thích ứng danh mục theo phong cách TechNova
 const CATEGORY_THEMES = [
-  { gradient: 'from-blue-600 to-indigo-950', icon: Laptop, defaultDesc: 'Ultrabooks, creator rigs & gaming beasts' },
-  { gradient: 'from-emerald-600 to-teal-950', icon: Smartphone, defaultDesc: 'Flagship cameras & all-day 5G battery' },
-  { gradient: 'from-amber-700 to-orange-950', icon: Headphones, defaultDesc: 'Studio sound with active noise cancelling' },
-  { gradient: 'from-indigo-700 to-purple-950', icon: Watch, defaultDesc: 'Fitness, health & notifications on wrist' },
-  { gradient: 'from-rose-700 to-red-950', icon: Gamepad2, defaultDesc: 'Mechanical keys, low-latency gear & RGB' },
+  { gradient: 'from-blue-600 to-indigo-950', icon: Laptop, defaultDesc: 'Laptop mỏng nhẹ, đồ họa & gaming hiệu năng cao' },
+  { gradient: 'from-emerald-600 to-teal-950', icon: Smartphone, defaultDesc: 'Điện thoại cao cấp, camera đỉnh cao & pin trâu 5G' },
+  { gradient: 'from-amber-700 to-orange-950', icon: Headphones, defaultDesc: 'Tai nghe studio, chống ồn chủ động đỉnh cao' },
+  { gradient: 'from-indigo-700 to-purple-950', icon: Watch, defaultDesc: 'Đồng hồ thông minh, theo dõi sức khỏe & thể thao' },
+  { gradient: 'from-rose-700 to-red-950', icon: Gamepad2, defaultDesc: 'Bàn phím cơ, chuột gaming & phụ kiện chuẩn đấu' },
   { gradient: 'from-sky-700 to-blue-950', icon: Server, defaultDesc: 'Thiết bị & phụ kiện công nghệ đời mới' }
 ]
 
@@ -58,7 +54,6 @@ export const HomePage = () => {
   // Dữ liệu từ database MySQL qua API
   const [categories, setCategories] = useState([])
   const [featuredProducts, setFeaturedProducts] = useState([])
-  const [bestSellers, setBestSellers] = useState([])
   const [selectedCategoryTab, setSelectedCategoryTab] = useState('ALL')
   const [loadingProducts, setLoadingProducts] = useState(true)
   const [productsError, setProductsError] = useState(null)
@@ -68,11 +63,7 @@ export const HomePage = () => {
   const [loadingDeal, setLoadingDeal] = useState(true)
   const [dealError, setDealError] = useState(null)
 
-  // Diagnostics & UI states
-  const [healthStatus, setHealthStatus] = useState(null)
-  const [healthLoading, setHealthLoading] = useState(false)
-  const [healthError, setHealthError] = useState(null)
-  const [addedToast, setAddedToast] = useState(null)
+  // UI states
   const [showScrollTop, setShowScrollTop] = useState(false)
 
   // Countdown timer cho khối "Deal of the Day" tính theo endTime thực tế
@@ -112,18 +103,7 @@ export const HomePage = () => {
     }
   }, [])
 
-  // 3. Tải danh sách sản phẩm Best Sellers độc lập (4 sản phẩm)
-  const fetchBestSellers = async () => {
-    try {
-      const res = await productService.getBestSellers({ size: 4 })
-      const items = res.data?.content || res.data?.products || (Array.isArray(res.data) ? res.data : [])
-      setBestSellers(items)
-    } catch (err) {
-      console.error('Không thể tải sản phẩm Best Sellers:', err)
-    }
-  }
-
-  // 4. Tải Deal of the Day từ API backend thật
+  // 3. Tải Deal of the Day từ API backend thật
   const fetchDealOfTheDay = async () => {
     setLoadingDeal(true)
     setDealError(null)
@@ -143,10 +123,9 @@ export const HomePage = () => {
     }
   }
 
-  // Tải danh mục, best sellers và deal khi mở trang
+  // Tải danh mục và deal khi mở trang
   useEffect(() => {
     fetchCategories()
-    fetchBestSellers()
     fetchDealOfTheDay()
   }, [])
 
@@ -194,24 +173,6 @@ export const HomePage = () => {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const checkBackendHealth = async () => {
-    setHealthLoading(true)
-    setHealthError(null)
-    try {
-      const response = await apiClient.get('/health')
-      setHealthStatus(response.data)
-    } catch (err) {
-      try {
-        const fallbackRes = await apiClient.get('/v1/health')
-        setHealthStatus(fallbackRes.data)
-      } catch (fallbackErr) {
-        setHealthError(fallbackErr.message || 'Không thể kết nối đến Backend')
-      }
-    } finally {
-      setHealthLoading(false)
-    }
-  }
-
   const handleAddToCart = async (product) => {
     if (!isAuthenticated) {
       navigate('/login', {
@@ -234,10 +195,6 @@ export const HomePage = () => {
         },
       })
       return
-    }
-    if (res?.success) {
-      setAddedToast(`Đã thêm "${product.name}" vào giỏ hàng`)
-      setTimeout(() => setAddedToast(null), 3000)
     }
   }
 
@@ -271,32 +228,8 @@ export const HomePage = () => {
     },
   }
 
-  // Nhóm dự án Rikkei E-commerce
-  const teamMembers = [
-    { stt: 1, name: 'Cao Chí Thiện', role: 'Team Lead / Backend Core', task: 'Auth, User Profile, Security & Tích hợp' },
-    { stt: 2, name: 'Đỗ Đức Mạnh', role: 'Backend + Frontend', task: 'Product, Category, Search' },
-    { stt: 3, name: 'Vũ Đức Huy Hoàng', role: 'Backend + Frontend', task: 'Cart, Order, Checkout & Trừ kho' },
-    { stt: 4, name: 'Đặng Thanh Bình', role: 'Backend + Frontend', task: 'Inventory, Payment, Admin UI' },
-    { stt: 5, name: 'Đỗ Hoàng Anh', role: 'Frontend + DevOps', task: 'Layout, Routing, Docker & CI/CD' },
-  ]
-
   return (
     <div className="flex-1 w-full bg-slate-50/50">
-      
-      {/* Toast thông báo thêm giỏ hàng thành công */}
-      <AnimatePresence>
-        {addedToast && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
-            className="fixed bottom-6 left-6 z-50 bg-slate-900 text-white text-xs font-semibold px-4 py-3 rounded-full shadow-2xl border border-slate-700 flex items-center gap-2.5"
-          >
-            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-            <span>{addedToast}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       {/* Floating Scroll to Top Button với Motion animation */}
       <AnimatePresence>
@@ -336,20 +269,20 @@ export const HomePage = () => {
               {/* Sale Tag */}
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-orange-400 text-xs font-semibold">
                 <Zap className="w-3.5 h-3.5 fill-current text-orange-400" />
-                <span>Republic Sale live — up to 40% off</span>
+                <span>Siêu hội công nghệ — Giảm giá tới 40%</span>
               </div>
 
               {/* Headline */}
               <h1 className="text-4xl sm:text-6xl font-extrabold tracking-tight leading-[1.08] text-white">
-                Premium tech, <br />
+                Công nghệ đỉnh cao, <br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-400 via-amber-400 to-orange-500">
-                  honest prices.
+                  giá tốt mỗi ngày.
                 </span>
               </h1>
 
               {/* Subtitle */}
               <p className="text-slate-300 text-sm sm:text-base max-w-xl mx-auto lg:mx-0 leading-relaxed font-normal">
-                Từ creator laptops đến smartphone flagship và gaming gear chuẩn thi đấu — 100% sản phẩm chính hãng, bảo hành toàn diện và giao nhanh trong 48 giờ.
+                Từ laptop đồ họa đến smartphone flagship và gaming gear chuẩn thi đấu — 100% sản phẩm chính hãng, bảo hành toàn diện và giao nhanh trong 48 giờ.
               </p>
 
               {/* CTA Buttons với hover & tap micro-interactions */}
@@ -363,7 +296,7 @@ export const HomePage = () => {
                     className="inline-flex items-center justify-center gap-2.5 px-7 py-3 rounded-full text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 shadow-lg shadow-orange-500/30 transition-colors"
                   >
                     <ShoppingBag className="w-4 h-4" />
-                    <span>Shop Now</span>
+                    <span>Mua sắm ngay</span>
                   </Link>
                 </motion.div>
 
@@ -375,7 +308,7 @@ export const HomePage = () => {
                     to="/products"
                     className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full text-sm font-semibold text-white bg-white/10 hover:bg-white/20 border border-white/20 backdrop-blur-sm transition-colors"
                   >
-                    <span>Browse Categories</span>
+                    <span>Khám phá danh mục</span>
                   </Link>
                 </motion.div>
               </div>
@@ -386,17 +319,17 @@ export const HomePage = () => {
                   <div className="text-2xl sm:text-3xl font-extrabold text-white">
                     {featuredProducts.length > 0 ? `${featuredProducts.length}+` : '25+'}
                   </div>
-                  <div className="text-xs text-slate-400 font-medium">Curated products</div>
+                  <div className="text-xs text-slate-400 font-medium">Sản phẩm chính hãng</div>
                 </div>
                 <div>
                   <div className="text-2xl sm:text-3xl font-extrabold text-white">50K+</div>
-                  <div className="text-xs text-slate-400 font-medium">Happy customers</div>
+                  <div className="text-xs text-slate-400 font-medium">Khách hàng tin dùng</div>
                 </div>
                 <div>
                   <div className="text-2xl sm:text-3xl font-extrabold text-white flex items-center gap-1">
                     4.8 <Star className="w-4 h-4 text-amber-400 fill-current inline" />
                   </div>
-                  <div className="text-xs text-slate-400 font-medium">Average rating</div>
+                  <div className="text-xs text-slate-400 font-medium">Đánh giá trung bình</div>
                 </div>
               </div>
             </motion.div>
@@ -421,8 +354,8 @@ export const HomePage = () => {
                     <ShieldCheck className="w-4 h-4" />
                   </div>
                   <div className="text-left">
-                    <div className="text-xs font-bold text-slate-900 leading-tight">2-Year</div>
-                    <div className="text-[10px] text-slate-500 font-medium">Warranty</div>
+                    <div className="text-xs font-bold text-slate-900 leading-tight">Bảo hành 2 năm</div>
+                    <div className="text-[10px] text-slate-500 font-medium">Chính hãng 100%</div>
                   </div>
                 </motion.div>
 
@@ -437,8 +370,8 @@ export const HomePage = () => {
                     <Truck className="w-4 h-4" />
                   </div>
                   <div className="text-left">
-                    <div className="text-xs font-bold text-slate-900 leading-tight">48-Hour</div>
-                    <div className="text-[10px] text-slate-500 font-medium">Delivery</div>
+                    <div className="text-xs font-bold text-slate-900 leading-tight">Giao nhanh 48h</div>
+                    <div className="text-[10px] text-slate-500 font-medium">Toàn quốc</div>
                   </div>
                 </motion.div>
 
@@ -468,8 +401,8 @@ export const HomePage = () => {
                       </div>
 
                       <div className="flex items-center justify-between text-[10px] text-slate-500 pt-2 border-t border-slate-800">
-                        <span>High-Speed Wi-Fi 6E</span>
-                        <span>100% Genuine</span>
+                        <span>Wi-Fi 6E siêu tốc</span>
+                        <span>100% Chính hãng</span>
                       </div>
                     </div>
 
@@ -518,8 +451,8 @@ export const HomePage = () => {
               <Truck className="w-6 h-6 stroke-[1.8]" />
             </div>
             <div>
-              <div className="font-bold text-slate-900 text-sm">Free Fast Delivery</div>
-              <div className="text-xs text-slate-500 mt-0.5">On every order above 500.000₫</div>
+              <div className="font-bold text-slate-900 text-sm">Giao hàng siêu tốc</div>
+              <div className="text-xs text-slate-500 mt-0.5">Miễn phí cho đơn từ 500.000₫</div>
             </div>
           </motion.div>
 
@@ -531,8 +464,8 @@ export const HomePage = () => {
               <RotateCcw className="w-6 h-6 stroke-[1.8]" />
             </div>
             <div>
-              <div className="font-bold text-slate-900 text-sm">7-Day Returns</div>
-              <div className="text-xs text-slate-500 mt-0.5">No-questions-asked refunds</div>
+              <div className="font-bold text-slate-900 text-sm">Đổi trả 7 ngày</div>
+              <div className="text-xs text-slate-500 mt-0.5">Thủ tục linh hoạt, nhanh chóng</div>
             </div>
           </motion.div>
 
@@ -544,8 +477,8 @@ export const HomePage = () => {
               <ShieldCheck className="w-6 h-6 stroke-[1.8]" />
             </div>
             <div>
-              <div className="font-bold text-slate-900 text-sm">Genuine Warranty</div>
-              <div className="text-xs text-slate-500 mt-0.5">Brand-authorised service</div>
+              <div className="font-bold text-slate-900 text-sm">Bảo hành chính hãng</div>
+              <div className="text-xs text-slate-500 mt-0.5">Ủy quyền chính thức từ hãng</div>
             </div>
           </motion.div>
 
@@ -557,8 +490,8 @@ export const HomePage = () => {
               <Headphones className="w-6 h-6 stroke-[1.8]" />
             </div>
             <div>
-              <div className="font-bold text-slate-900 text-sm">24×7 Support</div>
-              <div className="text-xs text-slate-500 mt-0.5">Real humans, real answers</div>
+              <div className="font-bold text-slate-900 text-sm">Hỗ trợ 24/7</div>
+              <div className="text-xs text-slate-500 mt-0.5">Tư vấn viên tận tâm, chu đáo</div>
             </div>
           </motion.div>
         </div>
@@ -574,10 +507,10 @@ export const HomePage = () => {
           className="text-center max-w-2xl mx-auto mb-12 space-y-2"
         >
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 border border-orange-200/80 text-orange-600 text-xs font-bold uppercase tracking-wider">
-            <span>🏷️ SHOP BY CATEGORY</span>
+            <span>🏷️ DANH MỤC SẢN PHẨM</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Find exactly what you need
+            Tìm kiếm thiết bị bạn cần
           </h2>
           <p className="text-sm text-slate-500">
             Danh mục sản phẩm chính hãng lấy trực tiếp từ hệ thống, chọn lọc chất lượng cao nhất.
@@ -651,10 +584,10 @@ export const HomePage = () => {
           className="text-center max-w-2xl mx-auto mb-8 space-y-2"
         >
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 border border-orange-200/80 text-orange-600 text-xs font-bold uppercase tracking-wider">
-            <span>⭐ HANDPICKED</span>
+            <span>⭐ SẢN PHẨM NỔI BẬT</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-            Featured Products
+            Sản phẩm tuyển chọn
           </h2>
           <p className="text-sm text-slate-500">
             Tuyển chọn những sản phẩm bán chạy và được đánh giá cao nhất từ cơ sở dữ liệu.
@@ -672,7 +605,7 @@ export const HomePage = () => {
                   : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
             >
-              All
+              Tất cả
             </motion.button>
             {categories.map((c) => {
               const isSelected = selectedCategoryTab === c.id || String(selectedCategoryTab) === String(c.id)
@@ -760,7 +693,7 @@ export const HomePage = () => {
               to="/products"
               className="inline-flex items-center gap-2 px-6 py-3 rounded-full border border-blue-600 text-blue-600 hover:bg-blue-50 font-bold text-xs transition-colors"
             >
-              <span>View All {featuredProducts.length || ''} Products</span>
+              <span>Xem tất cả {featuredProducts.length || ''} sản phẩm</span>
               <ArrowRight className="w-4 h-4" />
             </Link>
           </motion.div>
@@ -842,7 +775,7 @@ export const HomePage = () => {
                 <div className="flex flex-wrap items-center justify-center lg:justify-start gap-2">
                   <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-500/20 border border-orange-500/40 text-orange-400 text-xs font-bold uppercase tracking-wider">
                     <Clock className="w-3.5 h-3.5" />
-                    <span>DEAL OF THE DAY</span>
+                    <span>SĂN DEAL HÔM NAY</span>
                   </div>
                   {deal.couponCode && (
                     <span className="inline-flex items-center px-2.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-400/40 text-blue-300 text-[11px] font-bold">
@@ -876,7 +809,7 @@ export const HomePage = () => {
                   )}
                   {deal.discountPercentage > 0 && (
                     <span className="bg-amber-400 text-slate-950 text-xs font-bold px-2 py-0.5 rounded-md">
-                      {deal.discountPercentage}% OFF
+                      GIẢM {deal.discountPercentage}%
                     </span>
                   )}
                 </div>
@@ -893,7 +826,7 @@ export const HomePage = () => {
                       className="inline-flex items-center justify-center gap-2 px-7 py-3 rounded-full text-sm font-bold text-white bg-orange-500 hover:bg-orange-600 shadow-lg shadow-orange-500/30 transition-colors"
                     >
                       <Zap className="w-4 h-4 fill-current" />
-                      <span>Grab This Deal</span>
+                      <span>Săn ưu đãi ngay</span>
                     </Link>
                   </motion.div>
                 </div>
@@ -902,26 +835,26 @@ export const HomePage = () => {
               {/* Right: Dynamic Countdown Timer Blocks */}
               <div className="lg:col-span-3 flex flex-col items-center lg:items-end justify-center">
                 <span className="text-xs font-medium text-slate-400 mb-2">
-                  {timeLeft.isExpired ? 'Ưu đãi đã kết thúc' : 'Offer ends in'}
+                  {timeLeft.isExpired ? 'Ưu đãi đã kết thúc' : 'Thời gian ưu đãi còn lại'}
                 </span>
                 <div className="flex items-center gap-2">
                   <div className="w-16 h-16 rounded-2xl bg-slate-900/80 border border-slate-700 flex flex-col items-center justify-center shadow-md">
                     <span className="text-lg font-extrabold text-white font-mono">
                       {String(timeLeft.hours).padStart(2, '0')}
                     </span>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase">HOURS</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">GIỜ</span>
                   </div>
                   <div className="w-16 h-16 rounded-2xl bg-slate-900/80 border border-slate-700 flex flex-col items-center justify-center shadow-md">
                     <span className="text-lg font-extrabold text-white font-mono">
                       {String(timeLeft.minutes).padStart(2, '0')}
                     </span>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase">MINS</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">PHÚT</span>
                   </div>
                   <div className="w-16 h-16 rounded-2xl bg-slate-900/80 border border-slate-700 flex flex-col items-center justify-center shadow-md">
                     <span className="text-lg font-extrabold text-orange-400 font-mono">
                       {String(timeLeft.seconds).padStart(2, '0')}
                     </span>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase">SECS</span>
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">GIÂY</span>
                   </div>
                 </div>
               </div>
@@ -931,165 +864,8 @@ export const HomePage = () => {
         )}
       </motion.section>
 
-      {/* 7. "MOST LOVED" BEST SELLERS (Scroll Reveal) */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
-        <motion.div 
-          initial={shouldReduceMotion ? {} : { opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-50px' }}
-          transition={{ duration: 0.5 }}
-          className="flex items-end justify-between mb-8"
-        >
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-orange-50 text-orange-600 text-xs font-bold uppercase tracking-wider mb-2">
-              <span>🏆 MOST LOVED</span>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">
-              Best Sellers
-            </h2>
-          </div>
-          <Link
-            to="/products"
-            className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 group transition-colors"
-          >
-            <span>See all</span>
-            <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-          </Link>
-        </motion.div>
-
-        {/* Product Grid */}
-        <motion.div 
-          initial={shouldReduceMotion ? {} : { opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: '-40px' }}
-          transition={{ duration: 0.4 }}
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"
-        >
-          {(bestSellers.length > 0 ? bestSellers : featuredProducts.slice(0, 4)).map((prod) => (
-            <ProductCard
-              key={prod.id}
-              product={prod}
-              onAddToCart={handleAddToCart}
-            />
-          ))}
-        </motion.div>
-      </section>
-
-      {/* 8. PROJECT ACADEMIC INFO & BACKEND DIAGNOSTICS (Scroll Reveal) */}
-      <motion.section 
-        initial={shouldReduceMotion ? {} : { opacity: 0, y: 24 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: '-50px' }}
-        transition={{ duration: 0.5 }}
-        className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16 border-t border-slate-200"
-      >
-        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-sm space-y-8">
-          
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-blue-600"></span>
-                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Thông tin dự án & Hệ thống</span>
-              </div>
-              <h3 className="text-lg font-bold text-slate-900 mt-1">
-                E-Commerce Platform Architecture & Team Assignment
-              </h3>
-            </div>
-
-            <motion.button
-              whileTap={shouldReduceMotion ? {} : { scale: 0.96 }}
-              type="button"
-              onClick={checkBackendHealth}
-              disabled={healthLoading}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 transition-colors cursor-pointer self-start sm:self-auto"
-            >
-              <Activity className="w-3.5 h-3.5 text-blue-600" />
-              <span>{healthLoading ? 'Đang kiểm tra...' : 'Kiểm tra trạng thái Backend'}</span>
-            </motion.button>
-          </div>
-
-          {/* Backend Diagnostics Result */}
-          {healthError && (
-            <div className="p-3.5 rounded-2xl bg-red-50 border border-red-200 text-red-800 text-xs">
-              <span className="font-bold">Chưa kết nối Backend:</span> {healthError}
-              <div className="text-red-600 mt-1">Đảm bảo backend Spring Boot đang chạy tại cổng 8080.</div>
-            </div>
-          )}
-
-          {healthStatus && (
-            <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs">
-              <div className="font-bold text-emerald-800 flex items-center gap-1.5 mb-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                <span>Backend đang hoạt động bình thường (Status: UP)</span>
-              </div>
-              <pre className="p-3 bg-white rounded-xl border border-emerald-200 font-mono text-[11px] overflow-x-auto text-slate-700">
-                {JSON.stringify(healthStatus, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          {/* Architecture 3 pillars */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-              <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
-                <Layers className="w-4 h-4 text-blue-600" />
-                <span>Frontend Layer</span>
-              </div>
-              <p className="text-slate-600 font-medium">React 18 + Vite + Tailwind CSS + Zustand + Motion</p>
-              <div className="text-slate-500 text-[11px]">Rikkei Store Design System, Route guards, token refresh interceptor.</div>
-            </div>
-
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-              <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
-                <Server className="w-4 h-4 text-blue-600" />
-                <span>Backend Core</span>
-              </div>
-              <p className="text-slate-600 font-medium">Spring Boot 3.3.5 + Java 21 + Spring Security</p>
-              <div className="text-slate-500 text-[11px]">Stateless JWT JJWT 0.12.6, transaction isolation, global error handler.</div>
-            </div>
-
-            <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-1.5">
-              <div className="flex items-center gap-2 font-bold text-slate-900 text-sm">
-                <Database className="w-4 h-4 text-blue-600" />
-                <span>Database & Cache</span>
-              </div>
-              <p className="text-slate-600 font-medium">MySQL 8.0 & Redis 7 (Docker Compose)</p>
-              <div className="text-slate-500 text-[11px]">Khóa ngoại an toàn, kiểm tra tồn kho, nhật ký giao dịch kho.</div>
-            </div>
-          </div>
-
-          {/* Team Work Allocation Table */}
-          <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3 flex items-center gap-2">
-              <Users className="w-3.5 h-3.5 text-blue-600" />
-              <span>Phân chia công việc thành viên nhóm</span>
-            </h4>
-            <div className="overflow-x-auto rounded-2xl border border-slate-200">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-50 text-slate-700 font-bold uppercase border-b border-slate-200">
-                  <tr>
-                    <th className="py-3 px-4 w-12 text-center">STT</th>
-                    <th className="py-3 px-4">Thành viên</th>
-                    <th className="py-3 px-4">Vai trò</th>
-                    <th className="py-3 px-4">Phụ trách Module</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {teamMembers.map((m) => (
-                    <tr key={m.stt} className="hover:bg-slate-50/70">
-                      <td className="py-3 px-4 text-center text-slate-400 font-medium">{m.stt}</td>
-                      <td className="py-3 px-4 font-bold text-slate-900">{m.name}</td>
-                      <td className="py-3 px-4 text-slate-600">{m.role}</td>
-                      <td className="py-3 px-4 text-slate-900 font-medium">{m.task}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-        </div>
-      </motion.section>
+      {/* 7. BEST SELLER SECTION – SẢN PHẨM BÁN CHẠY NHẤT THÁNG */}
+      <BestSellerSection limit={8} />
 
     </div>
   )

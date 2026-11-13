@@ -391,7 +391,25 @@ public class ProductService {
 
         Page<BestSellerProjection> bestSellerPage = orderItemRepository.findBestSellers(startDate, endDate, pageable);
 
-        return PageResponse.from(bestSellerPage, ProductResponse::fromProjection);
+        java.util.List<ProductResponse> content = new java.util.ArrayList<>();
+        int startIndex = validPage * validSize;
+        java.util.List<BestSellerProjection> projections = bestSellerPage.getContent();
+        for (int i = 0; i < projections.size(); i++) {
+            ProductResponse res = ProductResponse.fromProjection(projections.get(i));
+            if (res != null) {
+                res.setRank(startIndex + i + 1);
+                content.add(res);
+            }
+        }
+
+        return PageResponse.<ProductResponse>builder()
+                .content(content)
+                .pageNumber(bestSellerPage.getNumber())
+                .pageSize(bestSellerPage.getSize())
+                .totalElements(bestSellerPage.getTotalElements())
+                .totalPages(bestSellerPage.getTotalPages())
+                .last(bestSellerPage.isLast())
+                .build();
     }
 
     /**
