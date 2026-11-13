@@ -21,6 +21,8 @@ import {
   Store,
   ShieldCheck,
   UploadCloud,
+  PackageCheck,
+  ShoppingBag,
 } from 'lucide-react'
 import reviewService from '../../services/reviewService'
 import { useAuthStore } from '../../store/useAuthStore'
@@ -101,6 +103,17 @@ export const ProductReviewsSection = ({ productId }) => {
     currentIndex: 0,
   })
 
+  // --- State Kiểm tra Quyền Đánh Giá (Chỉ khi đã mua hàng thành công) ---
+  const [eligibility, setEligibility] = useState({
+    loading: false,
+    canReview: false,
+    hasPurchased: false,
+    alreadyReviewed: false,
+    reason: '',
+    myReviewId: null,
+    myReview: null,
+  })
+
   // Tự động đóng toast sau 4 giây
   useEffect(() => {
     if (toast) {
@@ -153,10 +166,64 @@ export const ProductReviewsSection = ({ productId }) => {
     }
   }, [productId])
 
+  // Kiểm tra điều kiện đánh giá của người dùng hiện tại (chỉ khi đã đăng nhập và đã mua thành công)
+  const fetchEligibility = useCallback(async () => {
+    if (!productId || !isAuthenticated) {
+      setEligibility({
+        loading: false,
+        canReview: false,
+        hasPurchased: false,
+        alreadyReviewed: false,
+        reason: '',
+        myReviewId: null,
+        myReview: null,
+      })
+      return
+    }
+
+    setEligibility((prev) => ({ ...prev, loading: true }))
+    try {
+      const res = await reviewService.checkReviewEligibility(productId)
+      if (res?.success && res.data) {
+        setEligibility({
+          loading: false,
+          canReview: !!res.data.canReview,
+          hasPurchased: !!res.data.hasPurchased,
+          alreadyReviewed: !!res.data.alreadyReviewed,
+          reason: res.data.reason || '',
+          myReviewId: res.data.myReviewId || null,
+          myReview: res.data.myReview || null,
+        })
+      } else {
+        setEligibility({
+          loading: false,
+          canReview: false,
+          hasPurchased: false,
+          alreadyReviewed: false,
+          reason: 'Không thể kiểm tra điều kiện đánh giá.',
+          myReviewId: null,
+          myReview: null,
+        })
+      }
+    } catch (err) {
+      console.warn('Lỗi kiểm tra quyền đánh giá:', err)
+      setEligibility({
+        loading: false,
+        canReview: false,
+        hasPurchased: false,
+        alreadyReviewed: false,
+        reason: err.response?.data?.message || 'Có lỗi khi kiểm tra điều kiện đánh giá.',
+        myReviewId: null,
+        myReview: null,
+      })
+    }
+  }, [productId, isAuthenticated])
+
   useEffect(() => {
     fetchSummary()
     fetchReviews(0)
-  }, [fetchSummary, fetchReviews])
+    fetchEligibility()
+  }, [fetchSummary, fetchReviews, fetchEligibility])
 
   // Lọc đánh giá theo mức sao đã chọn
   const filteredReviews = useMemo(() => {
@@ -351,9 +418,10 @@ export const ProductReviewsSection = ({ productId }) => {
         })
         setSelectedImages([])
 
-        // Tải lại summary và danh sách đánh giá mới nhất
+        // Tải lại summary, danh sách đánh giá và điều kiện đánh giá mới nhất
         fetchSummary()
         fetchReviews(0)
+        fetchEligibility()
       } else {
         setToast({
           type: 'error',
@@ -450,6 +518,7 @@ export const ProductReviewsSection = ({ productId }) => {
         handleCancelEdit()
         fetchSummary()
         fetchReviews(page)
+        fetchEligibility()
       } else {
         setToast({
           type: 'error',
@@ -488,6 +557,7 @@ export const ProductReviewsSection = ({ productId }) => {
         setDeletingReview(null)
         fetchSummary()
         fetchReviews(0)
+        fetchEligibility()
       } else {
         setToast({
           type: 'error',
@@ -699,10 +769,16 @@ export const ProductReviewsSection = ({ productId }) => {
         </p>
 
         {!isAuthenticated ? (
-          /* Trạng thái chưa đăng nhập */
-          <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/60 p-6 text-center">
-            <p className="text-sm font-semibold text-blue-900 mb-3">
-              Bạn đã mua và trải nghiệm sản phẩm này? Đăng nhập ngay để chia sẻ cảm nhận nhé!
+          /* 1. Trạng thái chưa đăng nhập */
+          <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/60 p-6 sm:p-8 text-center">
+            <div className="w-12 h-12 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mx-auto mb-3">
+              <LogIn className="w-6 h-6" />
+            </div>
+            <h4 className="text-base font-bold text-slate-900 mb-1">
+              Bạn muốn đánh giá sản phẩm này?
+            </h4>
+            <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto mb-5 leading-relaxed">
+              Vui lòng đăng nhập với tài khoản đã mua sản phẩm này và nhận hàng thành công để gửi nhận xét và chia sẻ cảm nhận nhé!
             </p>
             <button
               type="button"
@@ -714,15 +790,155 @@ export const ProductReviewsSection = ({ productId }) => {
                   },
                 })
               }
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-full shadow-md shadow-blue-500/20 transition-all active:scale-95 cursor-pointer"
+              className="inline-flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs sm:text-sm rounded-full shadow-md shadow-blue-500/20 transition-all active:scale-95 cursor-pointer"
             >
               <LogIn className="w-4 h-4" />
               <span>Đăng nhập để đánh giá</span>
             </button>
           </div>
+        ) : eligibility.loading ? (
+          /* 2. Đang kiểm tra điều kiện mua hàng */
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-8 text-center flex flex-col items-center justify-center">
+            <LoadingSpinner size="md" className="text-blue-600 mb-3" />
+            <p className="text-xs sm:text-sm text-slate-500 font-medium">
+              Đang kiểm tra lịch sử mua hàng của bạn...
+            </p>
+          </div>
+        ) : !eligibility.hasPurchased ? (
+          /* 3. Đã đăng nhập nhưng chưa mua hoặc đơn hàng chưa hoàn thành */
+          <div className="rounded-2xl border border-amber-200/90 bg-amber-50/60 p-6 sm:p-8 text-center">
+            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mx-auto mb-3">
+              <PackageCheck className="w-6 h-6" />
+            </div>
+            <h4 className="text-base font-bold text-slate-900 mb-1">
+              Chỉ khách hàng đã mua sản phẩm mới có thể đánh giá
+            </h4>
+            <p className="text-xs sm:text-sm text-slate-600 max-w-xl mx-auto mb-5 leading-relaxed">
+              Nhằm đảm bảo 100% tính khách quan và trải nghiệm thực tế cho cộng đồng người mua, 
+              Rikkei Store chỉ cho phép gửi đánh giá đối với các đơn hàng đã đặt mua thành công và đã được giao đến tay bạn 
+              (Trạng thái đơn hàng: <strong className="text-emerald-700 font-bold">Đã hoàn thành</strong>).
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                }}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs sm:text-sm rounded-full shadow-md shadow-orange-500/20 transition-all active:scale-95 cursor-pointer"
+              >
+                <ShoppingBag className="w-4 h-4" />
+                <span>Mua ngay sản phẩm này</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/orders')}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs sm:text-sm rounded-full transition-all active:scale-95 cursor-pointer"
+              >
+                <span>Kiểm tra đơn hàng của tôi</span>
+              </button>
+            </div>
+          </div>
+        ) : eligibility.alreadyReviewed ? (
+          /* 4. Khách hàng đã từng gửi đánh giá cho sản phẩm này */
+          <div className="rounded-2xl border border-emerald-200/90 bg-emerald-50/40 p-6 sm:p-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-4 border-b border-emerald-200/60 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900">
+                    Bạn đã đánh giá sản phẩm này
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Cảm ơn bạn đã chia sẻ trải nghiệm thực tế khi sử dụng sản phẩm.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {eligibility.myReview && (
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit(eligibility.myReview)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-slate-300 hover:border-blue-400 hover:text-blue-600 rounded-xl text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>Sửa đánh giá</span>
+                  </button>
+                )}
+                {eligibility.myReview && (
+                  <button
+                    type="button"
+                    onClick={() => setDeletingReview(eligibility.myReview)}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-white border border-slate-300 hover:border-red-400 hover:text-red-600 rounded-xl text-xs font-semibold text-slate-700 transition-colors shadow-2xs cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Xóa</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Chi tiết đánh giá đã gửi của người dùng */}
+            {eligibility.myReview && (
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-emerald-100 shadow-2xs space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        className={`w-4 h-4 ${
+                          s <= eligibility.myReview.rating
+                            ? 'text-amber-400 fill-amber-400'
+                            : 'text-slate-200'
+                        }`}
+                      />
+                    ))}
+                    <span className="ml-2 text-xs font-bold text-slate-800">
+                      {RATING_LABELS[eligibility.myReview.rating] || `${eligibility.myReview.rating} sao`}
+                    </span>
+                  </div>
+                  {eligibility.myReview.createdAt && (
+                    <span className="text-[11px] text-slate-400">
+                      {formatDateTime(eligibility.myReview.createdAt)}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs sm:text-sm text-slate-700 leading-relaxed whitespace-pre-line">
+                  {eligibility.myReview.comment}
+                </p>
+                {Array.isArray(eligibility.myReview.images) && eligibility.myReview.images.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    {eligibility.myReview.images.map((imgUrl, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => openLightbox(eligibility.myReview.images, i)}
+                        className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200 hover:border-blue-400 transition-all cursor-pointer"
+                      >
+                        <img
+                          src={resolveImageUrl(imgUrl)}
+                          alt={`Ảnh đánh giá ${i + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         ) : (
-          /* Form Đánh Giá dành cho người dùng đã đăng nhập */
-          <form onSubmit={handleSubmitReview} className="space-y-6">
+          /* 5. ĐỦ ĐIỀU KIỆN ĐÁNH GIÁ (Đã mua, đơn giao thành công và chưa đánh giá) */
+          <div>
+            <div className="mb-6 p-3.5 bg-emerald-50/80 border border-emerald-200 text-emerald-800 rounded-2xl flex items-center gap-2.5 text-xs font-semibold">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>
+                Bạn đã mua sản phẩm này và nhận hàng thành công. Hãy chia sẻ cảm nhận chân thực của bạn nhé!
+              </span>
+            </div>
+
+            <form onSubmit={handleSubmitReview} className="space-y-6">
             {/* Chọn số sao tương tác */}
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
@@ -897,7 +1113,8 @@ export const ProductReviewsSection = ({ productId }) => {
               </button>
             </div>
           </form>
-        )}
+        </div>
+      )}
       </div>
 
       {/* KHU VỰC 3: DANH SÁCH ĐÁNH GIÁ (REVIEW LIST) */}

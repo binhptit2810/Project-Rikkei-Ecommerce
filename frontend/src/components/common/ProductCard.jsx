@@ -115,7 +115,7 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
           <div className="absolute top-3 left-3 flex flex-col gap-1 z-10">
             {product.stockQuantity > 5 ? (
               <span className="bg-orange-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider shadow-xs">
-                BEST SELLER
+                BÁN CHẠY
               </span>
             ) : isOutOfStock ? (
               <span className="bg-slate-900 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-md uppercase tracking-wider shadow-xs">

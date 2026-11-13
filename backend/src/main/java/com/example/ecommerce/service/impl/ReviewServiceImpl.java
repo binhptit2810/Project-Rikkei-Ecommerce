@@ -6,6 +6,7 @@ import com.example.ecommerce.dto.request.ReviewRequest;
 import com.example.ecommerce.dto.response.FileUploadResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductRatingSummaryResponse;
+import com.example.ecommerce.dto.response.ReviewEligibilityResponse;
 import com.example.ecommerce.dto.response.ReviewImageResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import com.example.ecommerce.entity.OrderStatus;
@@ -47,6 +48,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Triển khai nghiệp vụ Đánh giá & Nhận xét sản phẩm.
@@ -122,6 +124,59 @@ public class ReviewServiceImpl implements ReviewService {
                 .ratingAverage(ratingAverage)
                 .totalReviews(totalReviews)
                 .ratingCounts(ratingCounts)
+                .build();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReviewEligibilityResponse checkReviewEligibility(Long productId) {
+        if (!productRepository.existsById(productId)) {
+            throw new ResourceNotFoundException("Sản phẩm không tồn tại với ID: " + productId);
+        }
+
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated() || "anonymousUser".equals(authentication.getPrincipal())) {
+            return ReviewEligibilityResponse.builder()
+                    .canReview(false)
+                    .hasPurchased(false)
+                    .alreadyReviewed(false)
+                    .reason("Vui lòng đăng nhập để đánh giá sản phẩm.")
+                    .build();
+        }
+
+        User currentUser = getCurrentUser();
+
+        // 1. Kiểm tra khách hàng đã mua sản phẩm và đơn hàng ở trạng thái COMPLETED
+        boolean hasPurchased = orderItemRepository.hasUserPurchasedProductWithStatus(
+                currentUser.getId(), productId, OrderStatus.COMPLETED
+        );
+
+        // 2. Tìm bản ghi đánh giá của người dùng đối với sản phẩm này nếu có
+        Optional<Review> myReviewOpt = reviewRepository.findByProductIdAndUserId(productId, currentUser.getId());
+        boolean alreadyReviewed = myReviewOpt.isPresent();
+
+        // Chỉ được đánh giá mới khi: đã mua và giao thành công + chưa từng đánh giá
+        boolean canReview = hasPurchased && !alreadyReviewed;
+
+        String reason;
+        if (!hasPurchased) {
+            reason = "Bạn chỉ có thể đánh giá sản phẩm sau khi đã mua và nhận hàng thành công.";
+        } else if (alreadyReviewed) {
+            reason = "Bạn đã gửi đánh giá cho sản phẩm này rồi.";
+        } else {
+            reason = "Bạn đủ điều kiện để đánh giá sản phẩm này.";
+        }
+
+        ReviewResponse myReviewResponse = myReviewOpt.map(ReviewResponse::fromEntity).orElse(null);
+        Long myReviewId = myReviewOpt.map(Review::getId).orElse(null);
+
+        return ReviewEligibilityResponse.builder()
+                .canReview(canReview)
+                .hasPurchased(hasPurchased)
+                .alreadyReviewed(alreadyReviewed)
+                .reason(reason)
+                .myReviewId(myReviewId)
+                .myReview(myReviewResponse)
                 .build();
     }
 

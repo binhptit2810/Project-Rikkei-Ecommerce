@@ -16,6 +16,7 @@ import {
 } from 'lucide-react'
 import { useCartStore } from '../../store/useCartStore'
 import { useAuthStore } from '../../store/useAuthStore'
+import { useToastStore } from '../../store/useToastStore'
 import orderService from '../../services/orderService'
 import paymentService from '../../services/paymentService'
 import couponService from '../../services/couponService'
@@ -210,6 +211,15 @@ export const CheckoutPage = () => {
       if (!createdOrder || !createdOrder.id) {
         throw new Error('Dữ liệu đơn hàng phản hồi từ máy chủ không hợp lệ.')
       }
+
+      // Kích hoạt ô thông báo bên phải: Đặt hàng thành công (tự động biến mất sau 2s)
+      useToastStore.getState().showToast({
+        type: 'success',
+        title: 'Đặt hàng thành công!',
+        message: `Mã đơn hàng: #${createdOrder.orderCode || createdOrder.id} • Cảm ơn bạn đã mua hàng!`,
+        link: { to: `/orders/${createdOrder.id}`, label: 'Xem đơn hàng →' },
+        duration: 2000,
+      })
 
       // Xử lý theo phương thức thanh toán
       if (formData.paymentMethod === 'VNPAY' || formData.paymentMethod === 'SIMULATED') {

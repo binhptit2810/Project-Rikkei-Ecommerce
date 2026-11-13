@@ -56,6 +56,16 @@ export const reviewService = {
   },
 
   /**
+   * Kiểm tra điều kiện đánh giá sản phẩm của người dùng hiện tại (đã mua & giao hàng thành công, đã đánh giá chưa).
+   * @param {number|string} productId ID sản phẩm
+   * @returns {Promise<Object>} ApiResponse chứa { canReview, hasPurchased, alreadyReviewed, reason, myReviewId, myReview }
+   */
+  async checkReviewEligibility(productId) {
+    const response = await apiClient.get(`/products/${productId}/reviews/eligibility`)
+    return response.data
+  },
+
+  /**
    * Gửi đánh giá mới cho sản phẩm (kèm danh sách ảnh tối đa 3 ảnh).
    * @param {number|string} productId ID sản phẩm
    * @param {Object} reviewData { rating: number (1-5), comment: string, images?: string[] }

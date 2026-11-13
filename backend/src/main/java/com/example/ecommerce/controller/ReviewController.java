@@ -5,6 +5,7 @@ import com.example.ecommerce.dto.request.ReviewRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductRatingSummaryResponse;
+import com.example.ecommerce.dto.response.ReviewEligibilityResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import com.example.ecommerce.service.ReviewService;
 import jakarta.validation.Valid;
@@ -60,6 +61,19 @@ public class ReviewController {
 
         ProductRatingSummaryResponse summary = reviewService.getProductRatingSummary(productId);
         return ResponseEntity.ok(ApiResponse.success(summary));
+    }
+
+    /**
+     * Kiểm tra điều kiện được phép đánh giá sản phẩm của người dùng hiện tại.
+     * Chỉ người đã đăng nhập, đã mua và đơn hàng ở trạng thái COMPLETED (giao thành công) mới được đánh giá.
+     * GET /api/v1/products/{productId}/reviews/eligibility
+     */
+    @GetMapping("/eligibility")
+    public ResponseEntity<ApiResponse<ReviewEligibilityResponse>> checkReviewEligibility(
+            @PathVariable Long productId) {
+
+        ReviewEligibilityResponse response = reviewService.checkReviewEligibility(productId);
+        return ResponseEntity.ok(ApiResponse.success("Kiểm tra điều kiện đánh giá thành công", response));
     }
 
     /**
