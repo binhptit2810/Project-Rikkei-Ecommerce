@@ -1,5 +1,6 @@
 package com.example.ecommerce.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -13,11 +14,11 @@ import java.util.List;
  * Phụ trách: Đặng Thanh Bình (Thành viên 4 - DTB)
  * Phối hợp: Vũ Đức Huy Hoàng [VDHH]
  *
- * Chứa các chỉ số nghiệp vụ:
- * 1. Tổng đơn hàng (totalOrders)
- * 2. Doanh thu thực tế từ các đơn đã thanh toán PAID (actualRevenue / totalRevenue)
- * 3. Đơn chờ duyệt (pendingOrders)
- * 4. Danh sách các sản phẩm có nguy cơ hết hàng (stock_quantity <= 5) (lowStockProducts)
+ * Tiêu chí nghiệm thu (DoD):
+ * 1. Tổng doanh thu hôm nay, tuần này, tháng này, năm nay.
+ * 2. Tổng số đơn hàng (Chờ xử lý, Đã thanh toán, Đã giao, Đã hủy).
+ * 3. Doanh thu theo từng ngày trong tháng phục vụ vẽ biểu đồ (Chart Data).
+ * 4. Tỷ lệ thanh toán: COD vs VNPay Online.
  */
 @Data
 @Builder
@@ -25,43 +26,66 @@ import java.util.List;
 @AllArgsConstructor
 public class DashboardStatsResponse {
 
+    // =========================================================================
+    // 1. CHỈ SỐ DOANH THU THEO KỲ (TODAY, THIS WEEK, THIS MONTH, THIS YEAR)
+    // =========================================================================
+
+    /**
+     * Doanh thu hôm nay (từ 00:00:00 hôm nay đến hiện tại).
+     */
+    private BigDecimal revenueToday;
+
+    /**
+     * Doanh thu tuần này (từ Thứ Hai tuần này đến hiện tại).
+     */
+    private BigDecimal revenueThisWeek;
+
+    /**
+     * Doanh thu tháng này (từ ngày 01 tháng này đến hiện tại).
+     */
+    private BigDecimal revenueThisMonth;
+
+    /**
+     * Doanh thu năm nay (từ 01/01 năm nay đến hiện tại).
+     */
+    private BigDecimal revenueThisYear;
+
+    /**
+     * Doanh thu thực tế lũy kế toàn thời gian (tổng tiền các đơn hàng đã thanh toán PAID hoặc hoàn tất COMPLETED).
+     */
+    private BigDecimal actualRevenue;
+
+    /**
+     * Tên trường tương đương/alias cho frontend hoặc các client khác.
+     */
+    private BigDecimal totalRevenue;
+
+    // =========================================================================
+    // 2. THỐNG KÊ ĐƠN HÀNG THEO TRẠNG THÁI (CHỜ XỬ LÝ, ĐÃ THANH TOÁN, ĐÃ GIAO, ĐÃ HỦY)
+    // =========================================================================
+
     /**
      * Tổng số đơn hàng trên toàn hệ thống.
      */
     private long totalOrders;
 
     /**
-     * Doanh thu thực tế (tổng tiền các đơn hàng đã thanh toán PAID và không bị hủy).
-     */
-    private BigDecimal actualRevenue;
-
-    /**
-     * Doanh thu thực tế (tên trường tương đương/alias cho frontend hoặc các client khác).
-     */
-    private BigDecimal totalRevenue;
-
-    /**
-     * Số đơn hàng đang chờ duyệt (trạng thái PENDING).
+     * Số đơn hàng đang chờ duyệt / chờ xử lý (trạng thái PENDING).
      */
     private long pendingOrders;
 
     /**
-     * Số đơn hàng đã xác nhận (trạng thái CONFIRMED).
+     * Số đơn hàng đã thanh toán (paymentStatus = PAID).
      */
-    private long confirmedOrders;
+    private long paidOrders;
 
     /**
-     * Số đơn hàng đang xử lý (trạng thái PROCESSING).
+     * Số đơn hàng đã giao thành công (trạng thái COMPLETED).
      */
-    private long processingOrders;
+    private long deliveredOrders;
 
     /**
-     * Số đơn hàng đang giao (trạng thái SHIPPING).
-     */
-    private long shippingOrders;
-
-    /**
-     * Số đơn hàng đã hoàn thành (trạng thái COMPLETED).
+     * Số đơn hàng đã hoàn thành (tương đương deliveredOrders).
      */
     private long completedOrders;
 
@@ -69,6 +93,51 @@ public class DashboardStatsResponse {
      * Số đơn hàng đã hủy (trạng thái CANCELLED).
      */
     private long cancelledOrders;
+
+    /**
+     * Số đơn hàng đã xác nhận (trạng thái CONFIRMED).
+     */
+    private long confirmedOrders;
+
+    /**
+     * Số đơn hàng đang chuẩn bị / đóng gói (trạng thái PROCESSING).
+     */
+    private long processingOrders;
+
+    /**
+     * Số đơn hàng đang giao vận (trạng thái SHIPPING).
+     */
+    private long shippingOrders;
+
+    // =========================================================================
+    // 3. DOANH THU THEO TỪNG NGÀY TRONG THÁNG PHỤC VỤ VẼ BIỂU ĐỒ (CHART DATA)
+    // =========================================================================
+
+    /**
+     * Dữ liệu thống kê doanh thu và số đơn từng ngày trong tháng hiện tại.
+     */
+    private List<DailyRevenuePoint> dailyRevenue;
+
+    // =========================================================================
+    // 4. TỶ LỆ THANH TOÁN: COD VS VNPAY ONLINE
+    // =========================================================================
+
+    /**
+     * Thống kê tỷ lệ và số lượng phương thức thanh toán COD vs VNPay Online.
+     */
+    @JsonProperty("paymentDistribution")
+    private PaymentDistribution paymentDistribution;
+
+    /**
+     * Alias để frontend có thể đọc qua paymentMethodStats nếu cần.
+     */
+    public PaymentDistribution getPaymentMethodStats() {
+        return paymentDistribution;
+    }
+
+    // =========================================================================
+    // 5. CÁC CHỈ SỐ BỔ TRỢ HỆ THỐNG (TỒN KHO, NGƯỜI DÙNG, NHẬT KÝ KHO)
+    // =========================================================================
 
     /**
      * Tổng số sản phẩm trong hệ thống.
@@ -109,5 +178,87 @@ public class DashboardStatsResponse {
      * Thống kê nhật ký kho: Số giao dịch admin nhập kho thủ công (MANUAL_IMPORT).
      */
     private Long manualImportCount;
+
+    // =========================================================================
+    // SUB-DTOs
+    // =========================================================================
+
+    /**
+     * Điểm dữ liệu biểu đồ doanh thu theo từng ngày trong tháng.
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class DailyRevenuePoint {
+        /**
+         * Ngày theo định dạng ISO (YYYY-MM-DD), ví dụ: "2026-11-01".
+         */
+        private String date;
+
+        /**
+         * Ngày trong tháng (1..31).
+         */
+        private int day;
+
+        /**
+         * Doanh thu thực tế trong ngày.
+         */
+        private BigDecimal revenue;
+
+        /**
+         * Số lượng đơn hàng được tạo trong ngày.
+         */
+        private long orderCount;
+    }
+
+    /**
+     * Thống kê phân bổ phương thức thanh toán COD vs VNPay Online.
+     */
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class PaymentDistribution {
+        /**
+         * Số lượng đơn hàng thanh toán COD.
+         */
+        private long codCount;
+
+        /**
+         * Doanh thu từ thanh toán COD (đã thu/hoàn tất).
+         */
+        private BigDecimal codRevenue;
+
+        /**
+         * Tỷ lệ phần trăm đơn hàng COD (0..100%).
+         */
+        private double codPercentage;
+
+        /**
+         * Số lượng đơn hàng thanh toán VNPay Online.
+         */
+        private long vnpayCount;
+
+        /**
+         * Doanh thu từ thanh toán VNPay Online.
+         */
+        private BigDecimal vnpayRevenue;
+
+        /**
+         * Tỷ lệ phần trăm đơn hàng VNPay Online (0..100%).
+         */
+        private double vnpayPercentage;
+
+        /**
+         * Tổng số giao dịch thanh toán được thống kê.
+         */
+        private long totalCount;
+
+        /**
+         * Tổng doanh thu các phương thức thanh toán.
+         */
+        private BigDecimal totalRevenue;
+    }
 }
 
