@@ -291,3 +291,21 @@ CREATE TABLE IF NOT EXISTS review_images (
     INDEX idx_review_images_review (review_id),
     INDEX idx_review_images_created (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- =============================================================================
+-- Bảng wishlists — Danh sách sản phẩm yêu thích [TSK-D15-DDM]
+-- Phụ trách: Đỗ Đức Mạnh (mnhd1)
+-- =============================================================================
+CREATE TABLE IF NOT EXISTS wishlists (
+    id          BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id     BIGINT NOT NULL,
+    product_id  BIGINT NOT NULL,
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_wishlists_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_wishlists_product FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    CONSTRAINT uk_wishlists_user_product UNIQUE (user_id, product_id),
+    INDEX idx_wishlists_user (user_id),
+    INDEX idx_wishlists_product (product_id),
+    INDEX idx_wishlists_created (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

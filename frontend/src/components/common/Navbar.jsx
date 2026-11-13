@@ -17,10 +17,12 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 import { useCartStore } from '../../store/useCartStore'
+import { useWishlistStore } from '../../store/useWishlistStore'
 
 export const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuthStore()
   const totalCartCount = useCartStore((state) => state.getTotalCount())
+  const wishlistCount = useWishlistStore((state) => state.getCount())
   const navigate = useNavigate()
   const location = useLocation()
   
@@ -204,13 +206,19 @@ export const Navbar = () => {
 
           {/* Right Action Icons & User Menu */}
           <div className="flex items-center gap-2 sm:gap-3">
-            {/* Wishlist Link */}
+            {/* Wishlist Link [TSK-D15-DDM] */}
             <Link
-              to="/products"
-              className="w-10 h-10 text-slate-600 hover:text-red-500 hover:bg-slate-100 rounded-full transition-colors hidden sm:flex items-center justify-center cursor-pointer"
-              title="Yêu thích"
+              to={isAuthenticated ? '/wishlist' : '/login'}
+              state={!isAuthenticated ? { from: { pathname: '/wishlist' }, message: 'Vui lòng đăng nhập để xem danh sách sản phẩm yêu thích.' } : undefined}
+              className="relative w-10 h-10 text-slate-700 hover:text-red-500 hover:bg-slate-100 rounded-full transition-colors hidden sm:flex items-center justify-center cursor-pointer"
+              title="Sản phẩm yêu thích"
             >
-              <Heart className="w-5 h-5 stroke-[1.8]" />
+              <Heart className={`w-5 h-5 stroke-[1.8] ${wishlistCount > 0 ? 'text-red-500 fill-red-50' : ''}`} />
+              {isAuthenticated && user?.role !== 'ADMIN' && wishlistCount > 0 && (
+                <span className="absolute top-0.5 right-0.5 bg-gradient-to-r from-rose-500 to-red-500 text-white font-extrabold text-[10px] rounded-full min-w-[19px] h-[19px] px-1 flex items-center justify-center border-2 border-white shadow-xs">
+                  {wishlistCount > 99 ? '99+' : wishlistCount}
+                </span>
+              )}
             </Link>
 
             {/* Cart Button */}
@@ -267,6 +275,19 @@ export const Navbar = () => {
                           >
                             <UserIcon className="w-4 h-4 text-slate-400" />
                             <span>Hồ sơ tài khoản</span>
+                          </Link>
+
+                          <Link
+                            to="/wishlist"
+                            className="flex items-center gap-3 px-4 py-2 text-xs font-medium text-slate-700 hover:text-slate-950 hover:bg-slate-50 transition-colors"
+                          >
+                            <Heart className="w-4 h-4 text-red-500" />
+                            <span>Sản phẩm yêu thích</span>
+                            {wishlistCount > 0 && (
+                              <span className="ml-auto text-[10px] font-bold bg-red-100 text-red-600 px-1.5 py-0.5 rounded-full">
+                                {wishlistCount}
+                              </span>
+                            )}
                           </Link>
 
                           <Link
@@ -373,6 +394,22 @@ export const Navbar = () => {
                     }`}
                   >
                     Hồ sơ tài khoản
+                  </Link>
+                  <Link
+                    to="/wishlist"
+                    className={`flex items-center justify-between px-3 py-2 rounded-xl text-sm font-semibold ${
+                      isActive('/wishlist') ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Heart className="w-4 h-4 text-red-500" />
+                      <span>Sản phẩm yêu thích</span>
+                    </div>
+                    {wishlistCount > 0 && (
+                      <span className="text-xs font-bold bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
+                        {wishlistCount}
+                      </span>
+                    )}
                   </Link>
                   <Link
                     to="/orders"
