@@ -25,6 +25,7 @@ import {
 import orderService from '../../services/orderService'
 import paymentService from '../../services/paymentService'
 import { useCartStore } from '../../store/useCartStore'
+import { useToastStore } from '../../store/useToastStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import CancelOrderModal from './CancelOrderModal'
 import SimulatePaymentModal from './SimulatePaymentModal'
@@ -183,30 +184,34 @@ export const OrderDetailPage = () => {
   // Reorder loading
   const [reordering, setReordering] = useState(false)
 
-  // Toast
-  const [toast, setToast] = useState(null)
-
+  // Toast kích hoạt ô thông báo góc phải tự động ẩn sau 2s
   const showToast = (message, type = 'success') => {
-    setToast({ message, type })
-    setTimeout(() => {
-      setToast(null)
-    }, 4000)
+    useToastStore.getState().showToast({
+      title: type === 'error' ? 'Có lỗi xảy ra' : 'Thao tác thành công',
+      message,
+      type: type === 'error' ? 'error' : 'success',
+      duration: 2000,
+    })
   }
 
-  // Tự động kích hoạt toast chúc mừng nếu được điều hướng từ CheckoutPage
+  // Tự động kích hoạt toast chúc mừng nếu được điều hướng từ CheckoutPage (biến mất sau 2s)
   useEffect(() => {
     if (location.state?.orderSuccess || location.state?.justCreated) {
       setJustCreated(true)
       if (location.state?.paymentFailed) {
-        showToast(
-          `⚠️ Đơn hàng #${location.state.orderCode || ''} đã được tạo nhưng thanh toán thất bại. Giỏ hàng đã được giữ nguyên.`,
-          'error'
-        )
+        useToastStore.getState().showToast({
+          title: 'Thanh toán chưa hoàn tất',
+          message: `Đơn hàng #${location.state.orderCode || ''} đã được tạo. Vui lòng thanh toán lại.`,
+          type: 'error',
+          duration: 2000,
+        })
       } else {
-        showToast(
-          `🎉 Đặt hàng thành công! Mã đơn: #${location.state.orderCode || ''}`,
-          'success'
-        )
+        useToastStore.getState().showToast({
+          title: 'Đặt hàng thành công!',
+          message: `Mã đơn hàng: #${location.state.orderCode || ''} • Cảm ơn bạn đã mua hàng!`,
+          type: 'success',
+          duration: 2000,
+        })
       }
     }
   }, [location.state])
@@ -394,30 +399,6 @@ export const OrderDetailPage = () => {
 
   return (
     <div className="min-h-[calc(100vh-140px)] bg-slate-50/50 py-8 px-4 sm:px-6 lg:px-8">
-      {/* Toast Notification */}
-      {toast && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-md w-full animate-in fade-in slide-in-from-bottom-3 duration-200">
-          <div className="bg-white rounded-2xl shadow-xl border border-slate-200/90 p-4 flex items-start gap-3 backdrop-blur-md">
-            {toast.type === 'error' ? (
-              <AlertCircle className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-            ) : (
-              <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-            )}
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold text-slate-900 leading-snug">
-                {toast.message}
-              </p>
-            </div>
-            <button
-              onClick={() => setToast(null)}
-              className="text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Modal Hủy đơn hàng dùng chung với OrderHistoryPage */}
       <CancelOrderModal
         isOpen={cancelModalOpen}

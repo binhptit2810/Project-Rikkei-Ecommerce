@@ -31,7 +31,6 @@ export const ProductDetailPage = () => {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [quantity, setQuantity] = useState(1)
-  const [cartNotice, setCartNotice] = useState(null)
   const [selectedSize, setSelectedSize] = useState(null)
   const [validationError, setValidationError] = useState(null)
 
@@ -46,14 +45,25 @@ export const ProductDetailPage = () => {
     ? product.variants.every((v) => Number(v.stockQuantity || 0) <= 0)
     : Number(product?.stockQuantity || 0) <= 0
 
+  // Đảm bảo trang chi tiết luôn hiển thị ở đầu trang khi mở sản phẩm hoặc đổi id
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+    if (document.documentElement) document.documentElement.scrollTop = 0
+    if (document.body) document.body.scrollTop = 0
+  }, [id])
+
   useEffect(() => {
     const fetchDetail = async () => {
       setLoading(true)
       setError(null)
+      window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
       try {
         const res = await productService.getProductById(id)
         if (res.success && res.data) {
           setProduct(res.data)
+          window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+          if (document.documentElement) document.documentElement.scrollTop = 0
+          if (document.body) document.body.scrollTop = 0
         } else {
           setError('Không tìm thấy thông tin sản phẩm')
         }
@@ -141,9 +151,6 @@ export const ProductDetailPage = () => {
       setValidationError(res?.message || 'Không thể thêm sản phẩm vào giỏ hàng.')
       return
     }
-    const sizeText = selectedSize ? ` (Size ${selectedSize})` : ''
-    setCartNotice(`Đã thêm ${quantity} sản phẩm${sizeText} vào giỏ hàng thành công!`)
-    setTimeout(() => setCartNotice(null), 5000)
   }
 
   const handleBuyNow = async () => {
@@ -239,28 +246,6 @@ export const ProductDetailPage = () => {
           {product.name}
         </span>
       </nav>
-
-      {/* Cart Feedback Notification */}
-      {cartNotice && (
-        <div className="mb-8 p-4 bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-sm animate-in slide-in-from-top-1 shadow-sm">
-          <div className="flex items-center gap-2.5">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-            <span className="font-bold text-xs sm:text-sm">{cartNotice}</span>
-            <Link
-              to="/cart"
-              className="ml-2 font-bold text-blue-600 underline underline-offset-4 hover:text-blue-700 text-xs sm:text-sm inline-flex items-center gap-1"
-            >
-              Xem giỏ hàng &rarr;
-            </Link>
-          </div>
-          <button
-            onClick={() => setCartNotice(null)}
-            className="text-emerald-700 hover:text-emerald-950 font-bold text-xs cursor-pointer px-3 py-1 rounded-full hover:bg-emerald-100"
-          >
-            Đóng
-          </button>
-        </div>
-      )}
 
       {/* Main Product Card */}
       <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden p-6 sm:p-10">

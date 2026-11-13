@@ -46,7 +46,9 @@ export const Pagination = ({
       onPageChange(pageIdx)
     }
     if (scrollToTop && typeof window !== 'undefined') {
-      window.scrollTo({ top: 0, behavior: 'smooth' })
+      window.scrollTo({ top: 0, behavior: 'instant' })
+      if (document.documentElement) document.documentElement.scrollTop = 0
+      if (document.body) document.body.scrollTop = 0
     }
   }
 
@@ -114,7 +116,9 @@ export const Pagination = ({
                   const newSize = Number(e.target.value)
                   onPageSizeChange(newSize)
                   if (scrollToTop && typeof window !== 'undefined') {
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                    window.scrollTo({ top: 0, behavior: 'instant' })
+                    if (document.documentElement) document.documentElement.scrollTop = 0
+                    if (document.body) document.body.scrollTop = 0
                   }
                 }}
                 className={`h-8 px-2 py-0.5 text-xs font-semibold bg-white border border-slate-200 rounded-lg text-slate-700 cursor-pointer focus:outline-none focus:ring-2 ${focusRingClass}`}

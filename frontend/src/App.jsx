@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './store/useAuthStore'
 import CustomerLayout from './components/common/CustomerLayout'
 import AdminLayout from './components/admin/AdminLayout'
+import ScrollToTop from './components/common/ScrollToTop'
+import GlobalToast from './components/common/GlobalToast'
 import ProtectedRoute from './components/auth/ProtectedRoute'
 import GuestRoute from './components/auth/GuestRoute'
 import AdminGuestRoute from './components/auth/AdminGuestRoute'
@@ -58,6 +60,10 @@ function App() {
 
   return (
     <BrowserRouter>
+      {/* Tự động cuộn lên đầu trang khi click sản phẩm, danh mục hoặc chuyển route */}
+      <ScrollToTop />
+      {/* Ô thông báo toàn cục bên phải màn hình (tự động biến mất sau 2s) */}
+      <GlobalToast />
       <Routes>
         {/* 1. Trang Đăng nhập Quản trị viên (Độc lập, không chứa Navbar/Footer mua sắm) */}
         <Route

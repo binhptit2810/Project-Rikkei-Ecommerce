@@ -3,6 +3,7 @@ package com.example.ecommerce.controller;
 import com.example.ecommerce.dto.request.ReviewCreateRequest;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductRatingSummaryResponse;
+import com.example.ecommerce.dto.response.ReviewEligibilityResponse;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import com.example.ecommerce.service.RefreshTokenService;
 import com.example.ecommerce.service.ReviewService;
@@ -170,6 +171,47 @@ class ReviewControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.success").value(false));
+    }
+
+    @Test
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    @DisplayName("GET /api/v1/products/{id}/reviews/eligibility: Kiểm tra điều kiện đánh giá khi đã đăng nhập trả về 200 OK")
+    void checkReviewEligibility_authenticated_returns200() throws Exception {
+        ReviewEligibilityResponse eligibility = ReviewEligibilityResponse.builder()
+                .canReview(true)
+                .hasPurchased(true)
+                .alreadyReviewed(false)
+                .reason("Bạn đủ điều kiện để đánh giá sản phẩm này.")
+                .build();
+
+        when(reviewService.checkReviewEligibility(10L)).thenReturn(eligibility);
+
+        mockMvc.perform(get("/api/v1/products/10/reviews/eligibility"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.canReview").value(true))
+                .andExpect(jsonPath("$.data.hasPurchased").value(true))
+                .andExpect(jsonPath("$.data.alreadyReviewed").value(false));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/products/{id}/reviews/eligibility: Chưa đăng nhập trả về canReview = false và yêu cầu đăng nhập")
+    void checkReviewEligibility_unauthenticated_returnsCanReviewFalse() throws Exception {
+        ReviewEligibilityResponse eligibility = ReviewEligibilityResponse.builder()
+                .canReview(false)
+                .hasPurchased(false)
+                .alreadyReviewed(false)
+                .reason("Vui lòng đăng nhập để đánh giá sản phẩm.")
+                .build();
+
+        when(reviewService.checkReviewEligibility(10L)).thenReturn(eligibility);
+
+        mockMvc.perform(get("/api/v1/products/10/reviews/eligibility"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.canReview").value(false))
+                .andExpect(jsonPath("$.data.hasPurchased").value(false))
+                .andExpect(jsonPath("$.data.reason").value("Vui lòng đăng nhập để đánh giá sản phẩm."));
     }
 }
 
