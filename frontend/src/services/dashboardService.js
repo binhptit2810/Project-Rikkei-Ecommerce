@@ -35,6 +35,19 @@ export const dashboardService = {
     })
     return response.data
   },
+
+  /**
+   * Truy vấn riêng danh sách Top sản phẩm bán chạy nhất tháng.
+   *
+   * @param {number} [limit=5] Số lượng sản phẩm muốn lấy
+   * @returns {Promise<Object>}
+   */
+  getTopSellingProducts: async (limit = 5) => {
+    const response = await apiClient.get('/admin/dashboard/top-products', {
+      params: { limit },
+    })
+    return response.data
+  },
 }
 
 export default dashboardService

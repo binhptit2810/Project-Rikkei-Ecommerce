@@ -29,6 +29,7 @@ public class ProductResponse {
     private Integer totalReviews;
     private Long totalSold;
     private Integer rank;
+    private BigDecimal totalRevenue;
     private List<ProductVariantResponse> variants;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -45,6 +46,14 @@ public class ProductResponse {
         return this.totalSold;
     }
 
+    public Long getQuantitySold() {
+        return this.totalSold;
+    }
+
+    public BigDecimal getRevenue() {
+        return this.totalRevenue;
+    }
+
     public static ProductResponse fromEntity(Product product, Long totalSold) {
         ProductResponse res = fromEntity(product);
         if (res != null) {
@@ -57,6 +66,11 @@ public class ProductResponse {
         if (p == null) {
             return null;
         }
+        BigDecimal revenue = p.getTotalRevenue();
+        if (revenue == null && p.getPrice() != null && p.getTotalSold() != null) {
+            revenue = p.getPrice().multiply(BigDecimal.valueOf(p.getTotalSold()));
+        }
+
         return ProductResponse.builder()
                 .id(p.getProductId())
                 .name(p.getProductName())
@@ -70,6 +84,7 @@ public class ProductResponse {
                 .ratingAverage(p.getRatingAverage() != null ? p.getRatingAverage() : 0.0)
                 .totalReviews(p.getTotalReviews() != null ? p.getTotalReviews() : 0)
                 .totalSold(p.getTotalSold() != null ? p.getTotalSold() : 0L)
+                .totalRevenue(revenue != null ? revenue : BigDecimal.ZERO)
                 .variants(null)
                 .createdAt(p.getCreatedAt())
                 .updatedAt(p.getUpdatedAt())

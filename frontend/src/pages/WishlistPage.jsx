@@ -7,9 +7,7 @@ import {
   ShoppingCart,
   Star,
   ArrowRight,
-  ShoppingBag,
   Sparkles,
-  ExternalLink,
 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useWishlistStore } from '../store/useWishlistStore'

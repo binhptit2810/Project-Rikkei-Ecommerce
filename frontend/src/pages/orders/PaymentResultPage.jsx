@@ -1,20 +1,14 @@
 import React, { useEffect, useState } from 'react'
-import { useSearchParams, Link, useNavigate } from 'react-router-dom'
+import { useSearchParams, Link } from 'react-router-dom'
 import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
   ArrowRight,
   ShoppingBag,
-  CreditCard,
   Copy,
   Check,
-  RefreshCw,
-  Home,
   ShieldCheck,
-  Calendar,
-  FileText,
-  Building,
 } from 'lucide-react'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import paymentService from '../../services/paymentService'
@@ -37,7 +31,6 @@ import { formatPrice } from '../orders/OrderBadges'
  */
 export const PaymentResultPage = () => {
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
 
   const [loading, setLoading] = useState(true)
   const [success, setSuccess] = useState(false)
@@ -55,7 +48,6 @@ export const PaymentResultPage = () => {
   const vnpOrderInfo = searchParams.get('vnp_OrderInfo')
   const vnpPayDate = searchParams.get('vnp_PayDate')
   const rawAmount = searchParams.get('vnp_Amount')
-  const vnpSecureHash = searchParams.get('vnp_SecureHash')
 
   // Số tiền quy đổi (VNPay nhân 100 khi truyền qua URL)
   const amount = rawAmount ? Number(rawAmount) / 100 : 0
