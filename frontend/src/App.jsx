@@ -13,6 +13,7 @@ import RegisterPage from './pages/auth/RegisterPage'
 import VerifyEmailPage from './pages/auth/VerifyEmailPage'
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
 import ResetPasswordPage from './pages/auth/ResetPasswordPage'
+import OAuth2RedirectPage from './pages/auth/OAuth2RedirectPage'
 import AdminLoginPage from './pages/admin/AdminLoginPage'
 import AdminDashboardPage from './pages/admin/AdminDashboardPage'
 import ProfilePage from './pages/user/ProfilePage'
@@ -140,6 +141,7 @@ function App() {
               </GuestRoute>
             }
           />
+          <Route path="/oauth2/redirect" element={<OAuth2RedirectPage />} />
 
           {/* Protected Customer Routes (chỉ dành cho khách hàng đăng nhập, chặn hoàn toàn Admin) */}
           <Route
