@@ -41,7 +41,8 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
                    "  p.total_reviews AS totalReviews, " +
                    "  p.created_at AS createdAt, " +
                    "  p.updated_at AS updatedAt, " +
-                   "  CAST(SUM(oi.quantity) AS SIGNED) AS totalSold " +
+                   "  CAST(SUM(oi.quantity) AS SIGNED) AS totalSold, " +
+                   "  COALESCE(SUM(oi.subtotal), 0) AS totalRevenue " +
                    "FROM order_items oi " +
                    "INNER JOIN orders o ON oi.order_id = o.id " +
                    "INNER JOIN products p ON oi.product_id = p.id " +

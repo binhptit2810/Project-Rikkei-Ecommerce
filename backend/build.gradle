@@ -64,8 +64,9 @@ dependencies {
     // Actuator (Health check endpoint)
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
 
-    // Spring Security
+    // Spring Security & OAuth2 Client
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
 
     // JWT — JJWT 0.12.x (tương thích Spring Boot 3 / Java 21)
     implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
@@ -75,6 +76,8 @@ dependencies {
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.security:spring-security-test'
+    testImplementation 'org.testcontainers:testcontainers:1.19.8'
+    testImplementation 'org.testcontainers:junit-jupiter:1.19.8'
     testRuntimeOnly 'com.h2database:h2'
 }
 

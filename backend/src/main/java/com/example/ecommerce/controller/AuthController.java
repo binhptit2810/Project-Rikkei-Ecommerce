@@ -1,7 +1,9 @@
 package com.example.ecommerce.controller;
 
+import com.example.ecommerce.dto.request.Auth0ExchangeRequest;
 import com.example.ecommerce.dto.request.ForgotPasswordRequest;
 import com.example.ecommerce.dto.request.LoginRequest;
+import com.example.ecommerce.dto.request.OAuth2TicketExchangeRequest;
 import com.example.ecommerce.dto.request.RegisterRequest;
 import com.example.ecommerce.dto.request.SendRegistrationOtpRequest;
 import com.example.ecommerce.dto.request.ResetPasswordRequest;
@@ -134,6 +136,49 @@ public class AuthController {
         return ResponseEntity.ok()
                 .headers(headers)
                 .body(ApiResponse.success("Đăng nhập thành công", response));
+    }
+
+    /**
+     * Trao đổi One-Time Ticket lấy JWT Access Token và Refresh Token sau khi đăng nhập Google [TSK-D15-CCT].
+     * POST /api/v1/auth/oauth2/exchange
+     */
+    @PostMapping("/oauth2/exchange")
+    public ResponseEntity<ApiResponse<AuthResponse>> exchangeOAuth2Ticket(
+            @Valid @RequestBody OAuth2TicketExchangeRequest request,
+            @CookieValue(name = "oauth2_binding", required = false) String bindingSecret) {
+
+        AuthResponse response = authService.exchangeOAuth2Ticket(request.getTicket(), bindingSecret);
+        HttpHeaders headers = buildCookieHeaders(response.getRefreshToken());
+
+        // Dọn dẹp cookie oauth2_binding sau khi đổi vé thành công
+        ResponseCookie clearBindingCookie = ResponseCookie.from("oauth2_binding", "")
+                .httpOnly(true)
+                .secure(cookieSecure)
+                .path("/api/v1/auth/oauth2")
+                .maxAge(0)
+                .sameSite(cookieSameSite)
+                .build();
+        headers.add(HttpHeaders.SET_COOKIE, clearBindingCookie.toString());
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(ApiResponse.success("Đăng nhập bằng tài khoản Google thành công", response));
+    }
+
+    /**
+     * Trao đổi Auth0 ID Token lấy JWT Access Token và Refresh Token [AUTH0-GOOGLE].
+     * POST /api/v1/auth/auth0/exchange
+     */
+    @PostMapping("/auth0/exchange")
+    public ResponseEntity<ApiResponse<AuthResponse>> exchangeAuth0Token(
+            @Valid @RequestBody Auth0ExchangeRequest request) {
+
+        AuthResponse response = authService.exchangeAuth0IdToken(request.getIdToken());
+        HttpHeaders headers = buildCookieHeaders(response.getRefreshToken());
+
+        return ResponseEntity.ok()
+                .headers(headers)
+                .body(ApiResponse.success("Đăng nhập bằng tài khoản Google (Auth0) thành công", response));
     }
 
     /**

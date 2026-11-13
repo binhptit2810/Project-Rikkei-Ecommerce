@@ -3,10 +3,16 @@ package com.example.ecommerce.config;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.security.CustomUserDetailsService;
 import com.example.ecommerce.security.JwtAuthenticationFilter;
+import com.example.ecommerce.security.oauth2.CustomOidcUserService;
+import com.example.ecommerce.security.oauth2.OAuth2AuthenticationFailureHandler;
+import com.example.ecommerce.security.oauth2.OAuth2AuthenticationSuccessHandler;
+import com.example.ecommerce.security.oauth2.RedisOAuth2AuthorizationRequestRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -21,6 +27,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
@@ -52,12 +59,50 @@ import java.nio.charset.StandardCharsets;
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity           // Cho phép @PreAuthorize, @PostAuthorize trong Service/Controller
-@RequiredArgsConstructor
 public class SecurityConfig {
 
     private final CustomUserDetailsService userDetailsService;
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final ObjectMapper objectMapper;  // Spring Boot auto-configure bean
+    private final CustomOidcUserService customOidcUserService;
+    private final RedisOAuth2AuthorizationRequestRepository authorizationRequestRepository;
+    private final OAuth2AuthenticationSuccessHandler oauth2SuccessHandler;
+    private final OAuth2AuthenticationFailureHandler oauth2FailureHandler;
+    private final ClientRegistrationRepository clientRegistrationRepository;
+
+    @Autowired
+    public SecurityConfig(CustomUserDetailsService userDetailsService,
+                          JwtAuthenticationFilter jwtAuthenticationFilter,
+                          ObjectMapper objectMapper,
+                          @Lazy CustomOidcUserService customOidcUserService,
+                          @Lazy RedisOAuth2AuthorizationRequestRepository authorizationRequestRepository,
+                          @Lazy OAuth2AuthenticationSuccessHandler oauth2SuccessHandler,
+                          @Lazy OAuth2AuthenticationFailureHandler oauth2FailureHandler,
+                          @Lazy ClientRegistrationRepository clientRegistrationRepository) {
+        this.userDetailsService = userDetailsService;
+        this.jwtAuthenticationFilter = jwtAuthenticationFilter;
+        this.objectMapper = objectMapper;
+        this.customOidcUserService = customOidcUserService;
+        this.authorizationRequestRepository = authorizationRequestRepository;
+        this.oauth2SuccessHandler = oauth2SuccessHandler;
+        this.oauth2FailureHandler = oauth2FailureHandler;
+        this.clientRegistrationRepository = clientRegistrationRepository;
+    }
+
+    /**
+     * Constructor tương thích ngược cho unit test.
+     */
+    public SecurityConfig(CustomUserDetailsService userDetailsService,
+                          JwtAuthenticationFilter jwtAuthenticationFilter,
+                          ObjectMapper objectMapper,
+                          CustomOidcUserService customOidcUserService,
+                          RedisOAuth2AuthorizationRequestRepository authorizationRequestRepository,
+                          OAuth2AuthenticationSuccessHandler oauth2SuccessHandler,
+                          OAuth2AuthenticationFailureHandler oauth2FailureHandler) {
+        this(userDetailsService, jwtAuthenticationFilter, objectMapper,
+             customOidcUserService, authorizationRequestRepository,
+             oauth2SuccessHandler, oauth2FailureHandler, null);
+    }
 
     // =========================================================================
     // Authentication beans
@@ -132,6 +177,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/coupons/**").permitAll()
                 // [TSK-D11-CCT] Chatbot AI tư vấn bán hàng: cho phép khách vãng lai và người dùng truy cập
                 .requestMatchers("/api/v1/chat", "/api/v1/chat/**").permitAll()
+                // [TSK-D15-CCT] Google OAuth2 endpoints & One-Time Ticket Exchange
+                .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/oauth2/exchange").permitAll()
+                // [AUTH0-GOOGLE] Auth0 ID Token Exchange endpoint
+                .requestMatchers(HttpMethod.POST, "/api/v1/auth/auth0/exchange").permitAll()
 
                 // --- Admin only ---
                 .requestMatchers("/api/v1/admin/**", "/admin/**").hasRole("ADMIN")
@@ -167,6 +217,21 @@ public class SecurityConfig {
             // Gắn DaoAuthenticationProvider và JWT filter
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        // [TSK-D15-CCT] Tích hợp đăng nhập nhanh bằng Google OAuth2 / OpenID Connect
+        // Chỉ kích hoạt luồng trực tiếp cũ khi có ClientRegistration của Google (GOOGLE_CLIENT_ID đã được cấu hình)
+        if (clientRegistrationRepository != null && clientRegistrationRepository.findByRegistrationId("google") != null) {
+            http.oauth2Login(oauth2 -> oauth2
+                .authorizationEndpoint(authEndpoint -> authEndpoint
+                    .authorizationRequestRepository(authorizationRequestRepository)
+                )
+                .userInfoEndpoint(userInfo -> userInfo
+                    .oidcUserService(customOidcUserService)
+                )
+                .successHandler(oauth2SuccessHandler)
+                .failureHandler(oauth2FailureHandler)
+            );
+        }
 
         return http.build();
     }

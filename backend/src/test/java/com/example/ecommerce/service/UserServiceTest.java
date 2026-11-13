@@ -53,6 +53,9 @@ class UserServiceTest {
     @Mock
     private RefreshTokenService refreshTokenService;
 
+    @Mock
+    private EmailService emailService;
+
     @InjectMocks
     private UserService userService;
 
@@ -516,6 +519,66 @@ class UserServiceTest {
         UserResponse response = userService.updateProfile(customerUserDetails, request);
 
         assertThat(response.getFullName()).isEqualTo("Khách hàng A");
+    }
+
+    @Test
+    @DisplayName("Branch: Cập nhật hồ sơ với avatarUrl hợp lệ -> Cập nhật avatar mới")
+    void updateProfile_WithValidAvatarUrl_UpdatesAvatar() {
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customerUser));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UpdateProfileRequest request = new UpdateProfileRequest();
+        request.setAvatarUrl("https://example.com/avatar.png");
+
+        UserResponse response = userService.updateProfile(customerUserDetails, request);
+
+        assertThat(response.getAvatarUrl()).isEqualTo("https://example.com/avatar.png");
+    }
+
+    @Test
+    @DisplayName("Branch: Cập nhật hồ sơ với avatarUrl là khoảng trắng -> Đặt avatarUrl thành null")
+    void updateProfile_WithBlankAvatarUrl_SetsAvatarNull() {
+        customerUser.setAvatarUrl("https://example.com/old-avatar.png");
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customerUser));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UpdateProfileRequest request = new UpdateProfileRequest();
+        request.setAvatarUrl("    ");
+
+        UserResponse response = userService.updateProfile(customerUserDetails, request);
+
+        assertThat(response.getAvatarUrl()).isNull();
+    }
+
+    @Test
+    @DisplayName("Branch: Cập nhật hồ sơ với phone là khoảng trắng -> Đặt phone thành null")
+    void updateProfile_WithBlankPhone_SetsPhoneNull() {
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customerUser));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        UpdateProfileRequest request = new UpdateProfileRequest();
+        request.setPhone("    ");
+
+        UserResponse response = userService.updateProfile(customerUserDetails, request);
+
+        assertThat(response.getPhone()).isNull();
+    }
+
+    @Test
+    @DisplayName("Branch: Cập nhật hồ sơ khi emailService gửi alert thất bại -> Vẫn cập nhật thành công")
+    void updateProfile_WhenEmailAlertFails_StillSucceeds() {
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customerUser));
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        doThrow(new RuntimeException("Mail server down"))
+                .when(emailService).sendSecurityAlertEmail(anyString(), anyString(), anyString(), anyString());
+
+        UpdateProfileRequest request = new UpdateProfileRequest();
+        request.setFullName("Tên Mới");
+
+        UserResponse response = userService.updateProfile(customerUserDetails, request);
+
+        assertThat(response.getFullName()).isEqualTo("Tên Mới");
+        verify(userRepository).save(any(User.class));
     }
 }
 

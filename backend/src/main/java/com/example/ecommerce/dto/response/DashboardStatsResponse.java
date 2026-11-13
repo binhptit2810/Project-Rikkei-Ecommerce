@@ -135,6 +135,20 @@ public class DashboardStatsResponse {
         return paymentDistribution;
     }
 
+    /**
+     * Alias để frontend có thể đọc qua codVsVnpay nếu cần.
+     */
+    public PaymentDistribution getCodVsVnpay() {
+        return paymentDistribution;
+    }
+
+    /**
+     * Alias để frontend có thể đọc qua revenueByDate nếu cần.
+     */
+    public List<DailyRevenuePoint> getRevenueByDate() {
+        return dailyRevenue;
+    }
+
     // =========================================================================
     // 5. CÁC CHỈ SỐ BỔ TRỢ HỆ THỐNG (TỒN KHO, NGƯỜI DÙNG, NHẬT KÝ KHO)
     // =========================================================================
@@ -178,6 +192,56 @@ public class DashboardStatsResponse {
      * Thống kê nhật ký kho: Số giao dịch admin nhập kho thủ công (MANUAL_IMPORT).
      */
     private Long manualImportCount;
+
+    // =========================================================================
+    // 6. CÁC CHỈ SỐ TĂNG TRƯỞNG SO VỚI THÁNG TRƯỚC (MoM GROWTH) & KHÁCH HÀNG MỚI [TSK-D15-DHA]
+    // =========================================================================
+
+    /**
+     * Tỷ lệ % tăng trưởng doanh thu so với tháng trước (dương là tăng, âm là giảm).
+     */
+    @Builder.Default
+    private Double revenueGrowth = 0.0;
+
+    /**
+     * Tỷ lệ % tăng trưởng số lượng đơn hàng so with tháng trước.
+     */
+    @Builder.Default
+    private Double ordersGrowth = 0.0;
+
+    /**
+     * Số lượng khách hàng mới đăng ký trong tháng này.
+     */
+    @Builder.Default
+    private Long newCustomers = 0L;
+
+    /**
+     * Tỷ lệ % tăng trưởng khách hàng mới so với tháng trước.
+     */
+    @Builder.Default
+    private Double customersGrowth = 0.0;
+
+    /**
+     * Tỷ lệ thay đổi đơn chờ xử lý.
+     */
+    @Builder.Default
+    private Double pendingOrdersGrowth = 0.0;
+
+    // =========================================================================
+    // 7. TOP 5 SẢN PHẨM BÁN CHẠY NHẤT THÁNG (BEST SELLERS) [TSK-D15-DHA]
+    // =========================================================================
+
+    /**
+     * Danh sách 5 sản phẩm bán chạy nhất kèm doanh thu và số lượng bán.
+     */
+    private List<ProductResponse> topSellingProducts;
+
+    /**
+     * Alias để frontend có thể đọc qua bestSellers nếu cần.
+     */
+    public List<ProductResponse> getBestSellers() {
+        return topSellingProducts;
+    }
 
     // =========================================================================
     // SUB-DTOs

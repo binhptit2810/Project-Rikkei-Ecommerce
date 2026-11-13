@@ -11,13 +11,8 @@ import {
   X,
   Copy,
   Check,
-  Percent,
-  Coins,
   Clock,
-  ShieldCheck,
   AlertTriangle,
-  ToggleLeft,
-  ToggleRight,
   Filter,
 } from 'lucide-react'
 import couponService from '../../services/couponService'

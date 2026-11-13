@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SecurityConfigTest {
 
-    private final SecurityConfig securityConfig = new SecurityConfig(null, null, null);
+    private final SecurityConfig securityConfig = new SecurityConfig(null, null, null, null, null, null, null);
 
     @Test
     @DisplayName("NFR-SEC-BCRYPT: Xác minh PasswordEncoder sử dụng BCrypt với cost factor bằng 12 ($2a$12$)")

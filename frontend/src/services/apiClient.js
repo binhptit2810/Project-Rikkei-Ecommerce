@@ -46,7 +46,8 @@ apiClient.interceptors.request.use(
       config.url?.includes('/auth/forgot-password') ||
       config.url?.includes('/auth/reset-password') ||
       config.url?.includes('/auth/verify-email') ||
-      config.url?.includes('/auth/resend-verification')
+      config.url?.includes('/auth/resend-verification') ||
+      config.url?.includes('/auth/oauth2/exchange')
 
     if (!isPublicAuthEndpoint) {
       const token = inMemoryAccessToken
@@ -133,7 +134,8 @@ apiClient.interceptors.response.use(
       originalRequest.url?.includes('/auth/forgot-password') ||
       originalRequest.url?.includes('/auth/reset-password') ||
       originalRequest.url?.includes('/auth/verify-email') ||
-      originalRequest.url?.includes('/auth/resend-verification')
+      originalRequest.url?.includes('/auth/resend-verification') ||
+      originalRequest.url?.includes('/auth/oauth2/exchange')
 
     // BƯỚC 1: Nếu gặp lỗi 401 Unauthorized và không phải request từ auth endpoint
     if (error.response?.status === 401 && !isAuthEndpoint) {

@@ -31,4 +31,7 @@ public class UpdateProfileRequest {
     private String phone;
 
     private String address;
+
+    @Size(max = 500, message = "URL ảnh đại diện không vượt quá 500 ký tự")
+    private String avatarUrl;
 }

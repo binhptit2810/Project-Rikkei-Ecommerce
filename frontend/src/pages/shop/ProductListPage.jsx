@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Link, useSearchParams, useNavigate } from 'react-router-dom'
+import React, { useState, useEffect, useCallback } from 'react'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../../store/useAuthStore'
 import {
   Search,
@@ -7,9 +7,7 @@ import {
   PackageOpen,
   X,
   Sparkles,
-  CheckCircle2,
   AlertCircle,
-  ArrowRight,
 } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
 import productService from '../../services/productService'

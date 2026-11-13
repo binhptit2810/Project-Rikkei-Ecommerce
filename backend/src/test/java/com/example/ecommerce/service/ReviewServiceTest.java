@@ -581,4 +581,29 @@ class ReviewServiceTest {
         assertThat(response.getMyReview()).isNotNull();
         assertThat(response.getMyReview().getComment()).isEqualTo("Đã đánh giá trước đó");
     }
+
+    @Test
+    @DisplayName("Test 17: checkReviewEligibility khi sản phẩm không tồn tại -> Ném ResourceNotFoundException")
+    void checkReviewEligibility_productNotFound_throwsResourceNotFoundException() {
+        when(productRepository.existsById(999L)).thenReturn(false);
+
+        assertThatThrownBy(() -> reviewService.checkReviewEligibility(999L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Sản phẩm không tồn tại với ID: 999");
+    }
+
+    @Test
+    @DisplayName("Test 18: checkReviewEligibility khi chưa đăng nhập (anonymousUser) -> Trả về canReview = false")
+    void checkReviewEligibility_unauthenticated_returnsCanReviewFalse() {
+        when(productRepository.existsById(10L)).thenReturn(true);
+        SecurityContextHolder.clearContext();
+
+        ReviewEligibilityResponse response = reviewService.checkReviewEligibility(10L);
+
+        assertThat(response).isNotNull();
+        assertThat(response.isCanReview()).isFalse();
+        assertThat(response.isHasPurchased()).isFalse();
+        assertThat(response.isAlreadyReviewed()).isFalse();
+        assertThat(response.getReason()).contains("Vui lòng đăng nhập");
+    }
 }

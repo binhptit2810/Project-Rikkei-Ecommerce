@@ -269,19 +269,57 @@ public class ReviewServiceImpl implements ReviewService {
             if (request.getImages().size() > 3) {
                 throw new BadRequestException("Mỗi đánh giá chỉ được đính kèm tối đa 3 ảnh");
             }
-            if (review.getImages() == null) {
-                review.setImages(new ArrayList<>());
-            } else {
-                review.getImages().clear();
+
+            List<String> requestedUrls = request.getImages().stream()
+                    .filter(u -> u != null && !u.trim().isEmpty())
+                    .map(String::trim)
+                    .distinct()
+                    .toList();
+
+            List<ReviewImage> currentImages = review.getImages() != null
+                    ? new ArrayList<>(review.getImages())
+                    : new ArrayList<>();
+
+            List<ReviewImage> toRemove = new ArrayList<>();
+            List<String> toRemovePaths = new ArrayList<>();
+            java.util.Set<String> keptUrls = new java.util.HashSet<>();
+
+            for (ReviewImage currentImg : currentImages) {
+                if (requestedUrls.contains(currentImg.getImageUrl())) {
+                    keptUrls.add(currentImg.getImageUrl());
+                } else {
+                    toRemove.add(currentImg);
+                    if (StringUtils.hasText(currentImg.getImagePath())) {
+                        toRemovePaths.add(currentImg.getImagePath());
+                    } else if (StringUtils.hasText(currentImg.getImageUrl())) {
+                        toRemovePaths.add(currentImg.getImageUrl());
+                    }
+                }
             }
-            for (String url : request.getImages()) {
-                if (url != null && !url.trim().isEmpty()) {
-                    ReviewImage ri = ReviewImage.builder()
+
+            // Xóa các ảnh cũ không còn được giữ lại khỏi quan hệ
+            for (ReviewImage img : toRemove) {
+                review.removeImage(img);
+            }
+
+            // Đăng ký dọn dẹp các tệp ảnh vật lý bị xóa sau khi transaction commit
+            if (!toRemovePaths.isEmpty()) {
+                registerPostCommitImageCleanup(toRemovePaths);
+            }
+
+            // Thêm các ảnh mới (chưa có trong review hiện tại)
+            for (String url : requestedUrls) {
+                if (!keptUrls.contains(url)) {
+                    String path = url;
+                    if (url.startsWith("/api/v1/uploads/")) {
+                        path = url.substring("/api/v1/uploads/".length());
+                    }
+                    ReviewImage newImg = ReviewImage.builder()
                             .review(review)
-                            .imageUrl(url.trim())
-                            .imagePath(url.trim())
+                            .imageUrl(url)
+                            .imagePath(path)
                             .build();
-                    review.addImage(ri);
+                    review.addImage(newImg);
                 }
             }
         }
