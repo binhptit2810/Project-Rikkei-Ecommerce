@@ -35,9 +35,13 @@ import AdminVouchersPage from './pages/admin/AdminVouchersPage'
 import AdminReviewsPage from './pages/admin/AdminReviewsPage'
 import ForbiddenPage from './pages/ForbiddenPage'
 import NotFoundPage from './pages/NotFoundPage'
+import WishlistPage from './pages/WishlistPage'
+import { useWishlistStore } from './store/useWishlistStore'
 
 function App() {
-  const { initAuth, isInitializing } = useAuthStore()
+  const { initAuth, isInitializing, isAuthenticated, user } = useAuthStore()
+  const fetchWishlistIds = useWishlistStore((state) => state.fetchWishlistIds)
+  const resetWishlist = useWishlistStore((state) => state.resetWishlist)
   const initRef = useRef(false)
 
   // Khôi phục phiên làm việc khi ứng dụng khởi chạy / reload trang (App Bootstrapping)
@@ -47,6 +51,15 @@ function App() {
       initAuth()
     }
   }, [initAuth])
+
+  // Tải danh sách Wishlist IDs khi người dùng đăng nhập
+  useEffect(() => {
+    if (isAuthenticated && user?.role !== 'ADMIN') {
+      fetchWishlistIds()
+    } else {
+      resetWishlist()
+    }
+  }, [isAuthenticated, user, fetchWishlistIds, resetWishlist])
 
   // Hiển thị màn hình chờ toàn trang khi đang kiểm tra và làm mới token trong memory
   if (isInitializing) {
@@ -153,6 +166,14 @@ function App() {
             element={
               <ProtectedRoute requiredRole="CUSTOMER">
                 <ProfilePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/wishlist"
+            element={
+              <ProtectedRoute requiredRole="CUSTOMER">
+                <WishlistPage />
               </ProtectedRoute>
             }
           />
