@@ -5,6 +5,7 @@ import com.example.ecommerce.repository.UserRepository;
 import com.example.ecommerce.service.AuthService;
 import com.example.ecommerce.service.EmailService;
 import com.example.ecommerce.service.RefreshTokenService;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -151,7 +152,8 @@ class EnvironmentSecurityTest {
                 jwtUtils,
                 refreshTokenService,
                 redisTemplate,
-                emailService
+                emailService,
+                new ObjectMapper()
         );
 
         for (String profile : List.of("prod", "docker", "production")) {

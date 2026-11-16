@@ -48,6 +48,10 @@ public class User {
     @Column(columnDefinition = "TEXT")
     private String address;
 
+    /** Đường dẫn ảnh đại diện (hỗ trợ Google picture URL hoặc uploaded avatar) [TSK-D15-CCT]. */
+    @Column(name = "avatar_url", length = 500)
+    private String avatarUrl;
+
     /** CUSTOMER hoặc ADMIN — khớp ENUM trong schema. */
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 10)

@@ -12,15 +12,22 @@ import com.example.ecommerce.dto.response.RegisterResponse;
 import com.example.ecommerce.dto.response.UserResponse;
 import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
+import com.example.ecommerce.entity.UserOAuthAccount;
 import com.example.ecommerce.exception.BusinessException;
 import com.example.ecommerce.exception.LockedAccountException;
 import com.example.ecommerce.exception.UnverifiedAccountException;
+import com.example.ecommerce.repository.UserOAuthAccountRepository;
 import com.example.ecommerce.repository.UserRepository;
 import com.example.ecommerce.security.CustomUserDetails;
 import com.example.ecommerce.security.JwtUtils;
+import com.example.ecommerce.security.oauth2.Auth0TokenValidator;
+import com.example.ecommerce.security.oauth2.Auth0UserInfo;
+import com.example.ecommerce.security.oauth2.OAuth2TicketData;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -62,7 +69,6 @@ import java.util.concurrent.TimeUnit;
 // TSK-AUTH-00
 // [TSK-D02-CCT]
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class AuthService {
 
@@ -73,6 +79,49 @@ public class AuthService {
     private final RefreshTokenService refreshTokenService;
     private final StringRedisTemplate redisTemplate;
     private final EmailService emailService;
+    private final ObjectMapper objectMapper;
+    private final UserOAuthAccountRepository userOAuthAccountRepository;
+    private final Auth0TokenValidator auth0TokenValidator;
+
+    public static final String PROVIDER_AUTH0 = "AUTH0";
+
+    @Autowired
+    public AuthService(UserRepository userRepository,
+                       PasswordEncoder passwordEncoder,
+                       AuthenticationManager authenticationManager,
+                       JwtUtils jwtUtils,
+                       RefreshTokenService refreshTokenService,
+                       StringRedisTemplate redisTemplate,
+                       EmailService emailService,
+                       ObjectMapper objectMapper,
+                       UserOAuthAccountRepository userOAuthAccountRepository,
+                       Auth0TokenValidator auth0TokenValidator) {
+        this.userRepository = userRepository;
+        this.passwordEncoder = passwordEncoder;
+        this.authenticationManager = authenticationManager;
+        this.jwtUtils = jwtUtils;
+        this.refreshTokenService = refreshTokenService;
+        this.redisTemplate = redisTemplate;
+        this.emailService = emailService;
+        this.objectMapper = objectMapper;
+        this.userOAuthAccountRepository = userOAuthAccountRepository;
+        this.auth0TokenValidator = auth0TokenValidator;
+    }
+
+    /**
+     * Constructor tương thích ngược cho các unit/integration test cũ.
+     */
+    public AuthService(UserRepository userRepository,
+                       PasswordEncoder passwordEncoder,
+                       AuthenticationManager authenticationManager,
+                       JwtUtils jwtUtils,
+                       RefreshTokenService refreshTokenService,
+                       StringRedisTemplate redisTemplate,
+                       EmailService emailService,
+                       ObjectMapper objectMapper) {
+        this(userRepository, passwordEncoder, authenticationManager, jwtUtils, refreshTokenService,
+             redisTemplate, emailService, objectMapper, null, null);
+    }
 
     @Value("${app.otp.hmac-secret:ecommerce-default-otp-hmac-secret-change-in-production-2024}")
     private String otpHmacSecret;
@@ -968,6 +1017,149 @@ public class AuthService {
         }
     }
 
+    /**
+     * Trao đổi One-Time Ticket lấy JWT Access Token và Refresh Token [TSK-D15-CCT].
+     *
+     * Nguyên tắc an ninh:
+     *   - Ticket được tạo bằng SecureRandom, thời gian sống ngắn (60 giây), lưu trong Redis.
+     *   - Tiêu thụ ticket nguyên tử (Atomic Burn via Lua script) để chống Replay Attack 100%.
+     *   - Ràng buộc ticket với trình duyệt thông qua hash bindingSecret từ HttpOnly cookie (Browser Binding).
+     *   - Không lưu JWT hay Refresh Token trong ticket.
+     *   - Truy vấn lại User trong database để kiểm tra trạng thái active và role.
+     *
+     * @param rawTicket mã vé thô nhận từ request body
+     * @param bindingSecret mã bí mật ràng buộc phiên nhận từ cookie oauth2_binding
+     * @return AuthResponse chứa accessToken và refreshToken
+     */
+    /**
+     * Lua script thực thi nguyên tử (Atomic Compare-And-Delete) cho việc trao đổi OAuth2 One-Time Ticket [FIX-01].
+     * Quy tắc an toàn:
+     *   - Kiểm tra tồn tại của ticket theo Redis key (KEYS[1]).
+     *   - Giải mã JSON lấy bindingHash và đối chiếu với expectedBindingHash (ARGV[1]).
+     *   - Nếu binding không khớp: trả về status 2 và TUYỆT ĐỐI KHÔNG XÓA VÉ khỏi Redis.
+     *   - Nếu binding khớp: xóa vé khỏi Redis (DEL) và trả về status 1 cùng ticket JSON.
+     *   - Nếu vé không tồn tại hoặc hết hạn: trả về status 0.
+     */
+    public static final String COMPARE_AND_DELETE_TICKET_LUA_SCRIPT =
+            "local ticketJson = redis.call('GET', KEYS[1])\n" +
+            "if not ticketJson then\n" +
+            "    return {0, ''}\n" +
+            "end\n" +
+            "local ok, ticket = pcall(cjson.decode, ticketJson)\n" +
+            "if not ok or type(ticket) ~= 'table' then\n" +
+            "    return {0, ''}\n" +
+            "end\n" +
+            "local storedHash = ticket['bindingHash']\n" +
+            "local expectedHash = ARGV[1]\n" +
+            "if not storedHash or type(storedHash) ~= 'string' or storedHash ~= expectedHash then\n" +
+            "    return {2, ''}\n" +
+            "end\n" +
+            "redis.call('DEL', KEYS[1])\n" +
+            "return {1, ticketJson}";
+
+    @Transactional
+    public AuthResponse exchangeOAuth2Ticket(String rawTicket, String bindingSecret) {
+        if (!StringUtils.hasText(rawTicket)) {
+            throw new BadCredentialsException("Mã xác thực ticket không hợp lệ hoặc đã hết hạn");
+        }
+        if (!StringUtils.hasText(bindingSecret)) {
+            throw new BadCredentialsException("Yêu cầu không hợp lệ: thiếu thông tin xác thực trình duyệt");
+        }
+
+        String ticketHash = hashSha256(rawTicket.trim());
+        String bindingHash = hashSha256(bindingSecret.trim());
+        String redisKey = "auth:oauth2_ticket:" + ticketHash;
+
+        // Tiêu thụ ticket nguyên tử qua Lua script Compare-And-Delete [FIX-01]:
+        // Chỉ xóa vé khi bindingHash khớp với expectedBindingHash (ARGV[1]).
+        // Nếu không khớp hoặc không tìm thấy, tuyệt đối KHÔNG xóa vé khỏi Redis.
+        DefaultRedisScript<List> script = new DefaultRedisScript<>(COMPARE_AND_DELETE_TICKET_LUA_SCRIPT, List.class);
+        List<?> result = redisTemplate.execute(script, List.of(redisKey), bindingHash);
+
+        if (result == null || result.isEmpty()) {
+            log.warn("Trao đổi OAuth2 ticket thất bại: không nhận được kết quả từ Redis: hash={}", ticketHash);
+            throw new BadCredentialsException("Mã xác thực không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.");
+        }
+
+        int statusCode = result.get(0) instanceof Number num ? num.intValue() : 0;
+
+        if (statusCode == 0) {
+            log.warn("Trao đổi OAuth2 ticket thất bại: ticket không tồn tại hoặc đã bị tiêu thụ: hash={}", ticketHash);
+            throw new BadCredentialsException("Mã xác thực không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.");
+        }
+
+        if (statusCode == 2) {
+            log.error("CẢNH BÁO AN NINH: Phát hiện cố gắng trao đổi OAuth2 ticket từ trình duyệt khác hoặc cookie binding sai! Vé được bảo toàn trong Redis: hash={}", ticketHash);
+            throw new BadCredentialsException("Mã xác thực không khớp với phiên trình duyệt khởi tạo");
+        }
+
+        String ticketJson = result.size() > 1 && result.get(1) != null ? result.get(1).toString() : null;
+        if (!StringUtils.hasText(ticketJson)) {
+            log.error("Lỗi dữ liệu: Lua script báo thành công nhưng không trả về ticket JSON");
+            throw new BusinessException("Lỗi hệ thống khi xử lý phiên xác thực");
+        }
+
+        OAuth2TicketData ticketData;
+        try {
+            ticketData = objectMapper.readValue(ticketJson, OAuth2TicketData.class);
+        } catch (Exception e) {
+            log.error("Lỗi khi giải mã OAuth2TicketData từ Redis: {}", e.getMessage());
+            throw new BusinessException("Lỗi hệ thống khi xử lý phiên xác thực");
+        }
+
+        // Lớp bảo vệ bổ sung kiểm tra ràng buộc trình duyệt (Defense-in-Depth)
+        if (ticketData.getBindingHash() == null || !ticketData.getBindingHash().equals(bindingHash)) {
+            log.error("CẢNH BÁO AN NINH: Binding hash không khớp trong lớp kiểm tra thứ cấp");
+            throw new BadCredentialsException("Mã xác thực không khớp với phiên trình duyệt khởi tạo");
+        }
+
+        // Tái xác thực người dùng trong database
+        User user = userRepository.findById(ticketData.getUserId())
+                .orElseThrow(() -> new BusinessException("Không tìm thấy thông tin người dùng"));
+
+        if (Boolean.FALSE.equals(user.getActive())) {
+            String lockReason = StringUtils.hasText(user.getLockReason()) ? user.getLockReason().trim() : null;
+            log.warn("OAuth2 exchange thất bại do tài khoản bị khóa: userId={}, reason={}", user.getId(), lockReason);
+            throw new LockedAccountException("Tài khoản của bạn đã bị khóa.", lockReason);
+        }
+
+        if (user.getRole() != Role.CUSTOMER) {
+            log.warn("OAuth2 exchange thất bại: tài khoản không phải CUSTOMER: userId={}, role={}", user.getId(), user.getRole());
+            throw new BadCredentialsException("Chỉ tài khoản khách hàng mới được phép đăng nhập qua cổng này");
+        }
+
+        // Phát hành JWT Access Token và Refresh Token theo cơ chế chuẩn
+        UserDetails userDetails = buildUserDetailsForToken(user);
+        String accessToken = jwtUtils.generateToken(userDetails);
+        String refreshToken = refreshTokenService.createRefreshToken(user);
+
+        log.info("Trao đổi OAuth2 Ticket thành công: userId={}, email={}", user.getId(), user.getEmail());
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .tokenType("Bearer")
+                .expiresIn(jwtUtils.getExpirationInSeconds())
+                .user(UserResponse.fromEntity(user))
+                .refreshToken(refreshToken)
+                .build();
+    }
+
+    private String hashSha256(String input) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hexString = new StringBuilder();
+            for (byte b : hash) {
+                String hex = Integer.toHexString(0xff & b);
+                if (hex.length() == 1) hexString.append('0');
+                hexString.append(hex);
+            }
+            return hexString.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new RuntimeException("SHA-256 algorithm không khả dụng", e);
+        }
+    }
+
     // ---------- Private helpers ----------
 
     /**
@@ -984,5 +1176,134 @@ public class AuthService {
                 Boolean.TRUE.equals(user.getActive()),
                 isEmailVerified
         );
+    }
+
+    /**
+     * Trao đổi Auth0 ID Token lấy JWT Access Token và Refresh Token [AUTH0-GOOGLE].
+     *
+     * Quy tắc đồng bộ danh tính & bảo mật:
+     *   - Xác thực chữ ký, issuer, audience, thời hạn và email_verified của ID Token thông qua Auth0TokenValidator.
+     *   - Trường hợp A: Đã tồn tại liên kết (provider='AUTH0', providerId=sub) -> kiểm tra trạng thái active/locked,
+     *                   từ chối role ADMIN tại storefront, cập nhật avatar nếu đổi, cấp token nội bộ.
+     *   - Trường hợp B: Chưa có liên kết và email chưa tồn tại trong users -> tạo User mới (ROLE_CUSTOMER, active=true,
+     *                   email_verified=true, random BCrypt password) và tạo UserOAuthAccount, cấp token nội bộ.
+     *   - Trường hợp C: Email đã tồn tại trong users nhưng chưa liên kết Auth0 -> NGUYÊN TẮC BẢO MẬT: từ chối tự động
+     *                   liên kết chỉ dựa trên email để phòng chống Account Takeover, yêu cầu đăng nhập bằng mật khẩu.
+     *   - Xử lý race condition khi nhiều request tạo tài khoản đồng thời.
+     *
+     * @param idToken chuỗi Auth0 ID Token gửi từ React SPA
+     * @return AuthResponse chứa accessToken và refreshToken nội bộ
+     */
+    @Transactional
+    public AuthResponse exchangeAuth0IdToken(String idToken) {
+        // 1. Thẩm định ID Token qua Auth0TokenValidator
+        Auth0UserInfo userInfo = auth0TokenValidator.validateToken(idToken);
+        String sub = userInfo.getSub();
+        String normalizedEmail = userInfo.getEmail();
+        String name = userInfo.getName();
+        String picture = userInfo.getPicture();
+
+        // 2. Tìm kiếm liên kết tài khoản dựa trên provider ('AUTH0') và providerId (sub)
+        Optional<UserOAuthAccount> oauthAccountOpt =
+                userOAuthAccountRepository.findByProviderAndProviderId(PROVIDER_AUTH0, sub);
+
+        User user;
+        if (oauthAccountOpt.isPresent()) {
+            // Trường hợp A: Đã liên kết Auth0
+            user = oauthAccountOpt.get().getUser();
+
+            // Kiểm tra trạng thái tài khoản bị Admin khóa
+            if (Boolean.FALSE.equals(user.getActive())) {
+                String lockReason = StringUtils.hasText(user.getLockReason()) ? user.getLockReason().trim() : null;
+                log.warn("Auth0 Google login thất bại do tài khoản bị khóa: userId={}, reason={}", user.getId(), lockReason);
+                throw new LockedAccountException("Tài khoản của bạn đã bị khóa.", lockReason);
+            }
+
+            // Phân tách vai trò: Google Login tại storefront chỉ dành cho CUSTOMER
+            if (user.getRole() == Role.ADMIN) {
+                log.warn("Từ chối đăng nhập Auth0 Google tại cổng Khách hàng cho tài khoản ADMIN: email={}", normalizedEmail);
+                throw new BusinessException("Tài khoản Quản trị viên (ADMIN) không được phép đăng nhập tại cổng Khách hàng.");
+            }
+
+            // Đồng bộ avatar mới nhất từ Google/Auth0 nếu có thay đổi
+            if (StringUtils.hasText(picture) && !picture.equals(user.getAvatarUrl())) {
+                user.setAvatarUrl(picture);
+                userRepository.save(user);
+                log.info("Đã cập nhật avatar mới từ Auth0 cho user ID={}", user.getId());
+            }
+
+            log.info("Đăng nhập Auth0 Google thành công cho tài khoản đã liên kết: userId={}, email={}", user.getId(), normalizedEmail);
+        } else {
+            // Trường hợp B & C: Chưa có liên kết Auth0
+            // Kiểm tra xem email đã tồn tại trong hệ thống chưa
+            Optional<User> existingUserOpt = userRepository.findByEmail(normalizedEmail);
+            if (existingUserOpt.isPresent()) {
+                // Trường hợp C: NGUYÊN TẮC BẢO MẬT BẮT BUỘC: Không tự động liên kết tài khoản LOCAL trùng email
+                log.warn("Từ chối tự động liên kết tài khoản LOCAL trùng email qua Auth0: email={}", normalizedEmail);
+                throw new BusinessException("Email này đã được đăng ký bằng phương thức khác. Vui lòng đăng nhập bằng mật khẩu để liên kết tài khoản.");
+            }
+
+            // Trường hợp B: Nếu email chưa tồn tại -> Tạo tài khoản CUSTOMER mới và tạo liên kết OAuth
+            String secureRandomPassword = generateCryptographicPassword();
+            String passwordHash = passwordEncoder.encode(secureRandomPassword);
+
+            User newUser = User.builder()
+                    .email(normalizedEmail)
+                    .password(passwordHash)
+                    .fullName(StringUtils.hasText(name) ? name.trim() : "Khách hàng Google")
+                    .avatarUrl(StringUtils.hasText(picture) ? picture.trim() : null)
+                    .role(Role.CUSTOMER)
+                    .active(true)
+                    .emailVerified(true)
+                    .emailVerifiedAt(LocalDateTime.now())
+                    .build();
+
+            try {
+                user = userRepository.save(newUser);
+
+                UserOAuthAccount newOAuthAccount = UserOAuthAccount.builder()
+                        .user(user)
+                        .provider(PROVIDER_AUTH0)
+                        .providerId(sub)
+                        .email(normalizedEmail)
+                        .build();
+
+                userOAuthAccountRepository.save(newOAuthAccount);
+                log.info("Tạo tài khoản CUSTOMER mới thành công qua Auth0: userId={}, email={}", user.getId(), normalizedEmail);
+            } catch (Exception ex) {
+                log.error("Lỗi khi lưu tài khoản mới hoặc liên kết OAuth: {}", ex.getMessage());
+                // Xử lý race condition khi có 2 request đồng thời tạo tài khoản
+                Optional<UserOAuthAccount> retryOpt = userOAuthAccountRepository.findByProviderAndProviderId(PROVIDER_AUTH0, sub);
+                if (retryOpt.isPresent()) {
+                    user = retryOpt.get().getUser();
+                } else {
+                    throw new BusinessException("Lỗi hệ thống khi khởi tạo tài khoản. Vui lòng thử lại.");
+                }
+            }
+        }
+
+        // 3. Phát hành JWT Access Token và Refresh Token theo cơ chế chuẩn của Rikkei
+        UserDetails userDetails = buildUserDetailsForToken(user);
+        String accessToken = jwtUtils.generateToken(userDetails);
+        String refreshToken = refreshTokenService.createRefreshToken(user);
+
+        log.info("Phát hành token thành công cho Auth0 Google login: userId={}, email={}", user.getId(), user.getEmail());
+
+        return AuthResponse.builder()
+                .accessToken(accessToken)
+                .tokenType("Bearer")
+                .expiresIn(jwtUtils.getExpirationInSeconds())
+                .user(UserResponse.fromEntity(user))
+                .refreshToken(refreshToken)
+                .build();
+    }
+
+    /**
+     * Sinh mật khẩu ngẫu nhiên bảo mật cao (Cryptographically Secure) bằng SecureRandom (32 bytes = 256 bits).
+     */
+    private String generateCryptographicPassword() {
+        byte[] randomBytes = new byte[32];
+        SECURE_RANDOM.nextBytes(randomBytes);
+        return java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(randomBytes);
     }
 }

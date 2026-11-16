@@ -29,6 +29,9 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
   const { isAuthenticated, user } = useAuthStore()
   const navigate = useNavigate()
   const shouldReduceMotion = useReducedMotion()
+  const isInWishlist = useWishlistStore((state) => state.isInWishlist)
+  const toggleWishlist = useWishlistStore((state) => state.toggleWishlist)
+  const isLiked = product ? isInWishlist(product.id) : false
 
   if (!product) return null
 
@@ -36,9 +39,6 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
     product.stockQuantity === undefined ||
     product.stockQuantity === null ||
     Number(product.stockQuantity) <= 0
-
-  const isLiked = useWishlistStore((state) => state.isInWishlist(product.id))
-  const toggleWishlist = useWishlistStore((state) => state.toggleWishlist)
 
   // Xử lý sự kiện click icon Trái tim Yêu thích [TSK-D15-DDM]
   const handleWishlistClick = async (e) => {

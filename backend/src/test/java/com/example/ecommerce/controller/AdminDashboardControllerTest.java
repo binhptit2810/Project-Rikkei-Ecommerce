@@ -194,5 +194,31 @@ class AdminDashboardControllerTest {
                 .andExpect(jsonPath("$.data[0].id").value(1))
                 .andExpect(jsonPath("$.data[0].stockQuantity").value(3));
     }
+
+    @Test
+    @DisplayName("GET /admin/dashboard/top-products: Trả về danh sách top sản phẩm bán chạy nhất")
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    void getTopSellingProducts_Success() throws Exception {
+        ProductResponse p1 = ProductResponse.builder()
+                .id(101L)
+                .name("Sản phẩm Best Seller 1")
+                .price(BigDecimal.valueOf(500000))
+                .totalSold(50L)
+                .totalRevenue(BigDecimal.valueOf(25000000))
+                .rank(1)
+                .build();
+
+        when(dashboardService.getTopSellingProducts(eq(5))).thenReturn(List.of(p1));
+
+        mockMvc.perform(get("/admin/dashboard/top-products?limit=5")
+                        .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].id").value(101))
+                .andExpect(jsonPath("$.data[0].name").value("Sản phẩm Best Seller 1"))
+                .andExpect(jsonPath("$.data[0].totalSold").value(50))
+                .andExpect(jsonPath("$.data[0].totalRevenue").value(25000000))
+                .andExpect(jsonPath("$.data[0].rank").value(1));
+    }
 }
 

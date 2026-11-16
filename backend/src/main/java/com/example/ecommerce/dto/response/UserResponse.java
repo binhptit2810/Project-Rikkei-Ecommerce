@@ -38,6 +38,7 @@ public class UserResponse {
     private String fullName;
     private String phone;
     private String address;
+    private String avatarUrl;
     private Role role;
     private Boolean active;
     private Boolean emailVerified;
@@ -60,6 +61,7 @@ public class UserResponse {
                 .fullName(user.getFullName())
                 .phone(user.getPhone())
                 .address(user.getAddress())
+                .avatarUrl(user.getAvatarUrl())
                 .role(user.getRole())
                 .active(user.getActive())
                 .emailVerified(user.getEmailVerified())

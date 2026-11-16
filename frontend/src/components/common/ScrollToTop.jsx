@@ -48,14 +48,18 @@ export const ScrollToTop = () => {
     performScrollToTop()
 
     // Thực hiện ở frame tiếp theo (sau khi DOM mount)
-    const rafId = requestAnimationFrame(performScrollToTop)
+    const rafId = typeof window !== 'undefined' && window.requestAnimationFrame
+      ? window.requestAnimationFrame(performScrollToTop)
+      : null
 
     // Thực hiện sau khi kết thúc animation chuyển trang của Framer Motion (thường từ 150ms - 220ms)
     const timer1 = setTimeout(performScrollToTop, 60)
     const timer2 = setTimeout(performScrollToTop, 220)
 
     return () => {
-      cancelAnimationFrame(rafId)
+      if (rafId && typeof window !== 'undefined' && window.cancelAnimationFrame) {
+        window.cancelAnimationFrame(rafId)
+      }
       clearTimeout(timer1)
       clearTimeout(timer2)
     }

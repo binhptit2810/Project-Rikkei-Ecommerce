@@ -137,6 +137,99 @@ export const useAuthStore = create((set, get) => ({
   },
 
   /**
+   * Đăng nhập thông qua One-Time Ticket nhận được từ Google OAuth2 [TSK-D15-CCT].
+   */
+  loginWithOAuth2Ticket: async (ticket) => {
+    set({
+      isLoading: true,
+      error: null,
+      lockReason: null,
+      isUnverified: false,
+      unverifiedEmail: null,
+    })
+    try {
+      const res = await authService.exchangeOAuth2Ticket(ticket)
+      const { accessToken, user } = res.data
+
+      setInMemoryToken(accessToken)
+
+      set({
+        user,
+        accessToken,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+        lockReason: null,
+      })
+      return { success: true, user }
+    } catch (err) {
+      setInMemoryToken(null)
+      const errResponse = err.response?.data
+      const message =
+        errResponse?.message || err.message || 'Đăng nhập bằng tài khoản Google thất bại'
+      const reason =
+        errResponse?.data?.reason || errResponse?.data?.lockReason || null
+
+      set({
+        user: null,
+        accessToken: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: message,
+        lockReason: reason,
+      })
+      throw err
+    }
+  },
+
+  /**
+   * Đăng nhập thông qua Auth0 ID Token [AUTH0-GOOGLE].
+   * Trao đổi ID Token lấy internal JWT Access Token và Refresh Token HttpOnly Cookie.
+   */
+  loginWithAuth0: async (idToken) => {
+    set({
+      isLoading: true,
+      error: null,
+      lockReason: null,
+      isUnverified: false,
+      unverifiedEmail: null,
+    })
+    try {
+      const res = await authService.exchangeAuth0Token(idToken)
+      const { accessToken, user } = res.data
+
+      setInMemoryToken(accessToken)
+
+      set({
+        user,
+        accessToken,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+        lockReason: null,
+      })
+      return { success: true, user }
+    } catch (err) {
+      setInMemoryToken(null)
+      const errResponse = err.response?.data
+      const message =
+        errResponse?.message || err.message || 'Đăng nhập bằng tài khoản Google (Auth0) thất bại'
+      const reason =
+        errResponse?.data?.reason || errResponse?.data?.lockReason || null
+
+      set({
+        user: null,
+        accessToken: null,
+        isAuthenticated: false,
+        isLoading: false,
+        error: message,
+        lockReason: reason,
+      })
+      throw err
+    }
+  },
+
+  /**
    * Gửi mã OTP xác thực email trước khi tạo tài khoản.
    */
   sendRegistrationOtp: async (data) => {

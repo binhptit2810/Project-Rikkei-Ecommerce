@@ -3,7 +3,6 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   ShoppingBag,
   ShoppingCart,
-  CheckCircle2,
   AlertCircle,
   Truck,
   RotateCcw,

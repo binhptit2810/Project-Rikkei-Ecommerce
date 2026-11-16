@@ -43,6 +43,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
     /** Đếm tổng số người dùng theo Role. */
     long countByRole(Role role);
 
+    /** Đếm số người dùng theo Role được tạo trong khoảng thời gian. */
+    long countByRoleAndCreatedAtBetween(Role role, java.time.LocalDateTime startDate, java.time.LocalDateTime endDate);
+
     /** Lấy danh sách người dùng theo Role có phân trang (phục vụ lọc Customer không lẫn Admin). */
     Page<User> findByRole(Role role, Pageable pageable);
 

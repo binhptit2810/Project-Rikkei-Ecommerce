@@ -24,6 +24,24 @@ export const authService = {
   },
 
   /**
+   * Trao đổi One-Time Ticket lấy JWT Access Token và Refresh Token sau khi xác thực Google [TSK-D15-CCT].
+   * POST /api/v1/auth/oauth2/exchange
+   */
+  async exchangeOAuth2Ticket(ticket) {
+    const response = await apiClient.post('/auth/oauth2/exchange', { ticket })
+    return response.data // ApiResponse<AuthResponse>
+  },
+
+  /**
+   * Trao đổi Auth0 ID Token lấy JWT Access Token và Refresh Token [AUTH0-GOOGLE].
+   * POST /api/v1/auth/auth0/exchange
+   */
+  async exchangeAuth0Token(idToken) {
+    const response = await apiClient.post('/auth/auth0/exchange', { idToken })
+    return response.data // ApiResponse<AuthResponse>
+  },
+
+  /**
    * Lấy thông tin người dùng đang đăng nhập.
    * GET /api/v1/users/me
    */

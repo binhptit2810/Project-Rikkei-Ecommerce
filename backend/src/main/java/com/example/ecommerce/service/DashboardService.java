@@ -1,11 +1,15 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.dto.response.BestSellerProjection;
 import com.example.ecommerce.dto.response.DashboardStatsResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
 import com.example.ecommerce.entity.*;
 import com.example.ecommerce.repository.*;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,7 +38,6 @@ import java.util.Map;
  * 4. Tỷ lệ thanh toán: COD vs VNPay Online.
  */
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class DashboardService {
 
@@ -45,6 +48,34 @@ public class DashboardService {
     private final UserRepository userRepository;
     private final InventoryTransactionRepository inventoryTransactionRepository;
     private final PaymentRepository paymentRepository;
+    private final OrderItemRepository orderItemRepository;
+
+    @Autowired
+    public DashboardService(
+            OrderRepository orderRepository,
+            ProductRepository productRepository,
+            UserRepository userRepository,
+            InventoryTransactionRepository inventoryTransactionRepository,
+            PaymentRepository paymentRepository,
+            @Autowired(required = false) OrderItemRepository orderItemRepository
+    ) {
+        this.orderRepository = orderRepository;
+        this.productRepository = productRepository;
+        this.userRepository = userRepository;
+        this.inventoryTransactionRepository = inventoryTransactionRepository;
+        this.paymentRepository = paymentRepository;
+        this.orderItemRepository = orderItemRepository;
+    }
+
+    public DashboardService(
+            OrderRepository orderRepository,
+            ProductRepository productRepository,
+            UserRepository userRepository,
+            InventoryTransactionRepository inventoryTransactionRepository,
+            PaymentRepository paymentRepository
+    ) {
+        this(orderRepository, productRepository, userRepository, inventoryTransactionRepository, paymentRepository, null);
+    }
 
     /**
      * Thu thập toàn bộ chỉ số thống kê kinh doanh và tổng quan hệ thống cho Admin Dashboard.
@@ -227,6 +258,95 @@ public class DashboardService {
         long totalUsers = userRepository.count();
         long totalCustomers = userRepository.countByRole(Role.CUSTOMER);
 
+        // =========================================================================
+        // 6. TÍNH TOÁN CÁC CHỈ SỐ TĂNG TRƯỞNG SO VỚI THÁNG TRƯỚC (MoM GROWTH) & KHÁCH HÀNG MỚI [TSK-D15-DHA]
+        // =========================================================================
+        YearMonth lastYearMonth = currentYearMonth.minusMonths(1);
+        LocalDateTime startOfLastMonth = lastYearMonth.atDay(1).atStartOfDay();
+        LocalDateTime endOfLastMonth = lastYearMonth.atEndOfMonth().atTime(LocalTime.MAX);
+
+        BigDecimal revenueLastMonth = orderRepository.sumRevenueBetween(
+                startOfLastMonth, endOfLastMonth, PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
+        if (revenueLastMonth == null) {
+            revenueLastMonth = BigDecimal.ZERO;
+        }
+
+        double revenueGrowth = 0.0;
+        if (revenueLastMonth.compareTo(BigDecimal.ZERO) > 0) {
+            double growth = ((revenueThisMonth.doubleValue() - revenueLastMonth.doubleValue()) / revenueLastMonth.doubleValue()) * 100.0;
+            revenueGrowth = Math.round(growth * 10.0) / 10.0;
+        } else if (revenueThisMonth.compareTo(BigDecimal.ZERO) > 0) {
+            revenueGrowth = 100.0;
+        }
+
+        long ordersThisMonth = (monthOrders != null) ? monthOrders.size() : 0L;
+        List<Order> lastMonthOrders = orderRepository.findOrdersBetween(startOfLastMonth, endOfLastMonth);
+        long ordersLastMonth = (lastMonthOrders != null) ? lastMonthOrders.size() : 0L;
+
+        double ordersGrowth = 0.0;
+        if (ordersLastMonth > 0) {
+            double growth = ((double) (ordersThisMonth - ordersLastMonth) / ordersLastMonth) * 100.0;
+            ordersGrowth = Math.round(growth * 10.0) / 10.0;
+        } else if (ordersThisMonth > 0) {
+            ordersGrowth = 100.0;
+        }
+
+        long newCustomersThisMonth = 0L;
+        long newCustomersLastMonth = 0L;
+        try {
+            newCustomersThisMonth = userRepository.countByRoleAndCreatedAtBetween(Role.CUSTOMER, monthStart, monthEnd);
+            newCustomersLastMonth = userRepository.countByRoleAndCreatedAtBetween(Role.CUSTOMER, startOfLastMonth, endOfLastMonth);
+        } catch (Exception e) {
+            log.debug("Không thể đếm khách hàng mới theo thời gian: {}", e.getMessage());
+        }
+
+        double customersGrowth = 0.0;
+        if (newCustomersLastMonth > 0) {
+            double growth = ((double) (newCustomersThisMonth - newCustomersLastMonth) / newCustomersLastMonth) * 100.0;
+            customersGrowth = Math.round(growth * 10.0) / 10.0;
+        } else if (newCustomersThisMonth > 0) {
+            customersGrowth = 100.0;
+        }
+
+        double pendingOrdersGrowth = 0.0;
+
+        // =========================================================================
+        // 7. TOP 5 SẢN PHẨM BÁN CHẠY NHẤT THÁNG (BEST SELLERS) [TSK-D15-DHA]
+        // =========================================================================
+        List<ProductResponse> topSellingProducts = new ArrayList<>();
+        if (orderItemRepository != null) {
+            try {
+                Page<BestSellerProjection> bestSellerPage = orderItemRepository.findBestSellers(
+                        monthStart, monthEnd, PageRequest.of(0, 5));
+                if (bestSellerPage != null && bestSellerPage.getContent() != null && !bestSellerPage.getContent().isEmpty()) {
+                    List<BestSellerProjection> projections = bestSellerPage.getContent();
+                    for (int i = 0; i < projections.size(); i++) {
+                        ProductResponse res = ProductResponse.fromProjection(projections.get(i));
+                        if (res != null) {
+                            res.setRank(i + 1);
+                            topSellingProducts.add(res);
+                        }
+                    }
+                } else {
+                    LocalDateTime fallbackStart = today.minusDays(90).atStartOfDay();
+                    Page<BestSellerProjection> fallbackPage = orderItemRepository.findBestSellers(
+                            fallbackStart, endOfToday, PageRequest.of(0, 5));
+                    if (fallbackPage != null && fallbackPage.getContent() != null) {
+                        List<BestSellerProjection> projections = fallbackPage.getContent();
+                        for (int i = 0; i < projections.size(); i++) {
+                            ProductResponse res = ProductResponse.fromProjection(projections.get(i));
+                            if (res != null) {
+                                res.setRank(i + 1);
+                                topSellingProducts.add(res);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Lỗi khi truy vấn best sellers: {}", e.getMessage());
+            }
+        }
+
         return DashboardStatsResponse.builder()
                 .totalOrders(totalOrders)
                 .actualRevenue(actualRevenue)
@@ -235,6 +355,11 @@ public class DashboardService {
                 .revenueThisWeek(revenueThisWeek)
                 .revenueThisMonth(revenueThisMonth)
                 .revenueThisYear(revenueThisYear)
+                .revenueGrowth(revenueGrowth)
+                .ordersGrowth(ordersGrowth)
+                .newCustomers(newCustomersThisMonth)
+                .customersGrowth(customersGrowth)
+                .pendingOrdersGrowth(pendingOrdersGrowth)
                 .pendingOrders(pendingOrders)
                 .paidOrders(paidOrders)
                 .deliveredOrders(deliveredOrders)
@@ -248,12 +373,61 @@ public class DashboardService {
                 .totalProducts(totalProducts)
                 .lowStockCount(lowStockCount)
                 .lowStockProducts(lowStockProducts)
+                .topSellingProducts(topSellingProducts)
                 .orderPlacedCount(orderPlacedCount)
                 .orderCancelledCount(orderCancelledCount)
                 .manualImportCount(manualImportCount)
                 .totalUsers(totalUsers)
                 .totalCustomers(totalCustomers)
                 .build();
+    }
+
+    /**
+     * Lấy danh sách Top sản phẩm bán chạy nhất.
+     *
+     * @param limit Số lượng sản phẩm muốn lấy (mặc định 5)
+     * @return Danh sách ProductResponse
+     */
+    @Transactional(readOnly = true)
+    public List<ProductResponse> getTopSellingProducts(Integer limit) {
+        int count = (limit != null && limit > 0) ? limit : 5;
+        LocalDate today = LocalDate.now();
+        YearMonth currentYearMonth = YearMonth.from(today);
+        LocalDateTime monthStart = currentYearMonth.atDay(1).atStartOfDay();
+        LocalDateTime monthEnd = currentYearMonth.atEndOfMonth().atTime(LocalTime.MAX);
+
+        List<ProductResponse> result = new ArrayList<>();
+        if (orderItemRepository != null) {
+            try {
+                Page<BestSellerProjection> page = orderItemRepository.findBestSellers(monthStart, monthEnd, PageRequest.of(0, count));
+                if (page != null && page.getContent() != null && !page.getContent().isEmpty()) {
+                    List<BestSellerProjection> list = page.getContent();
+                    for (int i = 0; i < list.size(); i++) {
+                        ProductResponse res = ProductResponse.fromProjection(list.get(i));
+                        if (res != null) {
+                            res.setRank(i + 1);
+                            result.add(res);
+                        }
+                    }
+                } else {
+                    LocalDateTime fallbackStart = today.minusDays(90).atStartOfDay();
+                    Page<BestSellerProjection> fallbackPage = orderItemRepository.findBestSellers(fallbackStart, today.atTime(LocalTime.MAX), PageRequest.of(0, count));
+                    if (fallbackPage != null && fallbackPage.getContent() != null) {
+                        List<BestSellerProjection> list = fallbackPage.getContent();
+                        for (int i = 0; i < list.size(); i++) {
+                            ProductResponse res = ProductResponse.fromProjection(list.get(i));
+                            if (res != null) {
+                                res.setRank(i + 1);
+                                result.add(res);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Lỗi khi lấy top selling products: {}", e.getMessage());
+            }
+        }
+        return result;
     }
 
     /**

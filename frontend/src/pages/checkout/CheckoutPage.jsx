@@ -11,7 +11,6 @@ import {
   MapPin,
   FileText,
   Lock,
-  Tag,
   Ticket,
   ChevronRight,
   X,
@@ -21,7 +20,6 @@ import { useAuthStore } from '../../store/useAuthStore'
 import { useToastStore } from '../../store/useToastStore'
 import orderService from '../../services/orderService'
 import paymentService from '../../services/paymentService'
-import couponService from '../../services/couponService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import VoucherPickerModal from '../../components/checkout/VoucherPickerModal'
 
@@ -44,9 +42,7 @@ export const CheckoutPage = () => {
   const [errorMessage, setErrorMessage] = useState(null)
 
   // Mã giảm giá / Voucher
-  const [couponCodeInput, setCouponCodeInput] = useState('')
   const [appliedCoupon, setAppliedCoupon] = useState(null)
-  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false)
   const [couponError, setCouponError] = useState(null)
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false)
 
@@ -83,31 +79,8 @@ export const CheckoutPage = () => {
     if (errorMessage) setErrorMessage(null)
   }
 
-  const handleApplyCoupon = async (e) => {
-    e?.preventDefault()
-    if (!couponCodeInput.trim()) {
-      setCouponError('Vui lòng nhập mã giảm giá')
-      return
-    }
-    setIsValidatingCoupon(true)
-    setCouponError(null)
-    try {
-      const res = await couponService.validateCoupon(couponCodeInput.trim(), getTotalPrice())
-      const data = res?.data || res
-      setAppliedCoupon(data)
-      setCouponError(null)
-    } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Mã giảm giá không hợp lệ'
-      setCouponError(msg)
-      setAppliedCoupon(null)
-    } finally {
-      setIsValidatingCoupon(false)
-    }
-  }
-
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null)
-    setCouponCodeInput('')
     setCouponError(null)
   }
 
@@ -841,7 +814,6 @@ export const CheckoutPage = () => {
         onClose={() => setIsVoucherModalOpen(false)}
         onSelectVoucher={(data) => {
           setAppliedCoupon(data)
-          setCouponCodeInput(data.code)
           setCouponError(null)
         }}
         currentCode={appliedCoupon?.code}

@@ -5,9 +5,13 @@ import com.example.ecommerce.dto.request.ReviewRequest;
 import com.example.ecommerce.dto.response.ReviewResponse;
 import com.example.ecommerce.entity.Product;
 import com.example.ecommerce.entity.Review;
+import com.example.ecommerce.entity.ReviewImage;
 import com.example.ecommerce.entity.Role;
 import com.example.ecommerce.entity.User;
+import com.example.ecommerce.exception.BadRequestException;
+import com.example.ecommerce.repository.OrderItemRepository;
 import com.example.ecommerce.repository.ProductRepository;
+import com.example.ecommerce.repository.ReviewImageRepository;
 import com.example.ecommerce.repository.ReviewRepository;
 import com.example.ecommerce.repository.UserRepository;
 import com.example.ecommerce.security.CustomUserDetails;
@@ -26,6 +30,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -49,6 +55,15 @@ class ReviewUpdateAndReplyTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private OrderItemRepository orderItemRepository;
+
+    @Mock
+    private ReviewImageRepository reviewImageRepository;
+
+    @Mock
+    private FileStorageService fileStorageService;
 
     @InjectMocks
     private ReviewServiceImpl reviewService;
@@ -218,5 +233,175 @@ class ReviewUpdateAndReplyTest {
         assertThat(testReview.getAdminReply()).isEqualTo("Cảm ơn bạn đã ủng hộ shop! Chúc bạn có trải nghiệm tuyệt vời với sản phẩm ạ.");
         assertThat(testReview.getAdminReplyAt()).isNotNull();
         verify(reviewRepository, times(1)).save(testReview);
+    }
+
+    @Test
+    @DisplayName("Kịch bản 5: Chỉnh sửa review - Giữ nguyên toàn bộ ảnh cũ")
+    void updateReview_keepExistingImages_retainsImagesWithoutDeletion() {
+        authenticateAs(ownerUser);
+
+        ReviewImage img1 = ReviewImage.builder()
+                .id(1001L)
+                .imageUrl("/api/v1/uploads/reviews/img1.jpg")
+                .imagePath("reviews/img1.jpg")
+                .build();
+        ReviewImage img2 = ReviewImage.builder()
+                .id(1002L)
+                .imageUrl("/api/v1/uploads/reviews/img2.jpg")
+                .imagePath("reviews/img2.jpg")
+                .build();
+        testReview.addImage(img1);
+        testReview.addImage(img2);
+
+        when(productRepository.findById(10L)).thenReturn(Optional.of(testProduct));
+        when(reviewRepository.findById(100L)).thenReturn(Optional.of(testReview));
+        when(reviewRepository.save(any(Review.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reviewRepository.calculateAverageRating(10L)).thenReturn(5.0);
+        when(reviewRepository.countByProductId(10L)).thenReturn(1);
+
+        ReviewRequest request = ReviewRequest.builder()
+                .rating(5)
+                .comment("Nội dung cập nhật giữ nguyên ảnh")
+                .images(List.of("/api/v1/uploads/reviews/img1.jpg", "/api/v1/uploads/reviews/img2.jpg"))
+                .build();
+
+        ReviewResponse response = reviewService.updateReview(10L, 100L, request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getImages()).containsExactly("/api/v1/uploads/reviews/img1.jpg", "/api/v1/uploads/reviews/img2.jpg");
+        assertThat(testReview.getImages()).hasSize(2);
+        verify(fileStorageService, never()).deleteFile(anyString());
+    }
+
+    @Test
+    @DisplayName("Kịch bản 6: Chỉnh sửa review - Xóa 1 ảnh cũ và giữ lại 1 ảnh cũ, kích hoạt dọn dẹp file vật lý")
+    void updateReview_removeOneOldImage_removesImageAndCleansUpFile() {
+        authenticateAs(ownerUser);
+
+        ReviewImage img1 = ReviewImage.builder()
+                .id(1001L)
+                .imageUrl("/api/v1/uploads/reviews/img1.jpg")
+                .imagePath("reviews/img1.jpg")
+                .build();
+        ReviewImage img2 = ReviewImage.builder()
+                .id(1002L)
+                .imageUrl("/api/v1/uploads/reviews/img2.jpg")
+                .imagePath("reviews/img2.jpg")
+                .build();
+        testReview.addImage(img1);
+        testReview.addImage(img2);
+
+        when(productRepository.findById(10L)).thenReturn(Optional.of(testProduct));
+        when(reviewRepository.findById(100L)).thenReturn(Optional.of(testReview));
+        when(reviewRepository.save(any(Review.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reviewRepository.calculateAverageRating(10L)).thenReturn(5.0);
+        when(reviewRepository.countByProductId(10L)).thenReturn(1);
+
+        ReviewRequest request = ReviewRequest.builder()
+                .rating(5)
+                .comment("Đã xóa bớt 1 ảnh cũ")
+                .images(List.of("/api/v1/uploads/reviews/img1.jpg"))
+                .build();
+
+        ReviewResponse response = reviewService.updateReview(10L, 100L, request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getImages()).containsExactly("/api/v1/uploads/reviews/img1.jpg");
+        assertThat(testReview.getImages()).hasSize(1);
+        assertThat(testReview.getImages().get(0).getId()).isEqualTo(1001L);
+        verify(fileStorageService, times(1)).deleteFile("reviews/img2.jpg");
+    }
+
+    @Test
+    @DisplayName("Kịch bản 7: Chỉnh sửa review - Kết hợp giữ ảnh cũ và thêm ảnh mới tải lên")
+    void updateReview_addNewImageWhileKeepingOld_addsNewImageSuccessfully() {
+        authenticateAs(ownerUser);
+
+        ReviewImage img1 = ReviewImage.builder()
+                .id(1001L)
+                .imageUrl("/api/v1/uploads/reviews/img1.jpg")
+                .imagePath("reviews/img1.jpg")
+                .build();
+        testReview.addImage(img1);
+
+        when(productRepository.findById(10L)).thenReturn(Optional.of(testProduct));
+        when(reviewRepository.findById(100L)).thenReturn(Optional.of(testReview));
+        when(reviewRepository.save(any(Review.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reviewRepository.calculateAverageRating(10L)).thenReturn(5.0);
+        when(reviewRepository.countByProductId(10L)).thenReturn(1);
+
+        ReviewRequest request = ReviewRequest.builder()
+                .rating(5)
+                .comment("Thêm ảnh mới kết hợp ảnh cũ")
+                .images(List.of("/api/v1/uploads/reviews/img1.jpg", "/api/v1/uploads/reviews/new_photo.jpg"))
+                .build();
+
+        ReviewResponse response = reviewService.updateReview(10L, 100L, request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getImages()).containsExactly("/api/v1/uploads/reviews/img1.jpg", "/api/v1/uploads/reviews/new_photo.jpg");
+        assertThat(testReview.getImages()).hasSize(2);
+        verify(fileStorageService, never()).deleteFile(anyString());
+    }
+
+    @Test
+    @DisplayName("Kịch bản 8: Chỉnh sửa review - Xóa toàn bộ ảnh đính kèm (gửi mảng rỗng)")
+    void updateReview_removeAllImages_removesAllAndCleansUpAllFiles() {
+        authenticateAs(ownerUser);
+
+        ReviewImage img1 = ReviewImage.builder()
+                .id(1001L)
+                .imageUrl("/api/v1/uploads/reviews/img1.jpg")
+                .imagePath("reviews/img1.jpg")
+                .build();
+        ReviewImage img2 = ReviewImage.builder()
+                .id(1002L)
+                .imageUrl("/api/v1/uploads/reviews/img2.jpg")
+                .imagePath("reviews/img2.jpg")
+                .build();
+        testReview.addImage(img1);
+        testReview.addImage(img2);
+
+        when(productRepository.findById(10L)).thenReturn(Optional.of(testProduct));
+        when(reviewRepository.findById(100L)).thenReturn(Optional.of(testReview));
+        when(reviewRepository.save(any(Review.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(reviewRepository.calculateAverageRating(10L)).thenReturn(5.0);
+        when(reviewRepository.countByProductId(10L)).thenReturn(1);
+
+        ReviewRequest request = ReviewRequest.builder()
+                .rating(5)
+                .comment("Không còn dùng ảnh nào")
+                .images(Collections.emptyList())
+                .build();
+
+        ReviewResponse response = reviewService.updateReview(10L, 100L, request);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getImages()).isEmpty();
+        assertThat(testReview.getImages()).isEmpty();
+        verify(fileStorageService, times(1)).deleteFile("reviews/img1.jpg");
+        verify(fileStorageService, times(1)).deleteFile("reviews/img2.jpg");
+    }
+
+    @Test
+    @DisplayName("Kịch bản 9: Chỉnh sửa review - Gửi vượt quá 3 ảnh -> Ném lỗi BadRequestException")
+    void updateReview_moreThanThreeImages_throwsBadRequestException() {
+        authenticateAs(ownerUser);
+
+        when(productRepository.findById(10L)).thenReturn(Optional.of(testProduct));
+        when(reviewRepository.findById(100L)).thenReturn(Optional.of(testReview));
+
+        ReviewRequest request = ReviewRequest.builder()
+                .rating(5)
+                .comment("Cố tình gửi 4 ảnh")
+                .images(List.of("url1.jpg", "url2.jpg", "url3.jpg", "url4.jpg"))
+                .build();
+
+        assertThatThrownBy(() -> reviewService.updateReview(10L, 100L, request))
+                .isInstanceOf(BadRequestException.class)
+                .hasMessageContaining("Mỗi đánh giá chỉ được đính kèm tối đa 3 ảnh");
+
+        verify(reviewRepository, never()).save(any(Review.class));
+        verify(fileStorageService, never()).deleteFile(anyString());
     }
 }

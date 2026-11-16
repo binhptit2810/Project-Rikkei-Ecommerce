@@ -3,7 +3,6 @@ import { Link, useNavigate } from 'react-router-dom'
 import { 
   ArrowRight, 
   ShoppingBag,  
-  CheckCircle2, 
   Server, 
   Zap,
   Truck,
@@ -206,26 +205,6 @@ export const HomePage = () => {
   const formatCurrency = (val) => {
     if (val === null || val === undefined) return '0 ₫'
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(val)
-  }
-
-  // Animation variants cho Stagger effect của danh sách sản phẩm
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: shouldReduceMotion ? 0 : 0.08,
-      },
-    },
-  }
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: shouldReduceMotion ? 0 : 24 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.45, ease: 'easeOut' },
-    },
   }
 
   return (

@@ -4,11 +4,8 @@ import {
   X,
   AlertCircle,
   CheckCircle2,
-  Calendar,
   Percent,
   Coins,
-  ShieldAlert,
-  Sparkles,
 } from 'lucide-react'
 import couponService from '../../services/couponService'
 import LoadingSpinner from '../common/LoadingSpinner'
@@ -176,11 +173,10 @@ export const VoucherModal = ({
         active: Boolean(formData.active),
       }
 
-      let res
       if (isEditing) {
-        res = await couponService.updateCoupon(voucher.id, payload)
+        await couponService.updateCoupon(voucher.id, payload)
       } else {
-        res = await couponService.createCoupon(payload)
+        await couponService.createCoupon(payload)
       }
 
       onSuccess(

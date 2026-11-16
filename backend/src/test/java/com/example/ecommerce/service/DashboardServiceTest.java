@@ -1,5 +1,6 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.dto.response.BestSellerProjection;
 import com.example.ecommerce.dto.response.DashboardStatsResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
 import com.example.ecommerce.entity.*;
@@ -50,6 +51,9 @@ class DashboardServiceTest {
 
     @Mock
     private PaymentRepository paymentRepository;
+
+    @Mock
+    private OrderItemRepository orderItemRepository;
 
     @InjectMocks
     private DashboardService dashboardService;
@@ -192,11 +196,56 @@ class DashboardServiceTest {
         assertThat(stats.getTotalUsers()).isEqualTo(100L);
         assertThat(stats.getTotalCustomers()).isEqualTo(95L);
 
+        // Kiểm tra các chỉ số tăng trưởng MoM và Top Selling [TSK-D15-DHA]
+        assertThat(stats.getRevenueGrowth()).isNotNull();
+        assertThat(stats.getOrdersGrowth()).isNotNull();
+        assertThat(stats.getNewCustomers()).isNotNull();
+        assertThat(stats.getCustomersGrowth()).isNotNull();
+        assertThat(stats.getPendingOrdersGrowth()).isNotNull();
+        assertThat(stats.getTopSellingProducts()).isNotNull();
+        assertThat(stats.getBestSellers()).isNotNull();
+        assertThat(stats.getRevenueByDate()).isNotNull();
+        assertThat(stats.getCodVsVnpay()).isNotNull();
+
         verify(orderRepository).count();
         verify(orderRepository).sumActualRevenue(PaymentStatus.PAID, OrderStatus.COMPLETED, OrderStatus.CANCELLED);
         verify(orderRepository).countByOrderStatus(OrderStatus.PENDING);
         verify(paymentRepository).countByPaymentMethod(PaymentMethod.COD);
         verify(paymentRepository).countByPaymentMethod(PaymentMethod.VNPAY);
+    }
+
+    @Test
+    @DisplayName("getTopSellingProducts: Trả về danh sách top sản phẩm bán chạy có rank và doanh thu")
+    void getTopSellingProducts_Success() {
+        BestSellerProjection proj = new BestSellerProjection() {
+            @Override public Long getProductId() { return 101L; }
+            @Override public String getProductName() { return "Áo Polo Nam"; }
+            @Override public String getDescription() { return "Áo chất lượng cao"; }
+            @Override public BigDecimal getPrice() { return BigDecimal.valueOf(350000); }
+            @Override public String getImageUrl() { return "https://example.com/polo.jpg"; }
+            @Override public Long getCategoryId() { return 1L; }
+            @Override public String getCategoryName() { return "Thời trang Nam"; }
+            @Override public Integer getStockQuantity() { return 45; }
+            @Override public Boolean getActive() { return true; }
+            @Override public Double getRatingAverage() { return 4.9; }
+            @Override public Integer getTotalReviews() { return 12; }
+            @Override public Long getTotalSold() { return 30L; }
+            @Override public BigDecimal getTotalRevenue() { return BigDecimal.valueOf(10500000); }
+            @Override public LocalDateTime getCreatedAt() { return LocalDateTime.now(); }
+            @Override public LocalDateTime getUpdatedAt() { return LocalDateTime.now(); }
+        };
+
+        when(orderItemRepository.findBestSellers(any(), any(), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(proj)));
+
+        List<ProductResponse> result = dashboardService.getTopSellingProducts(5);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getId()).isEqualTo(101L);
+        assertThat(result.get(0).getName()).isEqualTo("Áo Polo Nam");
+        assertThat(result.get(0).getTotalSold()).isEqualTo(30L);
+        assertThat(result.get(0).getTotalRevenue()).isEqualByComparingTo(BigDecimal.valueOf(10500000));
+        assertThat(result.get(0).getRank()).isEqualTo(1);
     }
 
     @Test

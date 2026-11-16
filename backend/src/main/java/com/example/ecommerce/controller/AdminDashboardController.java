@@ -63,5 +63,22 @@ public class AdminDashboardController {
         List<ProductResponse> lowStockProducts = dashboardService.getLowStockProducts(threshold);
         return ResponseEntity.ok(ApiResponse.success("Lấy danh sách sản phẩm có nguy cơ hết hàng thành công", lowStockProducts));
     }
+
+    /**
+     * Truy vấn riêng danh sách Top sản phẩm bán chạy nhất tháng.
+     * GET /api/v1/admin/dashboard/top-products
+     * GET /admin/dashboard/best-sellers
+     *
+     * @param limit Số lượng sản phẩm muốn lấy (mặc định: 5)
+     * @return ApiResponse chứa danh sách ProductResponse
+     */
+    @GetMapping({"/top-products", "/best-sellers"})
+    public ResponseEntity<ApiResponse<List<ProductResponse>>> getTopSellingProducts(
+            @RequestParam(name = "limit", required = false, defaultValue = "5") Integer limit
+    ) {
+        log.info("Admin truy vấn danh sách top sản phẩm bán chạy với limit = {}", limit);
+        List<ProductResponse> bestSellers = dashboardService.getTopSellingProducts(limit);
+        return ResponseEntity.ok(ApiResponse.success("Lấy danh sách top sản phẩm bán chạy thành công", bestSellers));
+    }
 }
 

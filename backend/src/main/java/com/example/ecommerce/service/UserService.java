@@ -294,6 +294,10 @@ public class UserService {
         if (request.getAddress() != null) {
             user.setAddress(request.getAddress());
         }
+        if (request.getAvatarUrl() != null) {
+            String newAvatar = request.getAvatarUrl().trim();
+            user.setAvatarUrl(StringUtils.hasText(newAvatar) ? newAvatar : null);
+        }
 
         user = userRepository.save(user);
         log.info("Cập nhật hồ sơ người dùng: {}", user.getEmail());
