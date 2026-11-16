@@ -131,7 +131,7 @@ export const OAuth2RedirectPage = () => {
             <Link
               to="/login"
               replace
-              className="inline-flex items-center justify-center gap-2 h-11 w-full rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+              className="inline-flex items-center justify-center gap-2 h-11 w-full rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] shadow-md cursor-pointer"
             >
               <ArrowLeft className="w-4 h-4" />
               <span>Quay lại trang Đăng nhập</span>

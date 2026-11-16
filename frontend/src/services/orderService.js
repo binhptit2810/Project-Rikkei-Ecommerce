@@ -70,7 +70,8 @@ export const orderService = {
    */
   downloadInvoicePdf: async (id, orderCode, isAdmin = false) => {
     const blob = await orderService.getInvoicePdf(id, isAdmin)
-    const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
+    const BlobConstructor = window.Blob || Blob
+    const url = window.URL.createObjectURL(new BlobConstructor([blob], { type: 'application/pdf' }))
     const a = document.createElement('a')
     a.href = url
     a.download = `Hoa-don-${orderCode || id}.pdf`

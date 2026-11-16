@@ -621,7 +621,7 @@ export const OrderDetailPage = () => {
                   type="button"
                   onClick={handleDownloadInvoice}
                   disabled={downloadingPdf}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-all cursor-pointer shadow-2xs hover:border-blue-300 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] cursor-pointer shadow-2xs hover:border-blue-300 hover:shadow-xs disabled:opacity-50 disabled:pointer-events-none"
                   title="Xuất hóa đơn PDF chuyên nghiệp"
                 >
                   {downloadingPdf ? (
@@ -1166,7 +1166,7 @@ export const OrderDetailPage = () => {
                       type="button"
                       onClick={handleDownloadInvoice}
                       disabled={downloadingPdf}
-                      className="w-full py-2.5 px-4 rounded-full text-xs font-bold text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs disabled:opacity-50"
+                      className="w-full py-2.5 px-4 rounded-full text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 hover:border-slate-300 transition-all duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer shadow-2xs hover:shadow-xs disabled:opacity-50 disabled:pointer-events-none"
                     >
                       {downloadingPdf ? (
                         <>

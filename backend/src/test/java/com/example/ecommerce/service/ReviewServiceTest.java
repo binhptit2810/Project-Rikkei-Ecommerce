@@ -606,4 +606,35 @@ class ReviewServiceTest {
         assertThat(response.isAlreadyReviewed()).isFalse();
         assertThat(response.getReason()).contains("Vui lòng đăng nhập");
     }
+
+    @Test
+    @DisplayName("Test 19: getAllReviewsForAdmin 4 tham số có sắp xếp và không sắp xếp")
+    void getAllReviewsForAdmin_fourParams_success() {
+        Review r1 = Review.builder()
+                .id(1L)
+                .product(testProduct)
+                .user(testUser)
+                .rating(5)
+                .comment("Review 1")
+                .isVisible(true)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        Page<Review> page = new PageImpl<>(List.of(r1));
+        when(reviewRepository.findAllForAdmin(eq(10L), eq(5), eq(false), any(Pageable.class))).thenReturn(page);
+
+        // Trường hợp 1: Pageable unsorted (sẽ tự động thêm sort DESC theo createdAt)
+        Pageable unsorted = PageRequest.of(0, 10);
+        PageResponse<ReviewResponse> response1 = reviewService.getAllReviewsForAdmin(unsorted, 10L, 5, false);
+        assertThat(response1).isNotNull();
+        assertThat(response1.getContent()).hasSize(1);
+        assertThat(response1.getContent().get(0).getId()).isEqualTo(1L);
+
+        // Trường hợp 2: Pageable đã có sort
+        Pageable sorted = PageRequest.of(0, 10, org.springframework.data.domain.Sort.by("rating").ascending());
+        when(reviewRepository.findAllForAdmin(eq(10L), eq(5), eq(false), eq(sorted))).thenReturn(page);
+        PageResponse<ReviewResponse> response2 = reviewService.getAllReviewsForAdmin(sorted, 10L, 5, false);
+        assertThat(response2).isNotNull();
+        assertThat(response2.getContent()).hasSize(1);
+    }
 }
