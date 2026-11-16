@@ -559,6 +559,11 @@ class ProductServiceTest {
             p.setId(50L);
             return p;
         });
+        when(productVariantRepository.save(any(com.example.ecommerce.entity.ProductVariant.class))).thenAnswer(inv -> {
+            com.example.ecommerce.entity.ProductVariant pv = inv.getArgument(0);
+            pv.setId(101L);
+            return pv;
+        });
 
         com.example.ecommerce.entity.ProductVariant vSaved1 = com.example.ecommerce.entity.ProductVariant.builder()
                 .id(101L).size("M").stockQuantity(10).sku("P-M").product(testProduct).build();

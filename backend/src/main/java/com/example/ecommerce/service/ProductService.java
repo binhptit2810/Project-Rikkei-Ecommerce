@@ -519,8 +519,8 @@ public class ProductService {
                 existing.setSize(size);
                 existing.setStockQuantity(stock);
                 existing.setSku(sku);
-                productVariantRepository.save(existing);
-                updatedVariantIds.add(existing.getId());
+                ProductVariant saved = productVariantRepository.save(existing);
+                updatedVariantIds.add(saved != null && saved.getId() != null ? saved.getId() : existing.getId());
             } else {
                 Optional<ProductVariant> opt = productVariantRepository.findByProductIdAndSize(product.getId(), size);
                 if (opt.isPresent()) {
@@ -530,8 +530,8 @@ public class ProductService {
                     }
                     existing.setStockQuantity(stock);
                     existing.setSku(sku);
-                    productVariantRepository.save(existing);
-                    updatedVariantIds.add(existing.getId());
+                    ProductVariant saved = productVariantRepository.save(existing);
+                    updatedVariantIds.add(saved != null && saved.getId() != null ? saved.getId() : existing.getId());
                 } else {
                     if (productVariantRepository.existsBySku(sku)) {
                         throw new BusinessException("Mã SKU '" + sku + "' đã tồn tại trong hệ thống");
@@ -543,7 +543,9 @@ public class ProductService {
                             .sku(sku)
                             .build();
                     ProductVariant saved = productVariantRepository.save(newVariant);
-                    updatedVariantIds.add(saved.getId());
+                    if (saved != null && saved.getId() != null) {
+                        updatedVariantIds.add(saved.getId());
+                    }
                 }
             }
         }
@@ -561,9 +563,11 @@ public class ProductService {
 
         // 4. Đồng bộ tổng tồn kho sản phẩm bằng tổng tồn kho của các biến thể
         List<ProductVariant> allCurrent = productVariantRepository.findByProductId(product.getId());
-        int totalStock = allCurrent.stream().mapToInt(ProductVariant::getStockQuantity).sum();
-        product.setStockQuantity(totalStock);
-        productRepository.save(product);
+        if (allCurrent != null) {
+            int totalStock = allCurrent.stream().mapToInt(ProductVariant::getStockQuantity).sum();
+            product.setStockQuantity(totalStock);
+            productRepository.save(product);
+        }
     }
 
     /**
