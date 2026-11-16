@@ -4,6 +4,8 @@ import com.example.ecommerce.config.VNPayConfig;
 import com.example.ecommerce.dto.request.CreateOrderRequest;
 import com.example.ecommerce.dto.request.CreateVNPayPaymentRequest;
 import com.example.ecommerce.dto.request.OrderItemRequest;
+import com.example.ecommerce.dto.request.ProcessPaymentRequest;
+import com.example.ecommerce.dto.response.PaymentResponse;
 import com.example.ecommerce.dto.response.VNPayIpnResponse;
 import com.example.ecommerce.dto.response.VNPayPaymentResponse;
 import com.example.ecommerce.entity.*;
@@ -105,6 +107,7 @@ class SecurityMoneyTamperingTest {
                 emailService,
                 paymentTransactionRepository
         );
+        paymentServiceImpl.setActiveProfile("test");
 
         testUser = User.builder()
                 .id(1L)
@@ -413,5 +416,133 @@ class SecurityMoneyTamperingTest {
 
         // Không cập nhật lại đơn hàng
         verify(orderRepository, never()).save(any());
+    }
+
+    // =========================================================================
+    // SEC-13-09: Chống gian lận thanh toán mô phỏng (SIMULATED) trên môi trường triển khai
+    // =========================================================================
+    @Test
+    @DisplayName("SEC-13-09: Từ chối thanh toán mô phỏng SIMULATED khi chạy profile prod, docker, demo, staging")
+    void sec13_09_rejectSimulatedPaymentOnProductionProfiles() {
+        Order pendingOrder = Order.builder()
+                .id(999L)
+                .orderCode("ORD-SEC-09")
+                .user(testUser)
+                .totalAmount(new BigDecimal("2000000"))
+                .orderStatus(OrderStatus.PENDING)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .build();
+
+        when(orderRepository.findById(999L)).thenReturn(Optional.of(pendingOrder));
+        when(userRepository.findByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
+
+        ProcessPaymentRequest simulatedRequest = ProcessPaymentRequest.builder()
+                .paymentMethod(PaymentMethod.SIMULATED)
+                .simulateSuccess(true)
+                .build();
+
+        // 1. Kiểm tra trên profile prod
+        paymentServiceImpl.setActiveProfile("prod");
+        assertThatThrownBy(() -> paymentServiceImpl.processPayment(999L, simulatedRequest, testUser.getEmail()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Phương thức thanh toán mô phỏng (SIMULATED) chỉ được phép sử dụng trong môi trường thử nghiệm");
+
+        // 2. Kiểm tra trên profile docker
+        paymentServiceImpl.setActiveProfile("docker");
+        assertThatThrownBy(() -> paymentServiceImpl.processPayment(999L, simulatedRequest, testUser.getEmail()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Phương thức thanh toán mô phỏng (SIMULATED) chỉ được phép sử dụng trong môi trường thử nghiệm");
+
+        // 3. Kiểm tra trên profile demo
+        paymentServiceImpl.setActiveProfile("demo");
+        assertThatThrownBy(() -> paymentServiceImpl.processPayment(999L, simulatedRequest, testUser.getEmail()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Phương thức thanh toán mô phỏng (SIMULATED) chỉ được phép sử dụng trong môi trường thử nghiệm");
+
+        // 4. Kiểm tra fail-closed khi profile rỗng hoặc null
+        paymentServiceImpl.setActiveProfile(null);
+        assertThatThrownBy(() -> paymentServiceImpl.processPayment(999L, simulatedRequest, testUser.getEmail()))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("Phương thức thanh toán mô phỏng (SIMULATED) chỉ được phép sử dụng trong môi trường thử nghiệm");
+
+        // Xác nhận không bao giờ lưu đơn hàng với trạng thái PAID khi bị từ chối
+        verify(paymentRepository, never()).save(any());
+        assertThat(pendingOrder.getPaymentStatus()).isEqualTo(PaymentStatus.UNPAID);
+    }
+
+    // =========================================================================
+    // SEC-13-10: Cho phép thanh toán mô phỏng (SIMULATED) trên dev và test
+    // =========================================================================
+    @Test
+    @DisplayName("SEC-13-10: Cho phép thanh toán mô phỏng SIMULATED khi chạy profile dev hoặc test")
+    void sec13_10_allowSimulatedPaymentOnDevAndTestProfiles() {
+        Order pendingOrder = Order.builder()
+                .id(888L)
+                .orderCode("ORD-SEC-10")
+                .user(testUser)
+                .totalAmount(new BigDecimal("1000000"))
+                .orderStatus(OrderStatus.PENDING)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .build();
+
+        when(orderRepository.findById(888L)).thenReturn(Optional.of(pendingOrder));
+        when(userRepository.findByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
+        when(paymentRepository.findByOrderId(888L)).thenReturn(Optional.empty());
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProcessPaymentRequest simulatedRequest = ProcessPaymentRequest.builder()
+                .paymentMethod(PaymentMethod.SIMULATED)
+                .simulateSuccess(true)
+                .build();
+
+        // 1. Chạy trên dev thành công
+        paymentServiceImpl.setActiveProfile("dev");
+        PaymentResponse devResponse = paymentServiceImpl.processPayment(888L, simulatedRequest, testUser.getEmail());
+        assertThat(devResponse).isNotNull();
+        assertThat(devResponse.getStatus()).isEqualTo(PaymentStatus.PAID);
+
+        // Reset trạng thái để test tiếp
+        pendingOrder.setPaymentStatus(PaymentStatus.UNPAID);
+
+        // 2. Chạy trên test thành công
+        paymentServiceImpl.setActiveProfile("test");
+        PaymentResponse testResponse = paymentServiceImpl.processPayment(888L, simulatedRequest, testUser.getEmail());
+        assertThat(testResponse).isNotNull();
+        assertThat(testResponse.getStatus()).isEqualTo(PaymentStatus.PAID);
+    }
+
+    // =========================================================================
+    // SEC-13-11: Thanh toán COD trên Production không bị ảnh hưởng bởi chính sách khóa SIMULATED
+    // =========================================================================
+    @Test
+    @DisplayName("SEC-13-11: Thanh toán COD hoạt động bình thường trên môi trường Production")
+    void sec13_11_codPaymentAllowedOnProduction() {
+        Order pendingOrder = Order.builder()
+                .id(777L)
+                .orderCode("ORD-SEC-11")
+                .user(testUser)
+                .totalAmount(new BigDecimal("500000"))
+                .orderStatus(OrderStatus.PENDING)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .build();
+
+        when(orderRepository.findById(777L)).thenReturn(Optional.of(pendingOrder));
+        when(userRepository.findByEmail(testUser.getEmail())).thenReturn(Optional.of(testUser));
+        when(paymentRepository.findByOrderId(777L)).thenReturn(Optional.empty());
+        when(paymentRepository.save(any(Payment.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProcessPaymentRequest codRequest = ProcessPaymentRequest.builder()
+                .paymentMethod(PaymentMethod.COD)
+                .transactionNote("Giao hàng tận nơi")
+                .build();
+
+        paymentServiceImpl.setActiveProfile("prod");
+        PaymentResponse codResponse = paymentServiceImpl.processPayment(777L, codRequest, testUser.getEmail());
+
+        assertThat(codResponse).isNotNull();
+        assertThat(codResponse.getPaymentMethod()).isEqualTo(PaymentMethod.COD);
+        assertThat(codResponse.getStatus()).isEqualTo(PaymentStatus.UNPAID);
     }
 }

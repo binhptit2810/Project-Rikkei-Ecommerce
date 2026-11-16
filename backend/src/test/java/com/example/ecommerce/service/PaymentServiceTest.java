@@ -73,6 +73,8 @@ class PaymentServiceTest {
 
     @BeforeEach
     void setUp() {
+        paymentService.setActiveProfile("test");
+
         customer = User.builder()
                 .id(1L)
                 .email("customer@example.com")

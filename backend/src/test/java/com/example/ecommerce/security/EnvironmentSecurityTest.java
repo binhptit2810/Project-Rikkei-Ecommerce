@@ -102,6 +102,20 @@ class EnvironmentSecurityTest {
             // ACT-02: Vẫn tham chiếu biến ${OTP_HMAC_SECRET}
             assertThat(dockerComposeContent).contains("OTP_HMAC_SECRET: ${OTP_HMAC_SECRET}");
         }
+
+        // Kiểm tra backend/Dockerfile không chứa hardcoded fallback HMAC key
+        Path dockerfilePath = Paths.get("..", "backend", "Dockerfile");
+        if (!Files.exists(dockerfilePath)) {
+            dockerfilePath = Paths.get("Dockerfile");
+            if (!Files.exists(dockerfilePath)) {
+                dockerfilePath = Paths.get("backend", "Dockerfile");
+            }
+        }
+        if (Files.exists(dockerfilePath)) {
+            String dockerfileContent = Files.readString(dockerfilePath);
+            assertThat(dockerfileContent).doesNotContain("ecommerce-docker-otp-hmac-sha256");
+            assertThat(dockerfileContent).doesNotContain("export OTP_HMAC_SECRET=");
+        }
     }
 
     // =========================================================================
@@ -143,6 +157,15 @@ class EnvironmentSecurityTest {
         // 2. VNPayConfig trên Dev không ném lỗi
         vnPayConfig.setActiveProfile("dev");
         vnPayConfig.validateVNPayConfig(); // Không ném exception
+
+        // 2.1. VNPayConfig trên Prod từ chối khi sử dụng credential Sandbox mặc định
+        VNPayConfig prodSandboxConfig = new VNPayConfig();
+        prodSandboxConfig.setActiveProfile("prod");
+        prodSandboxConfig.setTmnCode(VNPayConfig.DEFAULT_SANDBOX_TMN_CODE);
+        prodSandboxConfig.setHashSecret(VNPayConfig.DEFAULT_SANDBOX_HASH_SECRET);
+        assertThatThrownBy(prodSandboxConfig::validateVNPayConfig)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Môi trường Production không được phép sử dụng credential Sandbox mặc định");
 
         // 3. Kiểm tra AuthService trên Production (prod, docker, production) với các kịch bản (ACT-02)
         AuthService authService = new AuthService(
@@ -198,6 +221,35 @@ class EnvironmentSecurityTest {
         ReflectionTestUtils.setField(authService, "activeProfile", "dev");
         ReflectionTestUtils.setField(authService, "otpHmacSecret", "");
         authService.validateOtpHmacSecret(); // Không ném exception trên dev
+
+        // 5. Kiểm tra JwtUtils fail-fast trên Production
+        JwtUtils testJwtUtils = new JwtUtils();
+        ReflectionTestUtils.setField(testJwtUtils, "activeProfile", "prod");
+        ReflectionTestUtils.setField(testJwtUtils, "jwtSecret", null);
+        assertThatThrownBy(testJwtUtils::validateJwtSecret)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("CRITICAL SECURITY ERROR: Biến môi trường JWT_SECRET bắt buộc");
+
+        // 5.1. JwtUtils từ chối secret dưới 32 ký tự trên prod
+        ReflectionTestUtils.setField(testJwtUtils, "jwtSecret", "short-jwt-secret");
+        assertThatThrownBy(testJwtUtils::validateJwtSecret)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("CRITICAL SECURITY ERROR: Biến môi trường JWT_SECRET bắt buộc");
+
+        // 5.2. JwtUtils từ chối default dev secret trên prod
+        ReflectionTestUtils.setField(testJwtUtils, "jwtSecret", JwtUtils.DEFAULT_DEV_JWT_SECRET);
+        assertThatThrownBy(testJwtUtils::validateJwtSecret)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Không được phép sử dụng secret mặc định cho JWT_SECRET");
+
+        // 5.3. JwtUtils chấp nhận secret hợp lệ trên prod
+        ReflectionTestUtils.setField(testJwtUtils, "jwtSecret", "this-is-a-valid-production-jwt-secret-with-256-bits-length");
+        testJwtUtils.validateJwtSecret(); // Không ném exception
+
+        // 5.4. JwtUtils trên Dev không ném lỗi dù dùng fallback
+        ReflectionTestUtils.setField(testJwtUtils, "activeProfile", "dev");
+        ReflectionTestUtils.setField(testJwtUtils, "jwtSecret", JwtUtils.DEFAULT_DEV_JWT_SECRET);
+        testJwtUtils.validateJwtSecret(); // Không ném exception
     }
 }
 

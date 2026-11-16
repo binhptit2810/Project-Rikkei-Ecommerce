@@ -3,11 +3,13 @@ package com.example.ecommerce.security;
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -40,6 +42,34 @@ public class JwtUtils {
 
     @Value("${jwt.expiration}")
     private long jwtExpiration;
+
+    @Value("${spring.profiles.active:}")
+    private String activeProfile;
+
+    public static final String DEFAULT_DEV_JWT_SECRET = "ecommerce-platform-default-dev-secret-change-this-in-production-2024";
+
+    @PostConstruct
+    public void validateJwtSecret() {
+        boolean isProduction = activeProfile != null && (
+                "docker".equalsIgnoreCase(activeProfile)
+                        || "prod".equalsIgnoreCase(activeProfile)
+                        || "production".equalsIgnoreCase(activeProfile)
+        );
+
+        if (!StringUtils.hasText(jwtSecret) || jwtSecret.trim().length() < 32) {
+            if (isProduction) {
+                throw new IllegalStateException("CRITICAL SECURITY ERROR: Biến môi trường JWT_SECRET bắt buộc phải được cấu hình và có độ dài tối thiểu 32 ký tự trên môi trường Production.");
+            } else {
+                log.warn("CẢNH BÁO BẢO MẬT: jwt.secret chưa được cấu hình hoặc ngắn hơn 32 ký tự. Đang sử dụng fallback cho môi trường dev/test.");
+            }
+        } else if (isProduction && (jwtSecret.contains("default-dev-secret") || DEFAULT_DEV_JWT_SECRET.equals(jwtSecret.trim()))) {
+            if ("prod".equalsIgnoreCase(activeProfile) || "production".equalsIgnoreCase(activeProfile)) {
+                throw new IllegalStateException("CRITICAL SECURITY ERROR: Không được phép sử dụng secret mặc định cho JWT_SECRET trên môi trường Production.");
+            } else {
+                log.warn("CẢNH BÁO BẢO MẬT: jwt.secret đang sử dụng giá trị mặc định dev.");
+            }
+        }
+    }
 
     /** Tạo SecretKey từ chuỗi secret trong cấu hình. */
     private SecretKey getSigningKey() {

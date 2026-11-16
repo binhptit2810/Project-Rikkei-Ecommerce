@@ -17,7 +17,10 @@ import com.example.ecommerce.util.VNPayUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -52,6 +55,85 @@ public class PaymentService {
     private final VNPayConfig vnPayConfig;
     private final EmailService emailService;
     private final PaymentTransactionRepository paymentTransactionRepository;
+
+    @Autowired(required = false)
+    private Environment environment;
+
+    @Value("${spring.profiles.active:}")
+    private String activeProfile;
+
+    private boolean activeProfileExplicitlySet = false;
+
+    public void setActiveProfile(String activeProfile) {
+        this.activeProfile = activeProfile;
+        this.activeProfileExplicitlySet = true;
+    }
+
+    public boolean isSimulatedPaymentAllowed() {
+        if (activeProfileExplicitlySet) {
+            return checkProfileAllowed(this.activeProfile);
+        }
+
+        if (StringUtils.hasText(activeProfile)) {
+            return checkProfileAllowed(this.activeProfile);
+        }
+
+        if (environment != null && environment.getActiveProfiles().length > 0) {
+            for (String p : environment.getActiveProfiles()) {
+                if (isBlockedProfile(p)) {
+                    return false;
+                }
+            }
+            for (String p : environment.getActiveProfiles()) {
+                if (isAllowedProfile(p)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        String sysProfile = System.getProperty("spring.profiles.active");
+        if (StringUtils.hasText(sysProfile)) {
+            return checkProfileAllowed(sysProfile);
+        }
+
+        return false;
+    }
+
+    private boolean checkProfileAllowed(String profileStr) {
+        if (!StringUtils.hasText(profileStr)) {
+            return false;
+        }
+        String[] profiles = profileStr.split(",");
+        for (String p : profiles) {
+            if (isBlockedProfile(p)) {
+                return false;
+            }
+        }
+        for (String p : profiles) {
+            if (isAllowedProfile(p)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isBlockedProfile(String profile) {
+        if (!StringUtils.hasText(profile)) {
+            return false;
+        }
+        String clean = profile.trim().toLowerCase();
+        return "docker".equals(clean) || "prod".equals(clean) || "production".equals(clean)
+                || "staging".equals(clean) || "demo".equals(clean);
+    }
+
+    private boolean isAllowedProfile(String profile) {
+        if (!StringUtils.hasText(profile)) {
+            return false;
+        }
+        String clean = profile.trim().toLowerCase();
+        return "dev".equals(clean) || "development".equals(clean) || "test".equals(clean);
+    }
 
     public PaymentService(PaymentRepository paymentRepository, OrderRepository orderRepository, UserRepository userRepository) {
         this(paymentRepository, orderRepository, userRepository, new VNPayConfig(), null, null);
@@ -784,6 +866,13 @@ public class PaymentService {
         if (method == null) {
             method = PaymentMethod.SIMULATED;
         }
+
+        // Chặn gian lận thanh toán mô phỏng (SIMULATED Payment) ngoài môi trường dev/test [TSK-D16-CCT]
+        if (method == PaymentMethod.SIMULATED && !isSimulatedPaymentAllowed()) {
+            log.warn("Từ chối thanh toán mô phỏng (SIMULATED) trên môi trường không được phép: activeProfile={}", activeProfile);
+            throw new BusinessException("Phương thức thanh toán mô phỏng (SIMULATED) chỉ được phép sử dụng trong môi trường thử nghiệm (dev/test). Vui lòng chọn VNPay hoặc COD.");
+        }
+
         payment.setPaymentMethod(method);
         payment.setAmount(order.getTotalAmount() != null ? order.getTotalAmount().setScale(2, RoundingMode.HALF_UP) : null);
 

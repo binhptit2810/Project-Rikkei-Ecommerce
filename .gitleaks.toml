@@ -1,0 +1,18 @@
+title = "Gitleaks Configuration for Rikkei Ecommerce"
+
+[allowlist]
+description = "Global allowlist for mock/placeholder secrets and sandbox test credentials"
+regexes = [
+    '''mock-gemini-key-placeholder''',
+    '''test-secret-key-[a-zA-Z0-9\-_]+''',
+    '''2QXUI4J4''',
+    '''RAIQUIBGCARJHNLKZCPGUCUMRHQKGZDF''',
+    '''noreply@rikkei-shop\.me''',
+    '''CONG TY TNHH E-COMMERCE RIKKEI'''
+]
+paths = [
+    '''backend/src/test/.*''',
+    '''\.env\.example''',
+    '''docs/.*'''
+]
+
