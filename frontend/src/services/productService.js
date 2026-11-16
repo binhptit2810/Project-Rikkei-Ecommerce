@@ -32,6 +32,16 @@ export const productService = {
   },
 
   /**
+   * Lấy danh sách các biến thể kích cỡ (ProductVariant Size) theo ID sản phẩm.
+   * @param {number|string} id - ID sản phẩm
+   * @returns {Promise<Object>} ApiResponse<List<ProductVariantResponse>>
+   */
+  async getProductVariants(id) {
+    const response = await apiClient.get(`/products/${id}/variants`)
+    return response.data
+  },
+
+  /**
    * Lấy sản phẩm ưu đãi trong ngày (Deal of the Day) từ MySQL DB kèm thông tin khuyến mãi.
    * @returns {Promise<Object>} ApiResponse<DealOfTheDayResponse>
    */
@@ -88,6 +98,60 @@ export const productService = {
    */
   async deleteProduct(id) {
     const response = await apiClient.delete(`/admin/products/${id}`)
+    return response.data
+  },
+
+  /**
+   * Lấy chi tiết sản phẩm cho Admin (bao gồm cả sản phẩm inactive và đầy đủ biến thể).
+   * @param {number|string} id - ID sản phẩm
+   * @returns {Promise<Object>} ApiResponse<ProductResponse>
+   */
+  async getAdminProductById(id) {
+    const response = await apiClient.get(`/admin/products/${id}`)
+    return response.data
+  },
+
+  /**
+   * Lấy danh sách biến thể kích cỡ dành cho Admin.
+   * @param {number|string} id - ID sản phẩm
+   * @returns {Promise<Object>} ApiResponse<List<ProductVariantResponse>>
+   */
+  async getAdminProductVariants(id) {
+    const response = await apiClient.get(`/admin/products/${id}/variants`)
+    return response.data
+  },
+
+  /**
+   * Thêm mới kích cỡ cho sản phẩm (Admin).
+   * @param {number|string} id - ID sản phẩm
+   * @param {Object} variantData - { size, stockQuantity, sku }
+   * @returns {Promise<Object>} ApiResponse<ProductVariantResponse>
+   */
+  async addAdminProductVariant(id, variantData) {
+    const response = await apiClient.post(`/admin/products/${id}/variants`, variantData)
+    return response.data
+  },
+
+  /**
+   * Cập nhật thông tin/tồn kho biến thể kích cỡ (Admin).
+   * @param {number|string} id - ID sản phẩm
+   * @param {number|string} variantId - ID biến thể
+   * @param {Object} variantData - { size, stockQuantity, sku }
+   * @returns {Promise<Object>} ApiResponse<ProductVariantResponse>
+   */
+  async updateAdminProductVariant(id, variantId, variantData) {
+    const response = await apiClient.put(`/admin/products/${id}/variants/${variantId}`, variantData)
+    return response.data
+  },
+
+  /**
+   * Xóa biến thể kích cỡ (Admin - chặn nếu đã có đơn hàng).
+   * @param {number|string} id - ID sản phẩm
+   * @param {number|string} variantId - ID biến thể
+   * @returns {Promise<Object>} ApiResponse
+   */
+  async deleteAdminProductVariant(id, variantId) {
+    const response = await apiClient.delete(`/admin/products/${id}/variants/${variantId}`)
     return response.data
   },
 }

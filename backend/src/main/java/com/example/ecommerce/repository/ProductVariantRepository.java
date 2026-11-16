@@ -28,6 +28,10 @@ public interface ProductVariantRepository extends JpaRepository<ProductVariant, 
 
     boolean existsBySku(String sku);
 
+    boolean existsBySkuAndIdNot(String sku, Long id);
+
+    boolean existsByProductIdAndSizeAndIdNot(Long productId, String size, Long id);
+
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("SELECT pv FROM ProductVariant pv WHERE pv.product.id = :productId AND pv.size = :size")
     Optional<ProductVariant> findByProductIdAndSizeForUpdate(@Param("productId") Long productId, @Param("size") String size);

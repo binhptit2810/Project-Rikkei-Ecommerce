@@ -18,6 +18,9 @@ public class OrderItemRequest {
     @NotNull(message = "ID sản phẩm không được để trống")
     private Long productId;
 
+    /** ID của biến thể kích cỡ (ProductVariant ID) nếu có. */
+    private Long variantId;
+
     /** Kích cỡ sản phẩm được chọn [TSK-D14-VDHH]. */
     private String selectedSize;
 
@@ -28,7 +31,15 @@ public class OrderItemRequest {
 
     public OrderItemRequest(Long productId, Integer quantity) {
         this.productId = productId;
+        this.variantId = null;
         this.selectedSize = null;
+        this.quantity = quantity;
+    }
+
+    public OrderItemRequest(Long productId, String selectedSize, Integer quantity) {
+        this.productId = productId;
+        this.variantId = null;
+        this.selectedSize = selectedSize;
         this.quantity = quantity;
     }
 }

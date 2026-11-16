@@ -37,6 +37,10 @@ public class OrderItem {
     @Column(name = "selected_size", length = 50)
     private String selectedSize;
 
+    /** ID của biến thể kích cỡ (ProductVariant ID) nếu có. */
+    @Column(name = "variant_id")
+    private Long variantId;
+
     @Column(name = "unit_price", nullable = false, precision = 15, scale = 2)
     private BigDecimal unitPrice;
 

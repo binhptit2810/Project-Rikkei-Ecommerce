@@ -261,5 +261,93 @@ class AdminProductControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("POST /api/v1/admin/products/{id}/variants: Admin thêm kích cỡ mới thành công")
+    void addVariant_asAdmin_returns201() throws Exception {
+        com.example.ecommerce.dto.request.ProductVariantRequest req = com.example.ecommerce.dto.request.ProductVariantRequest.builder()
+                .size("XXL")
+                .stockQuantity(25)
+                .sku("PROD-10-XXL")
+                .build();
+
+        com.example.ecommerce.dto.response.ProductVariantResponse res = com.example.ecommerce.dto.response.ProductVariantResponse.builder()
+                .id(201L)
+                .size("XXL")
+                .stockQuantity(25)
+                .sku("PROD-10-XXL")
+                .build();
+
+        when(productService.addVariantToProduct(eq(10L), any(com.example.ecommerce.dto.request.ProductVariantRequest.class)))
+                .thenReturn(res);
+
+        mockMvc.perform(post("/api/v1/admin/products/10/variants")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.size").value("XXL"))
+                .andExpect(jsonPath("$.data.stockQuantity").value(25));
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("GET /api/v1/admin/products/{id}/variants: Lấy danh sách kích cỡ của sản phẩm")
+    void getVariants_asAdmin_returns200() throws Exception {
+        com.example.ecommerce.dto.response.ProductVariantResponse res = com.example.ecommerce.dto.response.ProductVariantResponse.builder()
+                .id(1L)
+                .size("M")
+                .stockQuantity(15)
+                .sku("PROD-10-M")
+                .build();
+        when(productService.getProductVariants(10L)).thenReturn(List.of(res));
+
+        mockMvc.perform(get("/api/v1/admin/products/10/variants"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data[0].size").value("M"));
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("PUT /api/v1/admin/products/{id}/variants/{variantId}: Cập nhật kích cỡ thành công")
+    void updateVariant_asAdmin_returns200() throws Exception {
+        com.example.ecommerce.dto.request.ProductVariantRequest req = com.example.ecommerce.dto.request.ProductVariantRequest.builder()
+                .size("XL")
+                .stockQuantity(30)
+                .sku("PROD-10-XL")
+                .build();
+
+        com.example.ecommerce.dto.response.ProductVariantResponse res = com.example.ecommerce.dto.response.ProductVariantResponse.builder()
+                .id(1L)
+                .size("XL")
+                .stockQuantity(30)
+                .sku("PROD-10-XL")
+                .build();
+
+        when(productService.updateProductVariant(eq(10L), eq(1L), any(com.example.ecommerce.dto.request.ProductVariantRequest.class)))
+                .thenReturn(res);
+
+        mockMvc.perform(put("/api/v1/admin/products/10/variants/1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.size").value("XL"))
+                .andExpect(jsonPath("$.data.stockQuantity").value(30));
+    }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("DELETE /api/v1/admin/products/{id}/variants/{variantId}: Xóa kích cỡ thành công")
+    void deleteVariant_asAdmin_returns200() throws Exception {
+        doNothing().when(productService).deleteProductVariant(10L, 1L);
+
+        mockMvc.perform(delete("/api/v1/admin/products/10/variants/1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.message").value("Xóa kích cỡ thành công"));
+    }
 }
 

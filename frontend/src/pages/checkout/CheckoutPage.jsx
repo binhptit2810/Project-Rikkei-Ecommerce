@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import {
   Banknote,
   CreditCard,
@@ -25,8 +25,14 @@ import VoucherPickerModal from '../../components/checkout/VoucherPickerModal'
 
 export const CheckoutPage = () => {
   const navigate = useNavigate()
+  const location = useLocation()
   const { items, getTotalPrice, getTotalCount, clearCart } = useCartStore()
   const { user, isAuthenticated } = useAuthStore()
+
+  // Phân biệt luồng Mua ngay (Buy Now) và luồng Giỏ hàng (Cart Checkout)
+  const buyNowItem = location.state?.buyNowItem || null
+  const isBuyNow = Boolean(buyNowItem)
+  const checkoutItems = isBuyNow ? [buyNowItem] : items
 
   const [formData, setFormData] = useState({
     recipientName: '',
@@ -64,10 +70,14 @@ export const CheckoutPage = () => {
       navigate('/admin/dashboard', { replace: true })
       return
     }
-    if (!isSubmitting && items.length === 0) {
-      navigate('/cart')
+    if (!isSubmitting) {
+      if (isBuyNow && !buyNowItem) {
+        navigate('/')
+      } else if (!isBuyNow && items.length === 0) {
+        navigate('/cart')
+      }
     }
-  }, [user, items, isSubmitting, navigate])
+  }, [user, items, isSubmitting, isBuyNow, buyNowItem, navigate])
 
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0)
@@ -103,10 +113,14 @@ export const CheckoutPage = () => {
       return
     }
 
-    // Kiểm tra giỏ hàng
-    if (!items || items.length === 0) {
-      setErrorMessage('Giỏ hàng của bạn đang trống. Vui lòng thêm sản phẩm trước khi thanh toán.')
-      navigate('/cart')
+    // Kiểm tra danh sách mặt hàng
+    if (!checkoutItems || checkoutItems.length === 0) {
+      setErrorMessage(
+        isBuyNow
+          ? 'Không tìm thấy thông tin sản phẩm mua ngay. Vui lòng chọn lại sản phẩm.'
+          : 'Giỏ hàng của bạn đang trống. Vui lòng thêm sản phẩm trước khi thanh toán.'
+      )
+      navigate(isBuyNow ? '/' : '/cart')
       return
     }
 
@@ -148,7 +162,7 @@ export const CheckoutPage = () => {
     }
 
     // Validate số lượng từng sản phẩm
-    for (const item of items) {
+    for (const item of checkoutItems) {
       if (!item.quantity || item.quantity < 1) {
         setErrorMessage(`Số lượng đặt của sản phẩm "${item.name}" không hợp lệ (phải >= 1)`)
         return
@@ -169,8 +183,9 @@ export const CheckoutPage = () => {
       paymentMethod: formData.paymentMethod,
       note: formData.note.trim() || null,
       couponCode: appliedCoupon?.code || null,
-      items: items.map((item) => ({
+      items: checkoutItems.map((item) => ({
         productId: Number(item.id),
+        variantId: item.variantId ? Number(item.variantId) : null,
         selectedSize: item.selectedSize ? String(item.selectedSize).trim() : null,
         quantity: Number(item.quantity),
       })),
@@ -192,7 +207,7 @@ export const CheckoutPage = () => {
       // Kích hoạt ô thông báo bên phải: Đặt hàng thành công (tự động biến mất sau 2s)
       useToastStore.getState().showToast({
         type: 'success',
-        title: 'Đặt hàng thành công!',
+        title: isBuyNow ? 'Mua ngay thành công!' : 'Đặt hàng thành công!',
         message: `Mã đơn hàng: #${createdOrder.orderCode || createdOrder.id} • Cảm ơn bạn đã mua hàng!`,
         link: { to: `/orders/${createdOrder.id}`, label: 'Xem đơn hàng →' },
         duration: 2000,
@@ -212,8 +227,11 @@ export const CheckoutPage = () => {
           console.warn('Lỗi khi gọi API tạo URL VNPay:', vnpErr)
         }
 
-        // Xóa giỏ hàng và điều hướng sang trang Chi tiết đơn hàng để quét mã QR thanh toán
-        clearCart()
+        // Chỉ xóa giỏ hàng khi đặt hàng từ giỏ; KHÔNG xóa giỏ khi Mua ngay (Buy Now)
+        if (!isBuyNow) {
+          clearCart()
+        }
+
         navigate(`/orders/${createdOrder.id}`, {
           state: {
             orderSuccess: true,
@@ -227,8 +245,10 @@ export const CheckoutPage = () => {
         })
         return
       } else {
-        // Luồng COD: Đặt hàng thành công -> Xóa sạch giỏ hàng
-        clearCart()
+        // Luồng COD: Chỉ xóa giỏ hàng khi đặt hàng từ giỏ; KHÔNG xóa giỏ khi Mua ngay (Buy Now)
+        if (!isBuyNow) {
+          clearCart()
+        }
 
         // Chuyển hướng sang trang chi tiết đơn hàng kèm state chúc mừng và mã đơn ORD-...
         navigate(`/orders/${createdOrder.id}`, {
@@ -280,12 +300,16 @@ export const CheckoutPage = () => {
     }
   }
 
-  const totalPrice = getTotalPrice()
-  const totalCount = getTotalCount()
+  const totalPrice = isBuyNow
+    ? (Number(buyNowItem?.price) || 0) * (Number(buyNowItem?.quantity) || 1)
+    : getTotalPrice()
+  const totalCount = isBuyNow
+    ? (Number(buyNowItem?.quantity) || 1)
+    : getTotalCount()
   const discountAmount = appliedCoupon?.discountAmount || 0
   const finalPrice = Math.max(0, totalPrice - discountAmount)
 
-  if (items.length === 0) {
+  if (checkoutItems.length === 0) {
     return null
   }
 
@@ -298,24 +322,32 @@ export const CheckoutPage = () => {
             Trang chủ
           </Link>
           <span>/</span>
-          <Link to="/cart" className="hover:text-blue-600 transition-colors">
-            Giỏ hàng
-          </Link>
+          {isBuyNow ? (
+            <Link to={`/products/${buyNowItem?.id || ''}`} className="hover:text-blue-600 transition-colors">
+              Chi tiết sản phẩm
+            </Link>
+          ) : (
+            <Link to="/cart" className="hover:text-blue-600 transition-colors">
+              Giỏ hàng
+            </Link>
+          )}
           <span>/</span>
-          <span className="font-bold text-slate-900">Thanh toán</span>
+          <span className="font-bold text-slate-900">{isBuyNow ? 'Mua ngay' : 'Thanh toán'}</span>
         </nav>
 
         {/* Header */}
         <div className="mb-8 pb-5 border-b border-slate-200">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200/80 text-blue-700 text-xs font-bold uppercase tracking-wider mb-2">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>SECURE CHECKOUT</span>
+            <span>{isBuyNow ? 'MUA NGAY (BUY NOW)' : 'SECURE CHECKOUT'}</span>
           </div>
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
-            Xác nhận thông tin & Đặt hàng
+            {isBuyNow ? 'Xác nhận Mua ngay sản phẩm' : 'Xác nhận thông tin & Đặt hàng'}
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            Kiểm tra thông tin giao nhận và chọn phương thức thanh toán trước khi xác nhận.
+            {isBuyNow
+              ? 'Thanh toán trực tiếp cho sản phẩm bạn vừa chọn mà không làm thay đổi các sản phẩm trong giỏ hàng.'
+              : 'Kiểm tra thông tin giao nhận và chọn phương thức thanh toán trước khi xác nhận.'}
           </p>
         </div>
 
@@ -641,7 +673,7 @@ export const CheckoutPage = () => {
 
                 {/* Danh sách sản phẩm mua */}
                 <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 pr-1">
-                  {items.map((item) => (
+                  {checkoutItems.map((item) => (
                     <div key={`${item.id}-${item.selectedSize || 'default'}`} className="py-3 flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-11 h-11 rounded-xl bg-slate-50 shrink-0 overflow-hidden border border-slate-200 p-1 flex items-center justify-center">
@@ -783,18 +815,18 @@ export const CheckoutPage = () => {
                 {/* Submit button: Vibrant Orange Pill */}
                 <button
                   type="submit"
-                  disabled={isSubmitting || items.length === 0}
+                  disabled={isSubmitting || checkoutItems.length === 0}
                   className="w-full py-3.5 px-6 bg-orange-500 hover:bg-orange-600 active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none text-white font-bold text-sm rounded-full shadow-md shadow-orange-500/25 transition-all cursor-pointer flex items-center justify-center gap-2"
                 >
                   {isSubmitting ? (
                     <>
                       <LoadingSpinner size="sm" className="text-white" />
-                      <span>Đang xử lý đặt hàng...</span>
+                      <span>{isBuyNow ? 'Đang xử lý mua ngay...' : 'Đang xử lý đặt hàng...'}</span>
                     </>
                   ) : (
                     <>
                       <Lock className="w-4 h-4" />
-                      <span>Xác nhận đặt hàng</span>
+                      <span>{isBuyNow ? 'Xác nhận Mua ngay' : 'Xác nhận đặt hàng'}</span>
                     </>
                   )}
                 </button>

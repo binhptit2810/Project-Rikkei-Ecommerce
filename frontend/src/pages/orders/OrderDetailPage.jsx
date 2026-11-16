@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import orderService from '../../services/orderService'
 import paymentService from '../../services/paymentService'
+import productService from '../../services/productService'
 import { useCartStore } from '../../store/useCartStore'
 import { useToastStore } from '../../store/useToastStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
@@ -382,27 +383,90 @@ export const OrderDetailPage = () => {
     }
   }
 
-  // Xử lý mua lại (thêm toàn bộ sản phẩm trong đơn vào giỏ hàng rồi chuyển sang /cart)
+  // Xử lý mua lại: Lấy chính xác số lượng từ đơn hàng cũ, kiểm tra tồn kho và kích cỡ thực tế từ CSDL
   const handleBuyAgain = async () => {
-    if (!order?.items || order.items.length === 0) return
+    if (!order?.items || order.items.length === 0) {
+      showToast('Đơn hàng không có sản phẩm nào để mua lại.', 'error')
+      return
+    }
+
     setReordering(true)
+    const successItems = []
+    const warningMessages = []
+    const errorMessages = []
+
     try {
       for (const item of order.items) {
-        await addToCart(
-          {
-            id: item.productId,
-            name: item.productName,
-            price: item.unitPrice,
-            imageUrl: item.imageUrl,
-          },
-          item.quantity || 1
-        )
+        if (!item.productId) continue
+        const oldQty = Math.max(1, Number(item.quantity) || 1)
+        const chosenSize = item.selectedSize ? String(item.selectedSize).trim() : null
+
+        try {
+          // Lấy thông tin sản phẩm mới nhất từ máy chủ để kiểm tra trạng thái và tồn kho thực tế
+          const res = await productService.getProductById(item.productId)
+          const liveProduct = res?.data || res
+
+          if (!liveProduct || liveProduct.active === false) {
+            errorMessages.push(`Sản phẩm "${item.productName}" đã ngừng kinh doanh.`)
+            continue
+          }
+
+          // Kiểm tra tồn kho khả dụng theo biến thể kích cỡ hoặc theo sản phẩm
+          let availableStock = 0
+          if (chosenSize && Array.isArray(liveProduct.variants) && liveProduct.variants.length > 0) {
+            const matchedVariant = liveProduct.variants.find((v) => v.size === chosenSize)
+            if (!matchedVariant || Number(matchedVariant.stockQuantity) <= 0) {
+              errorMessages.push(`Sản phẩm "${item.productName}" (Size ${chosenSize}) hiện đã hết hàng.`)
+              continue
+            }
+            availableStock = Number(matchedVariant.stockQuantity)
+          } else {
+            availableStock = Number(liveProduct.stockQuantity ?? 0)
+            if (availableStock <= 0) {
+              errorMessages.push(`Sản phẩm "${item.productName}" hiện đã hết hàng.`)
+              continue
+            }
+          }
+
+          // Điều chỉnh số lượng nếu tồn kho thực tế nhỏ hơn số lượng trong đơn hàng cũ
+          let finalQty = oldQty
+          if (oldQty > availableStock) {
+            finalQty = availableStock
+            warningMessages.push(
+              `"${item.productName}"${chosenSize ? ` (Size ${chosenSize})` : ''} chỉ còn ${availableStock} sản phẩm (đã điều chỉnh từ ${oldQty}).`
+            )
+          }
+
+          // Thêm vào giỏ hàng với thông tin sản phẩm và số lượng thực tế
+          const addRes = await addToCart(liveProduct, finalQty, chosenSize)
+          if (addRes?.success) {
+            successItems.push({ name: item.productName, quantity: finalQty, size: chosenSize })
+          } else {
+            errorMessages.push(addRes?.message || `Không thể thêm "${item.productName}" vào giỏ hàng.`)
+          }
+        } catch (itemErr) {
+          errorMessages.push(`Không thể kiểm tra tồn kho cho sản phẩm "${item.productName}".`)
+        }
       }
-      navigate('/cart')
+
+      if (warningMessages.length > 0) {
+        warningMessages.forEach((msg) => showToast(msg, 'warning'))
+      }
+      if (errorMessages.length > 0) {
+        errorMessages.forEach((msg) => showToast(msg, 'error'))
+      }
+
+      if (successItems.length > 0) {
+        showToast(
+          `Đã thêm ${successItems.length} sản phẩm từ đơn hàng vào giỏ hàng!`,
+          'success'
+        )
+        navigate('/cart')
+      } else if (errorMessages.length > 0) {
+        showToast('Không có sản phẩm nào trong đơn hàng còn khả dụng để mua lại.', 'error')
+      }
     } catch (err) {
-      const msg =
-        err.message || 'Không thể thêm sản phẩm vào giỏ hàng. Vui lòng thử lại.'
-      showToast(msg, 'error')
+      showToast(err.message || 'Không thể thêm sản phẩm vào giỏ hàng. Vui lòng thử lại.', 'error')
     } finally {
       setReordering(false)
     }

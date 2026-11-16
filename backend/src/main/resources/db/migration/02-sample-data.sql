@@ -96,6 +96,37 @@ INSERT IGNORE INTO inventory_transactions (id, product_id, change_quantity, stoc
 (14, 14, 15,  15, 'INITIAL_STOCK', 'Nhập kho ban đầu', '2026-10-01 08:00:00');
 
 -- =============================================================================
+-- 4.1 Biến thể sản phẩm theo kích cỡ (Bảng product_variants) [TSK-D14-VDHH]
+-- =============================================================================
+INSERT IGNORE INTO product_variants (id, product_id, size, stock_quantity, sku, created_at, updated_at) VALUES
+-- Áo thun nam basic Cotton (product_id = 1, tổng tồn 50)
+(1,  1, 'S',   10, 'PROD-1-S',   NOW(), NOW()),
+(2,  1, 'M',   15, 'PROD-1-M',   NOW(), NOW()),
+(3,  1, 'L',   15, 'PROD-1-L',   NOW(), NOW()),
+(4,  1, 'XL',  10, 'PROD-1-XL',  NOW(), NOW()),
+(5,  1, 'XXL',  0, 'PROD-1-XXL', NOW(), NOW()), -- Hết hàng phục vụ test UI disabled
+
+-- Quần jean nam slim fit (product_id = 2, tổng tồn 30)
+(6,  2, '29',   5, 'PROD-2-29',  NOW(), NOW()),
+(7,  2, '30',  10, 'PROD-2-30',  NOW(), NOW()),
+(8,  2, '31',  10, 'PROD-2-31',  NOW(), NOW()),
+(9,  2, '32',   5, 'PROD-2-32',  NOW(), NOW()),
+(10, 2, '33',   0, 'PROD-2-33',  NOW(), NOW()), -- Hết hàng
+
+-- Áo khoác hoodie nữ (product_id = 3, tổng tồn 25)
+(11, 3, 'S',    5, 'PROD-3-S',   NOW(), NOW()),
+(12, 3, 'M',   10, 'PROD-3-M',   NOW(), NOW()),
+(13, 3, 'L',   10, 'PROD-3-L',   NOW(), NOW()),
+(14, 3, 'XL',   0, 'PROD-3-XL',  NOW(), NOW()), -- Hết hàng
+
+-- Giày thể thao nam (product_id = 4, tổng tồn 20)
+(15, 4, '39',   4, 'PROD-4-39',  NOW(), NOW()),
+(16, 4, '40',   6, 'PROD-4-40',  NOW(), NOW()),
+(17, 4, '41',   6, 'PROD-4-41',  NOW(), NOW()),
+(18, 4, '42',   4, 'PROD-4-42',  NOW(), NOW()),
+(19, 4, '43',   0, 'PROD-4-43',  NOW(), NOW()); -- Hết hàng
+
+-- =============================================================================
 -- 5. Mã giảm giá phong phú (Bảng coupons) [TSK-D13-DDM]
 -- Đáp ứng đầy đủ các loại voucher thực tế:
 --   - WELCOME10 : Giảm 10%, tối đa 50k, đơn tối thiểu 200k

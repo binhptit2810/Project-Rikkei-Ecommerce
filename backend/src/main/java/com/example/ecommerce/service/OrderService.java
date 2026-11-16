@@ -170,6 +170,7 @@ public class OrderService {
                 throw new BusinessException(reason);
             }
 
+            Long matchedVariantId = null;
             // Kiểm tra ràng buộc chọn kích cỡ nếu sản phẩm có biến thể kích cỡ [TSK-D14-VDHH]
             if (product.getVariants() != null && !product.getVariants().isEmpty()) {
                 if (selectedSize == null || selectedSize.isBlank()) {
@@ -186,6 +187,8 @@ public class OrderService {
                             log.warn("userId={} | action=CREATE_ORDER | result=FAILURE | reason={}", userId, reason);
                             return new BusinessException(reason);
                         });
+
+                matchedVariantId = matchedVariant.getId();
 
                 if (matchedVariant.getStockQuantity() == null || matchedVariant.getStockQuantity() <= 0) {
                     String reason = "Kích cỡ này hiện đã hết hàng.";
@@ -218,6 +221,7 @@ public class OrderService {
                     .product(product)
                     .productName(product.getName())   // Snapshot tên sản phẩm
                     .selectedSize(selectedSize)       // Snapshot kích cỡ đã chọn [TSK-D14-VDHH]
+                    .variantId(matchedVariantId)      // Lưu định danh biến thể variantId [TSK-D14-VDHH]
                     .unitPrice(unitPrice)             // Snapshot đơn giá từ DB (chuẩn hóa scale = 2)
                     .quantity(quantity)               // Số lượng mua
                     .subtotal(subtotal)               // Snapshot thành tiền (chuẩn hóa scale = 2)
@@ -740,6 +744,7 @@ public class OrderService {
         return OrderItemResponse.builder()
                 .id(item.getId())
                 .productId(item.getProduct() != null ? item.getProduct().getId() : null)
+                .variantId(item.getVariantId())
                 .productName(item.getProductName())
                 .selectedSize(item.getSelectedSize())
                 .unitPrice(item.getUnitPrice())

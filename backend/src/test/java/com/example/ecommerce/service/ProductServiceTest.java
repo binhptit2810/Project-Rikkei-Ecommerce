@@ -50,6 +50,12 @@ class ProductServiceTest {
     @Mock
     private com.example.ecommerce.repository.CouponRepository couponRepository;
 
+    @Mock
+    private com.example.ecommerce.repository.ProductVariantRepository productVariantRepository;
+
+    @Mock
+    private com.example.ecommerce.repository.OrderItemRepository orderItemRepository;
+
     @InjectMocks
     private ProductService productService;
 
@@ -79,6 +85,8 @@ class ProductServiceTest {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
+
+        lenient().when(productVariantRepository.findByProductId(anyLong())).thenReturn(List.of());
     }
 
     // =========================================================================
@@ -481,5 +489,240 @@ class ProductServiceTest {
         assertThat(deal).isNotNull();
         assertThat(deal.getCouponCode()).isEqualTo("SALE30");
         assertThat(deal.getDiscountPercentage()).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("getProductVariants: Lấy danh sách biến thể kích cỡ của sản phẩm thành công")
+    void getProductVariants_returnsVariants() {
+        when(productRepository.findByIdWithCategory(10L)).thenReturn(Optional.of(testProduct));
+        com.example.ecommerce.entity.ProductVariant v1 = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(1L)
+                .product(testProduct)
+                .size("M")
+                .stockQuantity(15)
+                .sku("PROD-10-M")
+                .build();
+        when(productVariantRepository.findByProductId(10L)).thenReturn(List.of(v1));
+
+        var variants = productService.getProductVariants(10L);
+
+        assertThat(variants).hasSize(1);
+        assertThat(variants.get(0).getSize()).isEqualTo("M");
+        assertThat(variants.get(0).getStockQuantity()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("getProductById: Trả về sản phẩm kèm đầy đủ danh sách variants")
+    void getProductById_returnsWithVariants() {
+        com.example.ecommerce.entity.ProductVariant v1 = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(1L)
+                .product(testProduct)
+                .size("L")
+                .stockQuantity(20)
+                .sku("PROD-10-L")
+                .build();
+        testProduct.setVariants(List.of(v1));
+        when(productRepository.findByIdWithCategoryAndVariants(10L)).thenReturn(Optional.of(testProduct));
+
+        var response = productService.getProductById(10L);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getVariants()).isNotEmpty();
+        assertThat(response.getVariants().get(0).getSize()).isEqualTo("L");
+    }
+
+    @Test
+    @DisplayName("createProduct: Thêm mới sản phẩm kèm biến thể kích cỡ")
+    void createProduct_withVariants_success() {
+        com.example.ecommerce.dto.request.ProductVariantRequest vr1 = com.example.ecommerce.dto.request.ProductVariantRequest.builder()
+                .size("M")
+                .stockQuantity(10)
+                .sku("P-M")
+                .build();
+        com.example.ecommerce.dto.request.ProductVariantRequest vr2 = com.example.ecommerce.dto.request.ProductVariantRequest.builder()
+                .size("L")
+                .stockQuantity(20)
+                .sku("P-L")
+                .build();
+
+        CreateProductRequest req = CreateProductRequest.builder()
+                .name("Áo Polo Size")
+                .price(new BigDecimal("200000"))
+                .categoryId(1L)
+                .hasVariants(true)
+                .variants(List.of(vr1, vr2))
+                .build();
+
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(testCategory));
+        when(productRepository.save(any(Product.class))).thenAnswer(inv -> {
+            Product p = inv.getArgument(0);
+            p.setId(50L);
+            return p;
+        });
+        when(productVariantRepository.save(any(com.example.ecommerce.entity.ProductVariant.class))).thenAnswer(inv -> {
+            com.example.ecommerce.entity.ProductVariant pv = inv.getArgument(0);
+            pv.setId(101L);
+            return pv;
+        });
+
+        com.example.ecommerce.entity.ProductVariant vSaved1 = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(101L).size("M").stockQuantity(10).sku("P-M").product(testProduct).build();
+        com.example.ecommerce.entity.ProductVariant vSaved2 = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(102L).size("L").stockQuantity(20).sku("P-L").product(testProduct).build();
+
+        when(productVariantRepository.findByProductId(50L)).thenReturn(List.of(vSaved1, vSaved2));
+
+        ProductResponse response = productService.createProduct(req);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getVariants()).hasSize(2);
+        verify(productVariantRepository, atLeastOnce()).save(any(com.example.ecommerce.entity.ProductVariant.class));
+    }
+
+    @Test
+    @DisplayName("addVariantToProduct: Thêm biến thể mới thành công")
+    void addVariantToProduct_success() {
+        when(productRepository.findById(10L)).thenReturn(Optional.of(testProduct));
+        when(productVariantRepository.existsByProductIdAndSize(10L, "XL")).thenReturn(false);
+        when(productVariantRepository.existsBySku("P-10-XL")).thenReturn(false);
+
+        com.example.ecommerce.entity.ProductVariant saved = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(55L)
+                .product(testProduct)
+                .size("XL")
+                .stockQuantity(12)
+                .sku("P-10-XL")
+                .build();
+        when(productVariantRepository.save(any(com.example.ecommerce.entity.ProductVariant.class))).thenReturn(saved);
+        when(productVariantRepository.findByProductId(10L)).thenReturn(List.of(saved));
+
+        com.example.ecommerce.dto.request.ProductVariantRequest req = com.example.ecommerce.dto.request.ProductVariantRequest.builder()
+                .size("XL")
+                .stockQuantity(12)
+                .sku("P-10-XL")
+                .build();
+
+        var res = productService.addVariantToProduct(10L, req);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getSize()).isEqualTo("XL");
+        assertThat(res.getStockQuantity()).isEqualTo(12);
+        verify(productRepository).save(testProduct);
+    }
+
+    @Test
+    @DisplayName("addVariantToProduct: Thất bại khi size rỗng hoặc trùng lặp")
+    void addVariantToProduct_invalidSize_throws() {
+        when(productRepository.findById(10L)).thenReturn(Optional.of(testProduct));
+
+        com.example.ecommerce.dto.request.ProductVariantRequest emptySize = com.example.ecommerce.dto.request.ProductVariantRequest.builder()
+                .size("   ")
+                .stockQuantity(5)
+                .build();
+        assertThatThrownBy(() -> productService.addVariantToProduct(10L, emptySize))
+                .isInstanceOf(BusinessException.class);
+
+        when(productVariantRepository.existsByProductIdAndSize(10L, "M")).thenReturn(true);
+        com.example.ecommerce.dto.request.ProductVariantRequest dupSize = com.example.ecommerce.dto.request.ProductVariantRequest.builder()
+                .size("M")
+                .stockQuantity(5)
+                .build();
+        assertThatThrownBy(() -> productService.addVariantToProduct(10L, dupSize))
+                .isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    @DisplayName("updateProductVariant: Cập nhật biến thể thành công")
+    void updateProductVariant_success() {
+        when(productRepository.findById(10L)).thenReturn(Optional.of(testProduct));
+        com.example.ecommerce.entity.ProductVariant existing = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(1L)
+                .product(testProduct)
+                .size("M")
+                .stockQuantity(5)
+                .sku("P-10-M")
+                .build();
+        when(productVariantRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(productVariantRepository.existsByProductIdAndSizeAndIdNot(10L, "M", 1L)).thenReturn(false);
+        when(productVariantRepository.existsBySkuAndIdNot("P-10-M", 1L)).thenReturn(false);
+        when(productVariantRepository.save(any(com.example.ecommerce.entity.ProductVariant.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(productVariantRepository.findByProductId(10L)).thenReturn(List.of(existing));
+
+        com.example.ecommerce.dto.request.ProductVariantRequest req = com.example.ecommerce.dto.request.ProductVariantRequest.builder()
+                .size("M")
+                .stockQuantity(15)
+                .sku("P-10-M")
+                .build();
+
+        var res = productService.updateProductVariant(10L, 1L, req);
+
+        assertThat(res).isNotNull();
+        assertThat(res.getStockQuantity()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("deleteProductVariant: Xóa biến thể thành công và chặn khi đã phát sinh đơn hàng")
+    void deleteProductVariant_tests() {
+        when(productRepository.findById(10L)).thenReturn(Optional.of(testProduct));
+        com.example.ecommerce.entity.ProductVariant existing = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(1L)
+                .product(testProduct)
+                .size("M")
+                .stockQuantity(5)
+                .sku("P-10-M")
+                .build();
+        when(productVariantRepository.findById(1L)).thenReturn(Optional.of(existing));
+
+        // Khi đã có đơn hàng
+        when(orderItemRepository.existsByVariantId(1L)).thenReturn(true);
+        assertThatThrownBy(() -> productService.deleteProductVariant(10L, 1L))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("đã có đơn hàng");
+
+        // Khi chưa có đơn hàng
+        when(orderItemRepository.existsByVariantId(1L)).thenReturn(false);
+        when(orderItemRepository.existsByProductIdAndSize(10L, "M")).thenReturn(false);
+        when(productVariantRepository.findByProductId(10L)).thenReturn(List.of());
+
+        productService.deleteProductVariant(10L, 1L);
+        verify(productVariantRepository).delete(existing);
+    }
+
+    @Test
+    @DisplayName("updateProduct: Cập nhật biến thể sản phẩm, thêm mới và xóa biến thể cũ an toàn")
+    void updateProduct_withVariants_addUpdateDelete() {
+        when(productRepository.findByIdWithCategory(10L)).thenReturn(Optional.of(testProduct));
+        when(categoryRepository.findById(1L)).thenReturn(Optional.of(testCategory));
+
+        com.example.ecommerce.entity.ProductVariant oldV1 = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(1L).product(testProduct).size("S").stockQuantity(5).sku("PROD-10-S").build();
+        com.example.ecommerce.entity.ProductVariant oldV2 = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(2L).product(testProduct).size("M").stockQuantity(10).sku("PROD-10-M").build();
+
+        when(productVariantRepository.findByProductId(10L))
+                .thenReturn(List.of(oldV1, oldV2))
+                .thenReturn(List.of(oldV1));
+
+        when(productVariantRepository.findById(1L)).thenReturn(Optional.of(oldV1));
+        when(productVariantRepository.existsBySkuAndIdNot("PROD-10-S", 1L)).thenReturn(false);
+        when(productVariantRepository.existsByProductIdAndSizeAndIdNot(10L, "S", 1L)).thenReturn(false);
+        when(orderItemRepository.existsByVariantId(2L)).thenReturn(false);
+        when(orderItemRepository.existsByProductIdAndSize(10L, "M")).thenReturn(false);
+
+        com.example.ecommerce.dto.request.ProductVariantRequest vr = com.example.ecommerce.dto.request.ProductVariantRequest.builder()
+                .id(1L).size("S").stockQuantity(15).sku("PROD-10-S").build();
+
+        UpdateProductRequest req = UpdateProductRequest.builder()
+                .name("Áo thun v3")
+                .categoryId(1L)
+                .price(new BigDecimal("199000"))
+                .hasVariants(true)
+                .variants(List.of(vr))
+                .build();
+
+        var res = productService.updateProduct(10L, req);
+
+        assertThat(res).isNotNull();
+        verify(productVariantRepository).delete(oldV2);
     }
 }

@@ -46,6 +46,9 @@ public class DealOfTheDayResponse {
     /** Mã giảm giá liên quan (nếu có) */
     private String couponCode;
 
+    /** Thời điểm bắt đầu của Deal trong ngày (00:00:00) */
+    private LocalDateTime startTime;
+
     /** Thời điểm kết thúc khuyến mãi thực tế dùng cho đồng hồ đếm ngược */
     private LocalDateTime endTime;
 

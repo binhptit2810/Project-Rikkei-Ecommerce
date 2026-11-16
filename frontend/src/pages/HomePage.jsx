@@ -133,23 +133,27 @@ export const HomePage = () => {
     fetchFeaturedProducts(selectedCategoryTab)
   }, [selectedCategoryTab, fetchFeaturedProducts])
 
-  // Đếm ngược thời gian thực tế dựa trên deal.endTime từ CSDL
+  // Đếm ngược thời gian thực tế dựa trên deal.endTime từ CSDL (tối đa 24 giờ trong ngày)
   useEffect(() => {
     if (!deal?.endTime) return
 
     const updateCountdown = () => {
       const targetTime = new Date(deal.endTime).getTime()
-      const now = new Date().getTime()
+      const now = Date.now()
       const difference = targetTime - now
 
       if (difference <= 0) {
         setTimeLeft({ hours: 0, minutes: 0, seconds: 0, isExpired: true })
+        // Tự động chuyển sang sản phẩm ưu đãi kế tiếp từ DB khi hết ngày
+        fetchDealOfTheDay()
         return
       }
 
-      const hours = Math.floor(difference / (1000 * 60 * 60))
-      const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60))
-      const seconds = Math.floor((difference % (1000 * 60)) / 1000)
+      // Tính chính xác số giờ, phút, giây còn lại; đảm bảo thời gian hiển thị không vượt quá 24 giờ
+      const totalSeconds = Math.max(0, Math.floor(difference / 1000))
+      const hours = Math.min(23, Math.floor(totalSeconds / 3600))
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      const seconds = totalSeconds % 60
 
       setTimeLeft({ hours, minutes, seconds, isExpired: false })
     }

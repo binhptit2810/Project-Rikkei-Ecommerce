@@ -61,6 +61,12 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query("SELECT p FROM Product p LEFT JOIN FETCH p.category WHERE p.id = :id")
     Optional<Product> findByIdWithCategory(@Param("id") Long id);
 
+    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.category LEFT JOIN FETCH p.variants WHERE p.id = :id")
+    Optional<Product> findByIdWithCategoryAndVariants(@Param("id") Long id);
+
+    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.category")
+    List<Product> findAllWithCategory();
+
     boolean existsByCategoryId(Long categoryId);
 
     @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)

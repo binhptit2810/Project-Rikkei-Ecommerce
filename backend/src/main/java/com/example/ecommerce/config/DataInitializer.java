@@ -4,19 +4,23 @@ import com.example.ecommerce.entity.Category;
 import com.example.ecommerce.entity.Coupon;
 import com.example.ecommerce.entity.DiscountType;
 import com.example.ecommerce.entity.Product;
+import com.example.ecommerce.entity.ProductVariant;
 import com.example.ecommerce.repository.CategoryRepository;
 import com.example.ecommerce.repository.CouponRepository;
 import com.example.ecommerce.repository.ProductRepository;
+import com.example.ecommerce.repository.ProductVariantRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * Tự động khởi tạo dữ liệu mẫu khi hệ thống có dưới 20 sản phẩm.
@@ -32,6 +36,7 @@ public class DataInitializer implements CommandLineRunner {
     private final ProductRepository productRepository;
     private final CategoryRepository categoryRepository;
     private final CouponRepository couponRepository;
+    private final ProductVariantRepository productVariantRepository;
 
     private static final String WATCH_IMAGE_FRAGMENT = "photo-1523275335684-37898b6baf30";
 
@@ -42,6 +47,12 @@ public class DataInitializer implements CommandLineRunner {
 
         // 1. Tự động rà soát và sửa ảnh các sản phẩm đã có nếu bị gán nhầm ảnh đồng hồ
         fixExistingMismatchedImages();
+
+        // 2. Đảm bảo các sản phẩm thời trang cốt lõi tồn tại (Áo thun nam basic Cotton, Quần jean, v.v.)
+        ensureCoreFashionProductsExist();
+
+        // 3. Khởi tạo và đồng bộ biến thể kích cỡ (ProductVariant Size)
+        initProductVariants();
 
         long count = productRepository.count();
         if (count >= 20) {
@@ -400,6 +411,109 @@ public class DataInitializer implements CommandLineRunner {
             }
         } catch (Exception e) {
             log.warn("Không thể tự động nạp coupons mẫu: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Đảm bảo các sản phẩm thời trang cốt lõi tồn tại trong DB để hỗ trợ đầy đủ bộ chọn biến thể kích cỡ.
+     */
+    private void ensureCoreFashionProductsExist() {
+        try {
+            Category catFashion = getOrCreateCategory("Thời trang", "Quần áo, giày dép và phụ kiện thời trang");
+            List<Product> coreProducts = List.of(
+                buildProduct("Áo thun nam basic Cotton", "Áo thun cotton 100%, thoáng mát, thấm hút mồ hôi, dễ phối đồ, giặt không phai màu.", "199000",
+                        "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=600&auto=format&fit=crop&q=80", catFashion, 50),
+                buildProduct("Quần jean nam slim fit", "Quần jean co giãn nhẹ, dáng slim fit hiện đại, phù hợp đi làm và đi chơi.", "450000",
+                        "https://images.unsplash.com/photo-1542272604-780c96856592?w=600&auto=format&fit=crop&q=80", catFashion, 30),
+                buildProduct("Áo khoác hoodie nữ", "Hoodie lót bông ấm áp, có mũ trùm và túi chuột, phù hợp mùa thu đông.", "350000",
+                        "https://images.unsplash.com/photo-1556905055-8f358a7a47b2?w=600&auto=format&fit=crop&q=80", catFashion, 25),
+                buildProduct("Giày thể thao nam", "Giày thể thao đế cao su chống trơn trượt, đệm EVA siêu êm chân, phù hợp chạy bộ và tập gym.", "850000",
+                        "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=600&auto=format&fit=crop&q=80", catFashion, 20)
+            );
+
+            for (Product p : coreProducts) {
+                boolean exists = productRepository.searchProducts(p.getName(), null, null, PageRequest.of(0, 5))
+                        .getContent().stream().anyMatch(existing -> existing.getName().equalsIgnoreCase(p.getName()));
+                if (!exists) {
+                    productRepository.save(p);
+                    log.info("Đã tạo bổ sung sản phẩm thời trang mẫu: {}", p.getName());
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Không thể bổ sung sản phẩm thời trang cốt lõi: {}", e.getMessage());
+        }
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    public void initProductVariants() {
+        if (productVariantRepository == null) return;
+        try {
+            List<Product> products = productRepository.findAllWithCategory();
+            for (Product p : products) {
+                String catName = p.getCategory() != null ? p.getCategory().getName() : "";
+                String nameLower = p.getName() != null ? p.getName().toLowerCase(Locale.ROOT) : "";
+
+                // Chỉ áp dụng biến thể Size cho ngành hàng Thời trang hoặc sản phẩm quần áo, giày dép
+                if (!"Thời trang".equalsIgnoreCase(catName) && !nameLower.contains("áo") && !nameLower.contains("quần") && !nameLower.contains("giày") && !nameLower.contains("đầm") && !nameLower.contains("váy") && !nameLower.contains("hoodie") && !nameLower.contains("sneaker") && !nameLower.contains("slip-on")) {
+                    continue;
+                }
+                // Bỏ qua các phụ kiện không có size
+                if (nameLower.contains("thắt lưng") || nameLower.contains("khóa kim") || nameLower.contains("ví da") || nameLower.contains("túi")) {
+                    continue;
+                }
+
+                // Xác định danh sách size và tồn kho tương ứng
+                List<String> sizes;
+                List<Integer> defaultStocks;
+
+                if (nameLower.contains("giày") || nameLower.contains("slip-on") || nameLower.contains("sneaker")) {
+                    sizes = List.of("38", "39", "40", "41", "42", "43");
+                    defaultStocks = List.of(4, 6, 6, 4, 0, 0); // Size 43 hết hàng để test giao diện
+                } else if (nameLower.contains("quần jean")) {
+                    sizes = List.of("29", "30", "31", "32", "33");
+                    defaultStocks = List.of(5, 10, 10, 5, 0); // Size 33 hết hàng
+                } else if (nameLower.contains("quần")) {
+                    sizes = List.of("28", "29", "30", "31", "32");
+                    defaultStocks = List.of(5, 8, 10, 7, 0); // Size 32 hết hàng
+                } else {
+                    // Áo thun, áo sơ mi, áo khoác, áo len, đầm, váy, hoodie, polo...
+                    sizes = List.of("S", "M", "L", "XL", "XXL");
+                    defaultStocks = List.of(10, 15, 15, 10, 0); // Size XXL hết hàng để test giao diện
+                }
+
+                for (int i = 0; i < sizes.size(); i++) {
+                    String size = sizes.get(i);
+                    int stock = (i < defaultStocks.size()) ? defaultStocks.get(i) : 5;
+
+                    Optional<ProductVariant> opt = productVariantRepository.findByProductIdAndSize(p.getId(), size);
+                    if (opt.isEmpty()) {
+                        String sku = "PROD-" + p.getId() + "-" + size;
+                        if (productVariantRepository.existsBySku(sku)) {
+                            sku = "SKU-" + p.getId() + "-" + size;
+                        }
+                        ProductVariant variant = ProductVariant.builder()
+                                .product(p)
+                                .size(size)
+                                .stockQuantity(stock)
+                                .sku(sku)
+                                .build();
+                        productVariantRepository.save(variant);
+                    }
+                }
+
+                List<ProductVariant> allVariants = productVariantRepository.findByProductId(p.getId());
+                if (!allVariants.isEmpty()) {
+                    int totalStock = allVariants.stream().mapToInt(ProductVariant::getStockQuantity).sum();
+                    if (p.getStockQuantity() == null || p.getStockQuantity() != totalStock) {
+                        p.setStockQuantity(totalStock);
+                        productRepository.save(p);
+                    }
+                    log.info("Đã đồng bộ {} biến thể kích cỡ cho sản phẩm #{} '{}' (Tổng tồn kho: {})",
+                            allVariants.size(), p.getId(), p.getName(), totalStock);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Lỗi khi khởi tạo biến thể kích cỡ mẫu: {}", e.getMessage(), e);
         }
     }
 }
