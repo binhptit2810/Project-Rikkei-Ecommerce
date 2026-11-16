@@ -103,10 +103,14 @@ public class ProductResponse {
         }
 
         List<ProductVariantResponse> variantResponses = null;
-        if (product.getVariants() != null) {
-            variantResponses = product.getVariants().stream()
-                    .map(ProductVariantResponse::fromEntity)
-                    .toList();
+        try {
+            if (product.getVariants() != null && org.hibernate.Hibernate.isInitialized(product.getVariants())) {
+                variantResponses = product.getVariants().stream()
+                        .map(ProductVariantResponse::fromEntity)
+                        .toList();
+            }
+        } catch (Exception ignored) {
+            // Lazy loading uninitialized fallback
         }
 
         return ProductResponse.builder()

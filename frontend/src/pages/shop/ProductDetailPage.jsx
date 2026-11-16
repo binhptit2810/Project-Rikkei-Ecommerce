@@ -27,21 +27,28 @@ export const ProductDetailPage = () => {
   const { isAuthenticated, user } = useAuthStore()
 
   const [product, setProduct] = useState(null)
+  const [variants, setVariants] = useState([])
+  const [selectedVariantId, setSelectedVariantId] = useState(null)
+  const [selectedSize, setSelectedSize] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [quantity, setQuantity] = useState(1)
-  const [selectedSize, setSelectedSize] = useState(null)
   const [validationError, setValidationError] = useState(null)
 
-  const hasVariants = Array.isArray(product?.variants) && product.variants.length > 0
-  const selectedVariant = hasVariants && selectedSize
-    ? product.variants.find((v) => v.size === selectedSize)
+  const hasVariants = Array.isArray(variants) && variants.length > 0
+  const selectedVariant = hasVariants
+    ? (selectedVariantId
+        ? variants.find((v) => v.id === selectedVariantId)
+        : (selectedSize ? variants.find((v) => v.size === selectedSize) : null))
     : null
+
   const availableStock = hasVariants
     ? (selectedVariant ? Number(selectedVariant.stockQuantity || 0) : 0)
     : Number(product?.stockQuantity || 0)
+
+  // Không phụ thuộc vào tồn kho tổng của Product nếu có variants
   const isOutOfStock = hasVariants
-    ? product.variants.every((v) => Number(v.stockQuantity || 0) <= 0)
+    ? variants.every((v) => Number(v.stockQuantity || 0) <= 0)
     : Number(product?.stockQuantity || 0) <= 0
 
   // Đảm bảo trang chi tiết luôn hiển thị ở đầu trang khi mở sản phẩm hoặc đổi id
@@ -52,30 +59,74 @@ export const ProductDetailPage = () => {
   }, [id])
 
   useEffect(() => {
-    const fetchDetail = async () => {
+    let isMounted = true
+
+    const fetchDetailAndVariants = async () => {
       setLoading(true)
       setError(null)
+      setSelectedSize(null)
+      setSelectedVariantId(null)
+      setValidationError(null)
+      setQuantity(1)
       window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
+
       try {
-        const res = await productService.getProductById(id)
-        if (res.success && res.data) {
-          setProduct(res.data)
-          window.scrollTo({ top: 0, left: 0, behavior: 'instant' })
-          if (document.documentElement) document.documentElement.scrollTop = 0
-          if (document.body) document.body.scrollTop = 0
-        } else {
-          setError('Không tìm thấy thông tin sản phẩm')
+        // Gọi song song cả API chi tiết và API biến thể kích cỡ
+        const [productRes, variantsRes] = await Promise.allSettled([
+          productService.getProductById(id),
+          productService.getProductVariants(id),
+        ])
+
+        if (!isMounted) return
+
+        let productData = null
+        if (productRes.status === 'fulfilled' && productRes.value?.success && productRes.value?.data) {
+          productData = productRes.value.data
         }
+
+        if (!productData) {
+          setError('Không tìm thấy thông tin sản phẩm')
+          setLoading(false)
+          return
+        }
+
+        // Trích xuất danh sách biến thể từ variantsRes hoặc từ productData.variants
+        let loadedVariants = []
+        if (variantsRes.status === 'fulfilled' && variantsRes.value) {
+          const varPayload = variantsRes.value.data
+          if (Array.isArray(varPayload)) {
+            loadedVariants = varPayload
+          } else if (Array.isArray(varPayload?.variants)) {
+            loadedVariants = varPayload.variants
+          }
+        }
+
+        // Fallback sang productData.variants nếu API variants trả về rỗng
+        if (loadedVariants.length === 0 && Array.isArray(productData.variants) && productData.variants.length > 0) {
+          loadedVariants = productData.variants
+        }
+
+        setProduct(productData)
+        setVariants(loadedVariants)
+
+        if (document.documentElement) document.documentElement.scrollTop = 0
+        if (document.body) document.body.scrollTop = 0
       } catch (err) {
-        console.error('Lỗi tải chi tiết sản phẩm:', err)
+        console.error('Lỗi tải chi tiết sản phẩm hoặc biến thể:', err)
         setError(err.response?.data?.message || 'Sản phẩm không tồn tại hoặc đã bị ẩn')
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
     if (id) {
-      fetchDetail()
+      fetchDetailAndVariants()
+    }
+
+    return () => {
+      isMounted = false
     }
   }, [id])
 
@@ -83,14 +134,25 @@ export const ProductDetailPage = () => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0)
   }
 
+  const handleSelectSize = (variant) => {
+    if (Number(variant.stockQuantity || 0) <= 0) return
+    setSelectedSize(variant.size)
+    setSelectedVariantId(variant.id)
+    setValidationError(null)
+    // Đảm bảo số lượng đang chọn không vượt quá tồn kho của size mới
+    if (quantity > Number(variant.stockQuantity || 0)) {
+      setQuantity(Math.max(1, Number(variant.stockQuantity || 0)))
+    }
+  }
+
   const validateBeforeAction = () => {
     setValidationError(null)
     if (hasVariants) {
-      if (!selectedSize) {
-        setValidationError('Vui lòng chọn kích cỡ trước khi tiếp tục.')
+      if (!selectedSize || !selectedVariantId) {
+        setValidationError('Vui lòng chọn kích thước sản phẩm.')
         return false
       }
-      const variant = product.variants.find((v) => v.size === selectedSize)
+      const variant = variants.find((v) => v.id === selectedVariantId || v.size === selectedSize)
       if (!variant) {
         setValidationError('Kích cỡ này không tồn tại.')
         return false
@@ -132,7 +194,15 @@ export const ProductDetailPage = () => {
     }
     if (!validateBeforeAction()) return
 
-    const res = await addToCart(product, quantity, selectedSize)
+    const res = await addToCart(
+      {
+        ...product,
+        variants,
+        variantId: selectedVariant?.id || selectedVariantId || null,
+      },
+      quantity,
+      selectedSize
+    )
     if (res?.requireLogin) {
       navigate('/login', {
         state: {
@@ -152,7 +222,7 @@ export const ProductDetailPage = () => {
     }
   }
 
-  const handleBuyNow = async () => {
+  const handleBuyNow = () => {
     if (!isAuthenticated) {
       navigate('/login', {
         state: {
@@ -168,25 +238,29 @@ export const ProductDetailPage = () => {
     }
     if (!validateBeforeAction()) return
 
-    const res = await addToCart(product, quantity, selectedSize)
-    if (res?.requireLogin) {
-      navigate('/login', {
-        state: {
-          from: { pathname: `/products/${id}` },
-          message: 'Vui lòng đăng nhập hoặc đăng ký tài khoản để mua hàng.',
-        },
-      })
+    const available = availableStock > 0 ? availableStock : (product?.stockQuantity || 0)
+    if (available <= 0) {
+      setValidationError(selectedSize ? `Kích cỡ ${selectedSize} hiện đã hết hàng.` : 'Sản phẩm đã hết hàng.')
       return
     }
-    if (res?.isAdmin) {
-      alert(res.message || 'Tài khoản Quản trị viên không được phép mua hàng.')
+    if (quantity > available) {
+      setValidationError(`Số lượng mua (${quantity}) vượt quá tồn kho hiện có (${available}).`)
       return
     }
-    if (!res?.success) {
-      setValidationError(res?.message || 'Không thể tiến hành mua ngay sản phẩm này.')
-      return
+
+    const buyNowItem = {
+      id: product.id,
+      variantId: selectedVariant?.id || selectedVariantId || null,
+      name: product.name,
+      price: product.price,
+      imageUrl: product.imageUrl,
+      selectedSize: selectedSize ? String(selectedSize).trim() : null,
+      quantity: Math.max(1, Number(quantity) || 1),
+      stockQuantity: available,
     }
-    navigate('/checkout')
+
+    // Luồng Mua ngay độc lập: Điều hướng trực tiếp sang Checkout mà KHÔNG thêm vào giỏ hàng chung
+    navigate('/checkout', { state: { buyNowItem } })
   }
 
   if (loading) {
@@ -344,6 +418,67 @@ export const ProductDetailPage = () => {
                 </span>
               </div>
 
+              {/* Bộ Chọn Kích Cỡ Sản Phẩm (ProductVariant Size Selector) [TSK-D14-VDHH] */}
+              {hasVariants && (
+                <div className="space-y-3 pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                      <span>Kích thước (Size)</span>
+                      {selectedSize ? (
+                        <span className="text-blue-600 font-extrabold normal-case">
+                          : {selectedSize}
+                        </span>
+                      ) : (
+                        <span className="text-rose-500 font-medium normal-case text-[11px]">
+                          * Vui lòng chọn
+                        </span>
+                      )}
+                    </span>
+                    {selectedVariant && (
+                      <span className="text-xs text-slate-500">
+                        Tồn kho: <span className="font-bold text-slate-900">{selectedVariant.stockQuantity}</span>
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {variants.map((v) => {
+                      const isVariantOutOfStock = Number(v.stockQuantity || 0) <= 0
+                      const isSelected = selectedVariantId === v.id || selectedSize === v.size
+
+                      return (
+                        <button
+                          key={v.id || v.size}
+                          type="button"
+                          onClick={() => handleSelectSize(v)}
+                          disabled={isVariantOutOfStock}
+                          aria-label={`Chọn kích cỡ ${v.size}${isVariantOutOfStock ? ' (Hết hàng)' : ''}`}
+                          className={`min-w-[48px] h-11 px-3.5 rounded-xl border text-sm font-bold transition-all flex items-center justify-center gap-1 relative cursor-pointer ${
+                            isSelected
+                              ? 'border-blue-600 bg-blue-600 text-white shadow-sm ring-2 ring-blue-600/30'
+                              : isVariantOutOfStock
+                              ? 'border-slate-200 bg-slate-100 text-slate-400 opacity-40 cursor-not-allowed line-through'
+                              : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                          title={
+                            isVariantOutOfStock
+                              ? `Size ${v.size} (Hết hàng)`
+                              : `Size ${v.size} (Còn ${v.stockQuantity} sản phẩm)`
+                          }
+                        >
+                          <span>{v.size}</span>
+                          {isVariantOutOfStock && (
+                            <span className="text-[9px] font-semibold text-rose-500 no-underline ml-0.5">
+                              (Hết)
+                            </span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Stock Quantity Info */}
               <div className="flex items-center gap-2 text-sm pt-1">
                 <span className="font-medium text-slate-600">Tình trạng:</span>
@@ -357,7 +492,7 @@ export const ProductDetailPage = () => {
                     Number(selectedVariant.stockQuantity || 0) > 0 ? (
                       <span className="font-bold text-emerald-600 inline-flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                        Size {selectedSize}: Còn hàng ({selectedVariant.stockQuantity} sản phẩm)
+                        Size {selectedSize}: Còn hàng ({selectedVariant.stockQuantity} sản phẩm sẵn sàng giao)
                       </span>
                     ) : (
                       <span className="font-bold text-red-600 inline-flex items-center gap-1.5">
@@ -378,79 +513,6 @@ export const ProductDetailPage = () => {
                   </span>
                 )}
               </div>
-
-              {/* Bộ Chọn Kích Cỡ Sản Phẩm (ProductVariant Size Selector) [TSK-D14-VDHH] */}
-              {hasVariants && (
-                <div className="space-y-3 pt-3 border-t border-slate-100">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                      <span>Kích cỡ (Size):</span>
-                      {selectedSize ? (
-                        <span className="text-blue-600 font-extrabold normal-case">
-                          {selectedSize}
-                        </span>
-                      ) : (
-                        <span className="text-rose-500 font-medium normal-case text-[11px]">
-                          * Chưa chọn
-                        </span>
-                      )}
-                    </span>
-                    {selectedVariant && (
-                      <span className="text-xs text-slate-500">
-                        Tồn kho:{' '}
-                        <span className="font-bold text-slate-900">
-                          {selectedVariant.stockQuantity}
-                        </span>
-                      </span>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2.5 flex-wrap">
-                    {product.variants.map((v) => {
-                      const isVariantOutOfStock = Number(v.stockQuantity || 0) <= 0
-                      const isSelected = selectedSize === v.size
-
-                      return (
-                        <button
-                          key={v.id || v.size}
-                          type="button"
-                          onClick={() => {
-                            if (!isVariantOutOfStock) {
-                              setSelectedSize(v.size)
-                              setValidationError(null)
-                              // Đảm bảo số lượng đang chọn không vượt quá tồn kho của size mới
-                              if (quantity > Number(v.stockQuantity || 0)) {
-                                setQuantity(Math.max(1, Number(v.stockQuantity || 0)))
-                              }
-                            }
-                          }}
-                          disabled={isVariantOutOfStock}
-                          aria-label={`Chọn kích cỡ ${v.size}${isVariantOutOfStock ? ' (Hết hàng)' : ''}`}
-                          className={`min-w-[48px] h-11 px-3.5 rounded-xl border text-sm font-bold transition-all flex items-center justify-center gap-1 relative cursor-pointer ${
-                            isSelected
-                              ? 'border-blue-600 bg-blue-50 text-blue-700 shadow-xs ring-2 ring-blue-600/20'
-                              : isVariantOutOfStock
-                              ? 'border-slate-200 bg-slate-100 text-slate-400 opacity-60 cursor-not-allowed line-through'
-                              : 'border-slate-200 bg-white text-slate-800 hover:border-slate-300 hover:bg-slate-50'
-                          }`}
-                          title={
-                            isVariantOutOfStock
-                              ? `Size ${v.size} (Hết hàng)`
-                              : `Size ${v.size} (Còn ${v.stockQuantity} sản phẩm)`
-                          }
-                        >
-                          <span>{v.size}</span>
-                          {isVariantOutOfStock && (
-                            <span className="text-[9px] font-semibold text-rose-500 no-underline ml-1">
-                              (Hết)
-                            </span>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
 
               {/* Description */}
               <div className="space-y-2 pt-2">
@@ -511,7 +573,7 @@ export const ProductDetailPage = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      const maxLimit = availableStock > 0 ? availableStock : (product?.stockQuantity || 9999)
+                      const maxLimit = availableStock > 0 ? availableStock : (product?.stockQuantity || 99)
                       setQuantity((prev) => Math.min(maxLimit, prev + 1))
                       setValidationError(null)
                     }}

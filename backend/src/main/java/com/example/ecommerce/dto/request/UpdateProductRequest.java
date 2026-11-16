@@ -45,5 +45,9 @@ public class UpdateProductRequest {
     private Integer stockQuantity;
 
     private Boolean active;
+
+    private Boolean hasVariants;
+
+    private java.util.List<ProductVariantRequest> variants;
 }
 

@@ -38,15 +38,20 @@ export const useCartStore = create(
           }
         }
 
-        // Xác định số lượng tồn kho theo biến thể kích cỡ nếu có
-        let maxStock = 9999
+        // Xác định số lượng tồn kho thực tế theo biến thể kích cỡ nếu có
+        let maxStock = 0
+        let matchedVariant = null
         if (selectedSize && Array.isArray(product?.variants) && product.variants.length > 0) {
-          const matchedVariant = product.variants.find((v) => v.size === selectedSize)
+          matchedVariant = product.variants.find((v) => v.size === selectedSize)
           if (matchedVariant) {
             maxStock = matchedVariant.stockQuantity !== undefined ? Number(matchedVariant.stockQuantity) : 0
           }
         } else if (product?.stockQuantity !== undefined && product?.stockQuantity !== null) {
           maxStock = Number(product.stockQuantity)
+        } else if (Array.isArray(product?.variants) && product.variants.length > 0) {
+          maxStock = product.variants.reduce((sum, v) => sum + (Number(v.stockQuantity) || 0), 0)
+        } else {
+          maxStock = 99 // Giá trị trần an toàn, không dùng số liệu ảo 9999
         }
 
         if (!product || maxStock <= 0) {
@@ -74,6 +79,7 @@ export const useCartStore = create(
           )
           newItems[existingIndex] = {
             ...current,
+            variantId: current.variantId || (matchedVariant ? matchedVariant.id : (product.variantId || null)),
             name: current.name || product.name || product.productName,
             stockQuantity: maxStock,
             quantity: updatedQuantity,
@@ -81,6 +87,7 @@ export const useCartStore = create(
         } else {
           newItems.push({
             id: product.id ?? product.productId,
+            variantId: matchedVariant ? matchedVariant.id : (product.variantId || null),
             selectedSize: normalizedSize,
             name: product.name ?? product.productName ?? 'Sản phẩm',
             price: Number(product.price) || 0,
@@ -128,7 +135,9 @@ export const useCartStore = create(
               item.id === productId &&
               (normalizedSize === null || (item.selectedSize || null) === normalizedSize)
             if (isMatch) {
-              const maxStock = (item.stockQuantity !== undefined && item.stockQuantity !== null) ? Number(item.stockQuantity) : 9999
+              const maxStock = (item.stockQuantity !== undefined && item.stockQuantity !== null && Number(item.stockQuantity) > 0)
+                ? Number(item.stockQuantity)
+                : 99
               const clamped = Math.min(maxStock, Math.max(1, numQty))
               return { ...item, quantity: clamped }
             }

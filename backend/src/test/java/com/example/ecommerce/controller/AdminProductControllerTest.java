@@ -261,5 +261,34 @@ class AdminProductControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
     }
+
+    @Test
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    @DisplayName("POST /api/v1/admin/products/{id}/variants: Admin thêm kích cỡ mới thành công")
+    void addVariant_asAdmin_returns201() throws Exception {
+        com.example.ecommerce.dto.request.ProductVariantRequest req = com.example.ecommerce.dto.request.ProductVariantRequest.builder()
+                .size("XXL")
+                .stockQuantity(25)
+                .sku("PROD-10-XXL")
+                .build();
+
+        com.example.ecommerce.dto.response.ProductVariantResponse res = com.example.ecommerce.dto.response.ProductVariantResponse.builder()
+                .id(201L)
+                .size("XXL")
+                .stockQuantity(25)
+                .sku("PROD-10-XXL")
+                .build();
+
+        when(productService.addVariantToProduct(eq(10L), any(com.example.ecommerce.dto.request.ProductVariantRequest.class)))
+                .thenReturn(res);
+
+        mockMvc.perform(post("/api/v1/admin/products/10/variants")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data.size").value("XXL"))
+                .andExpect(jsonPath("$.data.stockQuantity").value(25));
+    }
 }
 

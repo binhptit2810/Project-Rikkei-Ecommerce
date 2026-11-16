@@ -1,10 +1,12 @@
 package com.example.ecommerce.controller;
 
 import com.example.ecommerce.dto.request.CreateProductRequest;
+import com.example.ecommerce.dto.request.ProductVariantRequest;
 import com.example.ecommerce.dto.request.UpdateProductRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
+import com.example.ecommerce.dto.response.ProductVariantResponse;
 import com.example.ecommerce.service.ProductService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +14,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 /**
  * Controller quản trị sản phẩm (Admin Product Management API).
@@ -91,6 +95,54 @@ public class AdminProductController {
     public ResponseEntity<ApiResponse<Void>> deleteProduct(@PathVariable Long id) {
         productService.deleteProduct(id);
         return ResponseEntity.ok(ApiResponse.success("Xóa mềm sản phẩm thành công", null));
+    }
+
+    /**
+     * Lấy danh sách biến thể kích cỡ của sản phẩm dành cho Admin.
+     * GET /api/v1/admin/products/{id}/variants
+     */
+    @GetMapping("/{id}/variants")
+    public ResponseEntity<ApiResponse<List<ProductVariantResponse>>> getProductVariants(@PathVariable Long id) {
+        List<ProductVariantResponse> variants = productService.getProductVariants(id);
+        return ResponseEntity.ok(ApiResponse.success(variants));
+    }
+
+    /**
+     * Thêm mới 1 biến thể kích cỡ cho sản phẩm.
+     * POST /api/v1/admin/products/{id}/variants
+     */
+    @PostMapping("/{id}/variants")
+    public ResponseEntity<ApiResponse<ProductVariantResponse>> addProductVariant(
+            @PathVariable Long id,
+            @Valid @RequestBody ProductVariantRequest request) {
+        ProductVariantResponse created = productService.addVariantToProduct(id, request);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success("Thêm mới kích cỡ thành công", created));
+    }
+
+    /**
+     * Cập nhật thông tin/tồn kho của 1 biến thể kích cỡ.
+     * PUT /api/v1/admin/products/{id}/variants/{variantId}
+     */
+    @PutMapping("/{id}/variants/{variantId}")
+    public ResponseEntity<ApiResponse<ProductVariantResponse>> updateProductVariant(
+            @PathVariable Long id,
+            @PathVariable Long variantId,
+            @Valid @RequestBody ProductVariantRequest request) {
+        ProductVariantResponse updated = productService.updateProductVariant(id, variantId, request);
+        return ResponseEntity.ok(ApiResponse.success("Cập nhật kích cỡ thành công", updated));
+    }
+
+    /**
+     * Xóa 1 biến thể kích cỡ của sản phẩm (ngăn chặn nếu đã có đơn hàng sử dụng biến thể này).
+     * DELETE /api/v1/admin/products/{id}/variants/{variantId}
+     */
+    @DeleteMapping("/{id}/variants/{variantId}")
+    public ResponseEntity<ApiResponse<Void>> deleteProductVariant(
+            @PathVariable Long id,
+            @PathVariable Long variantId) {
+        productService.deleteProductVariant(id, variantId);
+        return ResponseEntity.ok(ApiResponse.success("Xóa kích cỡ thành công", null));
     }
 }
 

@@ -159,4 +159,35 @@ class ProductControllerTest {
                                 .andExpect(jsonPath("$.data.discountPercentage").value(25))
                                 .andExpect(jsonPath("$.data.name").value("Tai nghe Bluetooth không dây"));
         }
+
+        @Test
+        @DisplayName("GET /api/v1/products/{id}/variants: Lấy danh sách biến thể kích cỡ thành công")
+        void getProductVariants_returns200() throws Exception {
+                com.example.ecommerce.dto.response.ProductVariantResponse v1 = com.example.ecommerce.dto.response.ProductVariantResponse.builder()
+                                .id(101L)
+                                .size("S")
+                                .stockQuantity(20)
+                                .sku("PROD-1-S")
+                                .build();
+                com.example.ecommerce.dto.response.ProductVariantResponse v2 = com.example.ecommerce.dto.response.ProductVariantResponse.builder()
+                                .id(102L)
+                                .size("M")
+                                .stockQuantity(30)
+                                .sku("PROD-1-M")
+                                .build();
+
+                when(productService.getProductVariants(1L)).thenReturn(List.of(v1, v2));
+
+                mockMvc.perform(get("/api/v1/products/1/variants")
+                                .contentType(MediaType.APPLICATION_JSON))
+                                .andExpect(status().isOk())
+                                .andExpect(jsonPath("$.success").value(true))
+                                .andExpect(jsonPath("$.data.productId").value(1))
+                                .andExpect(jsonPath("$.data.variants[0].id").value(101))
+                                .andExpect(jsonPath("$.data.variants[0].size").value("S"))
+                                .andExpect(jsonPath("$.data.variants[0].stockQuantity").value(20))
+                                .andExpect(jsonPath("$.data.variants[1].id").value(102))
+                                .andExpect(jsonPath("$.data.variants[1].size").value("M"))
+                                .andExpect(jsonPath("$.data.variants[1].stockQuantity").value(30));
+        }
 }

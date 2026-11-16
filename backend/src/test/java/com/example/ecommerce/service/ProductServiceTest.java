@@ -50,6 +50,9 @@ class ProductServiceTest {
     @Mock
     private com.example.ecommerce.repository.CouponRepository couponRepository;
 
+    @Mock
+    private com.example.ecommerce.repository.ProductVariantRepository productVariantRepository;
+
     @InjectMocks
     private ProductService productService;
 
@@ -79,6 +82,8 @@ class ProductServiceTest {
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
+
+        lenient().when(productVariantRepository.findByProductId(anyLong())).thenReturn(List.of());
     }
 
     // =========================================================================
@@ -481,5 +486,45 @@ class ProductServiceTest {
         assertThat(deal).isNotNull();
         assertThat(deal.getCouponCode()).isEqualTo("SALE30");
         assertThat(deal.getDiscountPercentage()).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("getProductVariants: Lấy danh sách biến thể kích cỡ của sản phẩm thành công")
+    void getProductVariants_returnsVariants() {
+        when(productRepository.findByIdWithCategory(10L)).thenReturn(Optional.of(testProduct));
+        com.example.ecommerce.entity.ProductVariant v1 = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(1L)
+                .product(testProduct)
+                .size("M")
+                .stockQuantity(15)
+                .sku("PROD-10-M")
+                .build();
+        when(productVariantRepository.findByProductId(10L)).thenReturn(List.of(v1));
+
+        var variants = productService.getProductVariants(10L);
+
+        assertThat(variants).hasSize(1);
+        assertThat(variants.get(0).getSize()).isEqualTo("M");
+        assertThat(variants.get(0).getStockQuantity()).isEqualTo(15);
+    }
+
+    @Test
+    @DisplayName("getProductById: Trả về sản phẩm kèm đầy đủ danh sách variants")
+    void getProductById_returnsWithVariants() {
+        com.example.ecommerce.entity.ProductVariant v1 = com.example.ecommerce.entity.ProductVariant.builder()
+                .id(1L)
+                .product(testProduct)
+                .size("L")
+                .stockQuantity(20)
+                .sku("PROD-10-L")
+                .build();
+        testProduct.setVariants(List.of(v1));
+        when(productRepository.findByIdWithCategoryAndVariants(10L)).thenReturn(Optional.of(testProduct));
+
+        var response = productService.getProductById(10L);
+
+        assertThat(response).isNotNull();
+        assertThat(response.getVariants()).isNotEmpty();
+        assertThat(response.getVariants().get(0).getSize()).isEqualTo("L");
     }
 }

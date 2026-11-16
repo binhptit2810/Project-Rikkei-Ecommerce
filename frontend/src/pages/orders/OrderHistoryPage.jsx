@@ -14,8 +14,11 @@ import {
   MapPin,
   RefreshCw,
   CheckCircle2,
+  RotateCcw,
 } from 'lucide-react'
 import orderService from '../../services/orderService'
+import productService from '../../services/productService'
+import { useCartStore } from '../../store/useCartStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import CancelOrderModal from './CancelOrderModal'
 import {
@@ -57,12 +60,99 @@ export const OrderHistoryPage = () => {
 
   // Toast notification
   const [toast, setToast] = useState(null)
+  const [reorderingId, setReorderingId] = useState(null)
+  const addToCart = useCartStore((state) => state.addToCart)
 
   const showToast = (message, type = 'success') => {
     setToast({ message, type })
     setTimeout(() => {
       setToast(null)
     }, 3500)
+  }
+
+  // Xử lý mua lại: Kiểm tra tồn kho, kích cỡ và lấy chính xác số lượng từ đơn hàng cũ
+  const handleBuyAgain = async (targetOrder) => {
+    if (!targetOrder?.items || targetOrder.items.length === 0) {
+      showToast('Đơn hàng không có sản phẩm nào để mua lại.', 'error')
+      return
+    }
+
+    setReorderingId(targetOrder.id)
+    const successItems = []
+    const warningMessages = []
+    const errorMessages = []
+
+    try {
+      for (const item of targetOrder.items) {
+        if (!item.productId) continue
+        const oldQty = Math.max(1, Number(item.quantity) || 1)
+        const chosenSize = item.selectedSize ? String(item.selectedSize).trim() : null
+
+        try {
+          const res = await productService.getProductById(item.productId)
+          const liveProduct = res?.data || res
+
+          if (!liveProduct || liveProduct.active === false) {
+            errorMessages.push(`Sản phẩm "${item.productName}" đã ngừng kinh doanh.`)
+            continue
+          }
+
+          let availableStock = 0
+          if (chosenSize && Array.isArray(liveProduct.variants) && liveProduct.variants.length > 0) {
+            const matchedVariant = liveProduct.variants.find((v) => v.size === chosenSize)
+            if (!matchedVariant || Number(matchedVariant.stockQuantity) <= 0) {
+              errorMessages.push(`Sản phẩm "${item.productName}" (Size ${chosenSize}) hiện đã hết hàng.`)
+              continue
+            }
+            availableStock = Number(matchedVariant.stockQuantity)
+          } else {
+            availableStock = Number(liveProduct.stockQuantity ?? 0)
+            if (availableStock <= 0) {
+              errorMessages.push(`Sản phẩm "${item.productName}" hiện đã hết hàng.`)
+              continue
+            }
+          }
+
+          let finalQty = oldQty
+          if (oldQty > availableStock) {
+            finalQty = availableStock
+            warningMessages.push(
+              `"${item.productName}"${chosenSize ? ` (Size ${chosenSize})` : ''} chỉ còn ${availableStock} sản phẩm (đã điều chỉnh từ ${oldQty}).`
+            )
+          }
+
+          const addRes = await addToCart(liveProduct, finalQty, chosenSize)
+          if (addRes?.success) {
+            successItems.push({ name: item.productName, quantity: finalQty, size: chosenSize })
+          } else {
+            errorMessages.push(addRes?.message || `Không thể thêm "${item.productName}" vào giỏ hàng.`)
+          }
+        } catch (itemErr) {
+          errorMessages.push(`Không thể kiểm tra tồn kho cho sản phẩm "${item.productName}".`)
+        }
+      }
+
+      if (warningMessages.length > 0) {
+        warningMessages.forEach((msg) => showToast(msg, 'warning'))
+      }
+      if (errorMessages.length > 0) {
+        errorMessages.forEach((msg) => showToast(msg, 'error'))
+      }
+
+      if (successItems.length > 0) {
+        showToast(
+          `Đã thêm ${successItems.length} sản phẩm từ đơn hàng vào giỏ hàng!`,
+          'success'
+        )
+        navigate('/cart')
+      } else if (errorMessages.length > 0) {
+        showToast('Không có sản phẩm nào trong đơn hàng còn khả dụng để mua lại.', 'error')
+      }
+    } catch (err) {
+      showToast(err.message || 'Không thể thêm sản phẩm vào giỏ hàng.', 'error')
+    } finally {
+      setReorderingId(null)
+    }
   }
 
   // Tải danh sách đơn hàng của người dùng hiện tại có phân trang
@@ -551,6 +641,15 @@ export const OrderHistoryPage = () => {
                             Hủy đơn
                           </button>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => handleBuyAgain(order)}
+                          disabled={reorderingId === order.id}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold text-orange-600 hover:text-orange-700 hover:bg-orange-50 border border-orange-200 transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          <RotateCcw className={`w-3.5 h-3.5 ${reorderingId === order.id ? 'animate-spin' : ''}`} />
+                          <span>{reorderingId === order.id ? 'Đang thêm...' : 'Mua lại'}</span>
+                        </button>
                         <button
                           type="button"
                           onClick={() => navigate(`/orders/${order.id}`)}

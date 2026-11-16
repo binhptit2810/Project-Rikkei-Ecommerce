@@ -18,6 +18,11 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
 
     List<OrderItem> findByOrderId(Long orderId);
 
+    boolean existsByVariantId(Long variantId);
+
+    @Query("SELECT COUNT(oi) > 0 FROM OrderItem oi WHERE oi.product.id = :productId AND LOWER(TRIM(oi.selectedSize)) = LOWER(TRIM(:size))")
+    boolean existsByProductIdAndSize(@Param("productId") Long productId, @Param("size") String size);
+
     /**
      * Lấy danh sách sản phẩm Best Seller (bán chạy nhất) theo tháng và năm có phân trang.
      * Tính tổng số lượng bán ra theo từng sản phẩm: GROUP BY product_id, SUM(quantity).

@@ -4,12 +4,14 @@ import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.DealOfTheDayResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.dto.response.ProductResponse;
+import com.example.ecommerce.dto.response.ProductVariantResponse;
 import com.example.ecommerce.service.ProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Controller công khai cho sản phẩm (Public Products API).
@@ -83,5 +85,18 @@ public class ProductController {
     public ResponseEntity<ApiResponse<ProductResponse>> getProductById(@PathVariable Long id) {
         ProductResponse product = productService.getProductById(id);
         return ResponseEntity.ok(ApiResponse.success(product));
+    }
+
+    /**
+     * Lấy danh sách biến thể kích cỡ (ProductVariant Size) theo productId.
+     * GET /api/v1/products/{id}/variants
+     */
+    @GetMapping("/{id}/variants")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> getProductVariants(@PathVariable Long id) {
+        List<ProductVariantResponse> variants = productService.getProductVariants(id);
+        java.util.Map<String, Object> data = new java.util.LinkedHashMap<>();
+        data.put("productId", id);
+        data.put("variants", variants);
+        return ResponseEntity.ok(ApiResponse.success(data));
     }
 }

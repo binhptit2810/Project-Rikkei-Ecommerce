@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   Link2,
   Trash2,
+  Plus,
+  Layers,
 } from 'lucide-react'
 import productService from '../../services/productService'
 import categoryService from '../../services/categoryService'
@@ -51,6 +53,11 @@ export const ProductModal = ({
     description: '',
     active: true,
   })
+
+  // Quản lý biến thể kích cỡ (Size variants)
+  const [hasVariants, setHasVariants] = useState(false)
+  const [variants, setVariants] = useState([])
+  const [isLoadingVariants, setIsLoadingVariants] = useState(false)
 
   // Validation errors
   const [formErrors, setFormErrors] = useState({})
@@ -180,6 +187,39 @@ export const ProductModal = ({
         description: product.description || '',
         active: product.active !== false,
       })
+
+      // Tải danh sách biến thể kích cỡ nếu có
+      setIsLoadingVariants(true)
+      productService
+        .getAdminProductVariants(product.id)
+        .then((res) => {
+          const list = res?.data || []
+          if (Array.isArray(list) && list.length > 0) {
+            setHasVariants(true)
+            setVariants(
+              list.map((v) => ({
+                id: v.id,
+                size: v.size || '',
+                sku: v.sku || '',
+                stockQuantity:
+                  v.stockQuantity !== undefined && v.stockQuantity !== null
+                    ? String(v.stockQuantity)
+                    : '0',
+              }))
+            )
+          } else {
+            setHasVariants(false)
+            setVariants([])
+          }
+        })
+        .catch((err) => {
+          console.warn('ProductModal: Không thể tải danh sách size biến thể:', err)
+          setHasVariants(false)
+          setVariants([])
+        })
+        .finally(() => {
+          setIsLoadingVariants(false)
+        })
     } else {
       // Chế độ Thêm sản phẩm mới
       setFormData({
@@ -191,9 +231,66 @@ export const ProductModal = ({
         description: '',
         active: true,
       })
+      setHasVariants(false)
+      setVariants([])
     }
     setFormErrors({})
   }, [isOpen, product, loadCategories])
+
+  // Thao tác với danh sách biến thể Size
+  const handleAddVariantRow = () => {
+    setVariants((prev) => [
+      ...prev,
+      {
+        id: null,
+        size: '',
+        sku: '',
+        stockQuantity: '10',
+      },
+    ])
+  }
+
+  const handleRemoveVariantRow = (index) => {
+    setVariants((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleVariantChange = (index, field, value) => {
+    setVariants((prev) => {
+      const next = [...prev]
+      next[index] = { ...next[index], [field]: value }
+      return next
+    })
+  }
+
+  const handleApplyPresetSizes = (presetSizes) => {
+    setVariants((prev) => {
+      const existingSizes = new Set(prev.map((v) => (v.size || '').trim().toUpperCase()))
+      const newItems = presetSizes
+        .filter((s) => !existingSizes.has(s.toUpperCase()))
+        .map((s) => ({
+          id: null,
+          size: s,
+          sku: formData.name
+            ? `${formData.name.slice(0, 4).toUpperCase().replace(/[^A-Z0-9]/g, '')}-${s}`
+            : '',
+          stockQuantity: '20',
+        }))
+      return [...prev, ...newItems]
+    })
+  }
+
+  // Tổng số lượng tồn kho tính từ các biến thể Size
+  const totalVariantStock = variants.reduce(
+    (acc, v) => acc + (parseInt(v.stockQuantity, 10) || 0),
+    0
+  )
+
+  // Đồng bộ số lượng tồn kho tự động khi bật có biến thể
+  useEffect(() => {
+    if (hasVariants) {
+      setFormData((prev) => ({ ...prev, stockQuantity: String(totalVariantStock) }))
+    }
+  }, [hasVariants, totalVariantStock])
 
   // Lắng nghe phím ESC để đóng modal an toàn
   useEffect(() => {
@@ -230,17 +327,44 @@ export const ProductModal = ({
     }
 
     // 4. Số lượng tồn kho yêu cầu >= 0
-    const stockNum = Number(formData.stockQuantity)
+    const stockNum = hasVariants ? totalVariantStock : Number(formData.stockQuantity)
     if (
-      formData.stockQuantity === '' ||
-      formData.stockQuantity === null ||
-      isNaN(stockNum) ||
-      stockNum < 0
+      (formData.stockQuantity === '' || formData.stockQuantity === null || isNaN(stockNum) || stockNum < 0) &&
+      !hasVariants
     ) {
       errors.stockQuantity = 'Số lượng tồn kho không được âm'
     }
 
-    // 5. URL hình ảnh nếu có phải hợp lệ
+    // 5. Kiểm tra tính hợp lệ của biến thể nếu bật
+    if (hasVariants) {
+      if (!variants || variants.length === 0) {
+        errors.variants = 'Vui lòng thêm ít nhất một kích cỡ (Size) hoặc bỏ chọn tùy chọn biến thể'
+      } else {
+        const sizeSet = new Set()
+        for (let i = 0; i < variants.length; i++) {
+          const v = variants[i]
+          const trimmedSize = (v.size || '').trim()
+          if (!trimmedSize) {
+            errors.variants = `Dòng #${i + 1}: Kích cỡ (Size) không được để trống`
+            break
+          }
+          const upper = trimmedSize.toUpperCase()
+          if (sizeSet.has(upper)) {
+            errors.variants = `Kích cỡ "${trimmedSize}" bị trùng lặp. Mỗi size chỉ được xuất hiện một lần.`
+            break
+          }
+          sizeSet.add(upper)
+
+          const qty = Number(v.stockQuantity)
+          if (v.stockQuantity === '' || isNaN(qty) || qty < 0) {
+            errors.variants = `Dòng #${i + 1} (${trimmedSize}): Số lượng tồn kho không được âm`
+            break
+          }
+        }
+      }
+    }
+
+    // 6. URL hình ảnh nếu có phải hợp lệ
     if (formData.imageUrl && !formData.imageUrl.match(/^(https?:\/\/|\/)/i)) {
       errors.imageUrl = 'Đường dẫn ảnh phải bắt đầu bằng http://, https:// hoặc /'
     }
@@ -260,10 +384,19 @@ export const ProductModal = ({
       name: formData.name.trim(),
       categoryId: Number(formData.categoryId),
       price: Number(formData.price),
-      stockQuantity: Number(formData.stockQuantity),
+      stockQuantity: hasVariants ? totalVariantStock : Number(formData.stockQuantity),
       imageUrl: formData.imageUrl.trim() || null,
       description: formData.description.trim() || null,
       active: Boolean(formData.active),
+      hasVariants: Boolean(hasVariants),
+      variants: hasVariants
+        ? variants.map((v) => ({
+            id: v.id || null,
+            size: v.size.trim(),
+            sku: v.sku?.trim() || null,
+            stockQuantity: parseInt(v.stockQuantity, 10) || 0,
+          }))
+        : [],
     }
 
     try {
@@ -311,7 +444,7 @@ export const ProductModal = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="product-modal-title"
-        className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-2xl overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-200"
+        className="relative bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-3xl overflow-hidden z-10 animate-in fade-in zoom-in-95 duration-200"
       >
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50/60">
@@ -452,27 +585,201 @@ export const ProductModal = ({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                Số lượng tồn kho ban đầu <span className="text-red-500">*</span>
+                Số lượng tồn kho {hasVariants ? '(Tự động tính)' : 'ban đầu'} <span className="text-red-500">*</span>
               </label>
               <input
                 type="number"
                 min="0"
                 step="1"
                 placeholder="Ví dụ: 100"
-                value={formData.stockQuantity}
+                disabled={hasVariants}
+                value={hasVariants ? totalVariantStock : formData.stockQuantity}
                 onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
-                className={`w-full px-3.5 py-2 text-sm bg-slate-50 border rounded-xl focus:bg-white focus:outline-none focus:ring-2 transition-all tabular-nums ${formErrors.stockQuantity
-                    ? 'border-red-500 focus:ring-red-500/20'
-                    : 'border-slate-300 focus:ring-zinc-950/20 focus:border-zinc-900'
-                  }`}
+                className={`w-full px-3.5 py-2 text-sm border rounded-xl focus:outline-none transition-all tabular-nums ${
+                  hasVariants
+                    ? 'bg-slate-100/80 text-slate-500 border-slate-200 cursor-not-allowed font-semibold'
+                    : 'bg-slate-50 border-slate-300 focus:bg-white focus:ring-2 focus:ring-zinc-950/20 focus:border-zinc-900'
+                } ${formErrors.stockQuantity ? 'border-red-500 focus:ring-red-500/20' : ''}`}
               />
-              {formErrors.stockQuantity && (
+              {hasVariants ? (
+                <p className="text-[11px] text-slate-500 mt-1 font-medium">
+                  Đang đồng bộ tự động từ tổng các kích cỡ ({totalVariantStock} sp)
+                </p>
+              ) : formErrors.stockQuantity ? (
                 <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5" />
                   <span>{formErrors.stockQuantity}</span>
                 </p>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Quản lý biến thể kích cỡ (Size Variants) */}
+          <div className="border border-slate-200 rounded-2xl p-4 bg-slate-50/70 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              <label className="inline-flex items-center gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={hasVariants}
+                  onChange={(e) => {
+                    const checked = e.target.checked
+                    setHasVariants(checked)
+                    if (checked && variants.length === 0) {
+                      handleAddVariantRow()
+                    }
+                  }}
+                  className="w-4 h-4 text-zinc-900 rounded-sm focus:ring-zinc-950 cursor-pointer"
+                />
+                <span className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-zinc-700" />
+                  Quản lý biến thể kích cỡ (Size)
+                </span>
+              </label>
+
+              {hasVariants && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] font-medium text-slate-500">Mẫu nhanh:</span>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPresetSizes(['S', 'M', 'L', 'XL', 'XXL'])}
+                    className="px-2 py-0.5 text-xs bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-100 rounded-md font-medium text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    + Áo (S - XXL)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPresetSizes(['29', '30', '31', '32', '33'])}
+                    className="px-2 py-0.5 text-xs bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-100 rounded-md font-medium text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    + Quần (29 - 33)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleApplyPresetSizes(['39', '40', '41', '42', '43'])}
+                    className="px-2 py-0.5 text-xs bg-white border border-slate-200 hover:border-slate-300 hover:bg-slate-100 rounded-md font-medium text-slate-700 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    + Giày (39 - 43)
+                  </button>
+                </div>
               )}
             </div>
+
+            {hasVariants && (
+              <div className="space-y-3 pt-1">
+                {isLoadingVariants ? (
+                  <div className="py-4 flex items-center justify-center gap-2 text-xs text-slate-500">
+                    <LoadingSpinner size="sm" />
+                    <span>Đang tải biến thể kích cỡ...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-2xs">
+                      <table className="w-full text-left text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-100/80 border-b border-slate-200 text-slate-600 font-bold uppercase tracking-wider">
+                            <th className="py-2.5 px-3 w-32">Kích cỡ (Size) <span className="text-red-500">*</span></th>
+                            <th className="py-2.5 px-3">Mã SKU</th>
+                            <th className="py-2.5 px-3 w-32">Tồn kho <span className="text-red-500">*</span></th>
+                            <th className="py-2.5 px-3 w-28 text-center">Trạng thái</th>
+                            <th className="py-2.5 px-3 w-14 text-center">Xóa</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {variants.length === 0 ? (
+                            <tr>
+                              <td colSpan="5" className="py-4 text-center text-slate-400">
+                                Chưa có kích cỡ nào. Hãy nhấn "+ Thêm dòng kích cỡ" hoặc chọn "Mẫu nhanh" ở trên.
+                              </td>
+                            </tr>
+                          ) : (
+                            variants.map((v, idx) => {
+                              const qty = parseInt(v.stockQuantity, 10) || 0
+                              const isOutOfStock = qty <= 0
+                              return (
+                                <tr key={idx} className="hover:bg-slate-50/60 transition-colors">
+                                  <td className="py-2 px-3">
+                                    <input
+                                      type="text"
+                                      placeholder="VD: M, L, 42"
+                                      value={v.size}
+                                      onChange={(e) => handleVariantChange(idx, 'size', e.target.value)}
+                                      className="w-full px-2.5 py-1 text-xs font-semibold bg-white border border-slate-200 rounded-lg focus:border-zinc-900 focus:outline-none"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <input
+                                      type="text"
+                                      placeholder="Tùy chọn (VD: PROD-M)"
+                                      value={v.sku}
+                                      onChange={(e) => handleVariantChange(idx, 'sku', e.target.value)}
+                                      className="w-full px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg focus:border-zinc-900 focus:outline-none font-mono"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <input
+                                      type="number"
+                                      min="0"
+                                      step="1"
+                                      value={v.stockQuantity}
+                                      onChange={(e) => handleVariantChange(idx, 'stockQuantity', e.target.value)}
+                                      className="w-full px-2.5 py-1 text-xs font-semibold bg-white border border-slate-200 rounded-lg focus:border-zinc-900 focus:outline-none tabular-nums"
+                                    />
+                                  </td>
+                                  <td className="py-2 px-3 text-center">
+                                    {isOutOfStock ? (
+                                      <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-600 border border-rose-200">
+                                        Hết hàng
+                                      </span>
+                                    ) : (
+                                      <span className="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                        Còn {qty}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-2 px-3 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveVariantRow(idx)}
+                                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors cursor-pointer"
+                                      title="Xóa dòng kích cỡ này"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              )
+                            })
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleAddVariantRow}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 rounded-lg text-xs font-semibold transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Thêm dòng kích cỡ</span>
+                      </button>
+
+                      <p className="text-xs font-medium text-slate-600">
+                        Tổng tồn kho từ các size:{' '}
+                        <span className="font-bold text-zinc-900">{totalVariantStock}</span> sản phẩm
+                      </p>
+                    </div>
+
+                    {formErrors.variants && (
+                      <p className="text-xs text-red-600 flex items-center gap-1 mt-1">
+                        <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{formErrors.variants}</span>
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Hình ảnh sản phẩm (Upload từ máy tính hoặc Nhập URL) */}
