@@ -116,6 +116,26 @@ export const OrderDetailPage = () => {
   const [vnpayQRData, setVnpayQRData] = useState(null)
   const [loadingVNPayQR, setLoadingVNPayQR] = useState(false)
 
+  // Xuất hóa đơn PDF chuyên nghiệp (Đặng Thanh Bình)
+  const [downloadingPdf, setDownloadingPdf] = useState(false)
+
+  const handleDownloadInvoice = async () => {
+    if (!order) return
+    try {
+      setDownloadingPdf(true)
+      await orderService.downloadInvoicePdf(order.id, order.orderCode)
+      showToast('Đã tải file PDF hóa đơn chuyên nghiệp thành công!', 'success')
+    } catch (err) {
+      console.error('Lỗi khi tải hóa đơn PDF:', err)
+      showToast(
+        err.response?.data?.message || 'Không thể tải hóa đơn PDF. Vui lòng thử lại!',
+        'error'
+      )
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
+
   const handleOpenVNPayQR = async () => {
     if (!order?.id) return
     setLoadingVNPayQR(true)
@@ -595,8 +615,22 @@ export const OrderDetailPage = () => {
                 </div>
               </div>
 
-              {/* Badges trạng thái */}
-              <div className="flex flex-wrap items-center gap-2 self-start md:self-auto pl-8 md:pl-0">
+              {/* Badges trạng thái & Nút xuất hóa đơn PDF */}
+              <div className="flex flex-wrap items-center gap-2.5 self-start md:self-auto pl-8 md:pl-0">
+                <button
+                  type="button"
+                  onClick={handleDownloadInvoice}
+                  disabled={downloadingPdf}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl border border-blue-200 bg-blue-50/80 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-all cursor-pointer shadow-2xs hover:border-blue-300 disabled:opacity-50"
+                  title="Xuất hóa đơn PDF chuyên nghiệp"
+                >
+                  {downloadingPdf ? (
+                    <LoadingSpinner size="xs" className="text-blue-600" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5 text-blue-600" />
+                  )}
+                  <span>{downloadingPdf ? 'Đang xuất PDF...' : 'Xuất hóa đơn PDF'}</span>
+                </button>
                 <PaymentStatusBadge
                   status={order.paymentStatus}
                   description={order.paymentStatusDescription}
@@ -1123,6 +1157,26 @@ export const OrderDetailPage = () => {
                         <>
                           <RotateCcw className="w-3.5 h-3.5" />
                           <span>Mua lại đơn hàng này</span>
+                        </>
+                      )}
+                    </button>
+
+                    {/* Nút Xuất hóa đơn PDF chuyên nghiệp */}
+                    <button
+                      type="button"
+                      onClick={handleDownloadInvoice}
+                      disabled={downloadingPdf}
+                      className="w-full py-2.5 px-4 rounded-full text-xs font-bold text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-2xs disabled:opacity-50"
+                    >
+                      {downloadingPdf ? (
+                        <>
+                          <LoadingSpinner size="sm" className="text-blue-600" />
+                          <span>Đang xuất hóa đơn PDF...</span>
+                        </>
+                      ) : (
+                        <>
+                          <FileText className="w-4 h-4 text-blue-600" />
+                          <span>Xuất hóa đơn điện tử (PDF)</span>
                         </>
                       )}
                     </button>

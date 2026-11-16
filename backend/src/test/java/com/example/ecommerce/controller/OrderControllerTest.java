@@ -58,6 +58,9 @@ class OrderControllerTest {
     private OrderService orderService;
 
     @MockBean
+    private com.example.ecommerce.service.InvoicePdfService invoicePdfService;
+
+    @MockBean
     private RefreshTokenService refreshTokenService;
 
     @Test
@@ -298,6 +301,28 @@ class OrderControllerTest {
     @DisplayName("GET /api/v1/orders/{id}: Từ chối truy cập 401 khi chưa đăng nhập")
     void getOrderById_Unauthenticated_Returns401() throws Exception {
         mockMvc.perform(get("/api/v1/orders/1"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/orders/{id}/invoice-pdf: Xuất file PDF hóa đơn trả về 200 OK cùng Content-Type application/pdf")
+    @WithMockUser(username = "customer@example.com", roles = {"CUSTOMER"})
+    void getOrderInvoicePdf_Success() throws Exception {
+        byte[] fakePdfBytes = "%PDF-1.4 Fake PDF Content for Invoice Test".getBytes();
+        when(invoicePdfService.generateInvoicePdf(eq(1L), eq("customer@example.com")))
+                .thenReturn(fakePdfBytes);
+
+        mockMvc.perform(get("/api/v1/orders/1/invoice-pdf"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Type", "application/pdf"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Disposition", "inline; filename=\"invoice-1.pdf\""))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().bytes(fakePdfBytes));
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/orders/{id}/invoice-pdf: Chưa đăng nhập trả 401 Unauthorized")
+    void getOrderInvoicePdf_Unauthenticated_Returns401() throws Exception {
+        mockMvc.perform(get("/api/v1/orders/1/invoice-pdf"))
                 .andExpect(status().isUnauthorized());
     }
 }

@@ -5,11 +5,14 @@ import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.OrderResponse;
 import com.example.ecommerce.dto.response.PageResponse;
 import com.example.ecommerce.entity.OrderStatus;
+import com.example.ecommerce.service.InvoicePdfService;
 import com.example.ecommerce.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -25,6 +28,7 @@ import java.util.List;
 public class AdminOrderController {
 
     private final OrderService orderService;
+    private final InvoicePdfService invoicePdfService;
 
     /**
      * Lấy danh sách đơn hàng toàn hệ thống có phân trang, lọc theo trạng thái và tìm kiếm.
@@ -88,5 +92,26 @@ public class AdminOrderController {
     ) {
         OrderResponse response = orderService.updateOrderStatus(id, request.getStatus());
         return ResponseEntity.ok(ApiResponse.success("Cập nhật trạng thái đơn hàng thành công", response));
+    }
+
+    /**
+     * Xuất hóa đơn bán hàng PDF chuyên nghiệp cho Admin.
+     * GET /api/v1/admin/orders/{id}/invoice-pdf
+     *
+     * Người phụ trách: Đặng Thanh Bình (Thành viên 4 - DTB)
+     */
+    @GetMapping("/{id}/invoice-pdf")
+    public ResponseEntity<byte[]> getAdminOrderInvoicePdf(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails
+    ) {
+        byte[] pdfBytes = invoicePdfService.generateInvoicePdf(id, userDetails.getUsername());
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.inline()
+                .filename("invoice-" + id + ".pdf")
+                .build());
+        headers.setContentLength(pdfBytes.length);
+        return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
     }
 }

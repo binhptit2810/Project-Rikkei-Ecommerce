@@ -48,6 +48,38 @@ export const orderService = {
     return response.data
   },
 
+  /**
+   * Tải / Xuất file hóa đơn PDF chuyên nghiệp của đơn hàng
+   * Phụ trách: Đặng Thanh Bình (Thành viên 4 - DTB)
+   * @param {number|string} id ID đơn hàng
+   * @param {boolean} [isAdmin=false] Dành cho Admin hay Khách hàng
+   */
+  getInvoicePdf: async (id, isAdmin = false) => {
+    const endpoint = isAdmin ? `/admin/orders/${id}/invoice-pdf` : `/orders/${id}/invoice-pdf`
+    const response = await apiClient.get(endpoint, {
+      responseType: 'blob',
+    })
+    return response.data
+  },
+
+  /**
+   * Tải file hóa đơn PDF về máy người dùng
+   * @param {number|string} id
+   * @param {string} orderCode
+   * @param {boolean} [isAdmin=false]
+   */
+  downloadInvoicePdf: async (id, orderCode, isAdmin = false) => {
+    const blob = await orderService.getInvoicePdf(id, isAdmin)
+    const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Hoa-don-${orderCode || id}.pdf`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => window.URL.revokeObjectURL(url), 2000)
+  },
+
   // ================= ADMIN APIS =================
 
   /**
