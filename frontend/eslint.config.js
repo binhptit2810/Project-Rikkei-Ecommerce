@@ -28,6 +28,7 @@ export default [
         console: 'readonly',
         alert: 'readonly',
         FormData: 'readonly',
+        Blob: 'readonly',
         setTimeout: 'readonly',
         clearTimeout: 'readonly',
         setInterval: 'readonly',

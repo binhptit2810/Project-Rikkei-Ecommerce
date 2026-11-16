@@ -296,4 +296,59 @@ class DashboardServiceTest {
         assertThat(result.get(0).getName()).isEqualTo("Áo Thun Oversize");
         assertThat(result.get(1).getName()).isEqualTo("Quần Jean Slimfit");
     }
+
+    @Test
+    @DisplayName("getLowStockProducts: Ngưỡng null hoặc âm thì dùng mặc định 5")
+    void getLowStockProducts_NullOrNegative_UsesDefault() {
+        when(productRepository.findByStockQuantityLessThanEqualOrderByStockQuantityAsc(5))
+                .thenReturn(List.of(lowStock1));
+
+        List<ProductResponse> resNull = dashboardService.getLowStockProducts(null);
+        assertThat(resNull).hasSize(1);
+
+        List<ProductResponse> resNeg = dashboardService.getLowStockProducts(-1);
+        assertThat(resNeg).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("getTopSellingProducts: Fallback khi tháng hiện tại rỗng")
+    void getTopSellingProducts_FallbackWhenCurrentMonthEmpty() {
+        BestSellerProjection fallbackProj = mock(BestSellerProjection.class);
+        when(fallbackProj.getProductId()).thenReturn(200L);
+        when(fallbackProj.getProductName()).thenReturn("Fallback Product");
+        when(fallbackProj.getPrice()).thenReturn(BigDecimal.valueOf(300000));
+        when(fallbackProj.getTotalSold()).thenReturn(15L);
+
+        when(orderItemRepository.findBestSellers(any(), any(), any()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of()))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(fallbackProj)));
+
+        List<ProductResponse> list = dashboardService.getTopSellingProducts(null);
+        assertThat(list).hasSize(1);
+        assertThat(list.get(0).getId()).isEqualTo(200L);
+        assertThat(list.get(0).getName()).isEqualTo("Fallback Product");
+    }
+
+    @Test
+    @DisplayName("getTopSellingProducts: Bắt ngoại lệ và trả về mảng rỗng khi OrderItemRepository lỗi")
+    void getTopSellingProducts_Exception_ReturnsEmptyList() {
+        when(orderItemRepository.findBestSellers(any(), any(), any()))
+                .thenThrow(new RuntimeException("Database timeout"));
+
+        List<ProductResponse> list = dashboardService.getTopSellingProducts(0);
+        assertThat(list).isEmpty();
+    }
+
+    @Test
+    @DisplayName("DashboardService: Kiểm thử constructor 5 tham số không có OrderItemRepository")
+    void testFiveParameterConstructor() {
+        DashboardService service5 = new DashboardService(
+                orderRepository,
+                productRepository,
+                userRepository,
+                inventoryTransactionRepository,
+                paymentRepository
+        );
+        assertThat(service5.getTopSellingProducts(5)).isEmpty();
+    }
 }

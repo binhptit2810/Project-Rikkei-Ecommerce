@@ -214,6 +214,52 @@ class InvoicePdfServiceTest {
     }
 
     @Test
+    @DisplayName("generateInvoicePdf: Ném ResourceNotFoundException khi không tìm thấy user")
+    void generateInvoicePdf_UserNotFound_ThrowsResourceNotFoundException() {
+        when(orderRepository.findByIdWithItems(100L)).thenReturn(Optional.of(testOrder));
+        when(userRepository.findByEmail("notfound@example.com")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> invoicePdfService.generateInvoicePdf(100L, "notfound@example.com"))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessageContaining("Người dùng không tồn tại với email: notfound@example.com");
+    }
+
+    @Test
+    @DisplayName("generateInvoicePdf: Tìm thấy đơn qua findById dự phòng và lấy thanh toán qua PaymentRepository")
+    void generateInvoicePdf_FallbackFindByIdAndPaymentRepo() {
+        testOrder.setPayment(null);
+        testOrder.setNote(null);
+        testOrder.getItems().get(0).setSelectedSize(null);
+        testOrder.setOrderStatus(OrderStatus.CANCELLED);
+
+        when(orderRepository.findByIdWithItems(100L)).thenReturn(Optional.empty());
+        when(orderRepository.findById(100L)).thenReturn(Optional.of(testOrder));
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customer));
+        when(paymentRepository.findByOrderId(100L)).thenReturn(Optional.of(vnpayPayment));
+
+        byte[] pdfBytes = invoicePdfService.generateInvoicePdf(100L, "customer@example.com");
+        assertThat(pdfBytes).isNotNull();
+        assertThat(new String(pdfBytes, 0, 5)).isEqualTo("%PDF-");
+    }
+
+    @Test
+    @DisplayName("generateInvoicePdf: Đơn hàng hoàn toàn không có thanh toán")
+    void generateInvoicePdf_NoPayment_Success() {
+        testOrder.setPayment(null);
+        testOrder.setOrderStatus(OrderStatus.PENDING);
+        testOrder.setPaymentStatus(null);
+        testOrder.setDiscountAmount(null);
+
+        when(orderRepository.findByIdWithItems(100L)).thenReturn(Optional.of(testOrder));
+        when(userRepository.findByEmail("customer@example.com")).thenReturn(Optional.of(customer));
+        when(paymentRepository.findByOrderId(100L)).thenReturn(Optional.empty());
+
+        byte[] pdfBytes = invoicePdfService.generateInvoicePdf(100L, "customer@example.com");
+        assertThat(pdfBytes).isNotNull();
+        assertThat(new String(pdfBytes, 0, 5)).isEqualTo("%PDF-");
+    }
+
+    @Test
     @DisplayName("VietnameseNumberToWords: Chuyển đổi số tiền thành chữ tiếng Việt chuẩn xác")
     void testVietnameseNumberToWords() {
         assertThat(VietnameseNumberToWords.toVietnameseWords(BigDecimal.valueOf(1500000)))

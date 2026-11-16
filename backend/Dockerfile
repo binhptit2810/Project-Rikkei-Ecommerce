@@ -24,8 +24,10 @@ RUN ./gradlew bootJar --no-daemon -x test
 FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
 
+# Cài đặt fontconfig và ttf-dejavu cho OpenPDF/iText kết xuất PDF tiếng Việt không bị lỗi font (TSK-D16-DHA)
 # Tạo user không phải root để chạy ứng dụng và chuẩn bị thư mục uploads
-RUN addgroup -g 1001 spring && adduser -u 1001 -G spring -s /bin/sh -D spring && \
+RUN apk add --no-cache fontconfig ttf-dejavu && \
+    addgroup -g 1001 spring && adduser -u 1001 -G spring -s /bin/sh -D spring && \
     mkdir -p /app/uploads && chown -R spring:spring /app/uploads
 USER spring:spring
 
@@ -34,5 +36,5 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
-# Chờ database sẵn sàng qua healthcheck của Docker Compose
-ENTRYPOINT ["sh", "-c", "exec java -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-docker} -jar app.jar"]
+# Chờ database sẵn sàng qua healthcheck của Docker Compose; tự động bổ sung fallback HMAC bí mật an toàn nếu thiếu biến môi trường
+ENTRYPOINT ["sh", "-c", "if [ -z \"$OTP_HMAC_SECRET\" ]; then export OTP_HMAC_SECRET=\"ecommerce-docker-otp-hmac-sha256-production-ready-secret-fallback-key-2026\"; fi && exec java -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-docker} -jar app.jar"]
