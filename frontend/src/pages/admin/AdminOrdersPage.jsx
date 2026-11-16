@@ -272,6 +272,24 @@ export const AdminOrdersPage = () => {
   }
 
   // Xem chi tiết đơn hàng
+  const [downloadingPdfId, setDownloadingPdfId] = useState(null)
+
+  const handleExportInvoice = async (orderId, orderCode) => {
+    try {
+      setDownloadingPdfId(orderId)
+      await orderService.downloadInvoicePdf(orderId, orderCode, true)
+      showToast(`Đã xuất hóa đơn PDF cho đơn #${orderCode || orderId} thành công!`, 'success')
+    } catch (err) {
+      console.error('Lỗi khi xuất hóa đơn PDF:', err)
+      showToast(
+        err.response?.data?.message || 'Không thể xuất hóa đơn PDF. Vui lòng thử lại!',
+        'error'
+      )
+    } finally {
+      setDownloadingPdfId(null)
+    }
+  }
+
   const handleOpenDetailModal = async (order) => {
     setSelectedOrder(order)
     setDetailLoading(true)
@@ -673,16 +691,28 @@ export const AdminOrdersPage = () => {
                         </div>
                       </td>
 
-                      {/* Thao tác: Xem chi tiết */}
+                      {/* Thao tác: Xuất hóa đơn PDF & Xem chi tiết */}
                       <td className="py-3.5 px-4 text-center">
-                        <button
-                          onClick={() => handleOpenDetailModal(order)}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-zinc-900 hover:text-white text-slate-700 font-semibold text-[11px] transition-all cursor-pointer shadow-2xs"
-                          title="Xem chi tiết đơn hàng"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Chi tiết</span>
-                        </button>
+                        <div className="inline-flex items-center gap-1.5 justify-center">
+                          <button
+                            type="button"
+                            onClick={() => handleExportInvoice(order.id, order.orderCode)}
+                            disabled={downloadingPdfId === order.id}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 font-semibold text-[11px] transition-all cursor-pointer shadow-2xs disabled:opacity-50"
+                            title="Xuất hóa đơn PDF"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-blue-600" />
+                            <span>{downloadingPdfId === order.id ? '...' : 'PDF'}</span>
+                          </button>
+                          <button
+                            onClick={() => handleOpenDetailModal(order)}
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-zinc-900 hover:text-white text-slate-700 font-semibold text-[11px] transition-all cursor-pointer shadow-2xs"
+                            title="Xem chi tiết đơn hàng"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>Chi tiết</span>
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )
@@ -987,13 +1017,25 @@ export const AdminOrdersPage = () => {
               <div className="text-xs text-slate-500">
                 Trạng thái: <strong>{selectedOrder.orderStatusDescription || selectedOrder.orderStatus}</strong>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedOrder(null)}
-                className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                Đóng
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleExportInvoice(selectedOrder.id, selectedOrder.orderCode)}
+                  disabled={downloadingPdfId === selectedOrder.id}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
+                  title="Xuất file hóa đơn PDF chuyên nghiệp"
+                >
+                  <FileText className="w-3.5 h-3.5 text-blue-600" />
+                  <span>{downloadingPdfId === selectedOrder.id ? 'Đang xuất PDF...' : 'Xuất hóa đơn PDF'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedOrder(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
             </div>
           </div>
         </div>

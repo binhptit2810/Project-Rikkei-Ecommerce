@@ -53,6 +53,9 @@ class AdminOrderControllerTest {
     @MockBean
     private OrderService orderService;
 
+    @MockBean
+    private com.example.ecommerce.service.InvoicePdfService invoicePdfService;
+
     private OrderResponse sampleOrderResponse() {
         return OrderResponse.builder()
                 .id(1L)
@@ -209,5 +212,20 @@ class AdminOrderControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("GET /api/v1/admin/orders/{id}/invoice-pdf: Admin xuất hóa đơn PDF thành công trả 200 OK")
+    @WithMockUser(username = "admin@example.com", roles = {"ADMIN"})
+    void getAdminOrderInvoicePdf_Success() throws Exception {
+        byte[] fakePdfBytes = "%PDF-1.4 Fake PDF Content for Admin Test".getBytes();
+        when(invoicePdfService.generateInvoicePdf(eq(1L), eq("admin@example.com")))
+                .thenReturn(fakePdfBytes);
+
+        mockMvc.perform(get("/api/v1/admin/orders/1/invoice-pdf"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Type", "application/pdf"))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.header().string("Content-Disposition", "inline; filename=\"invoice-1.pdf\""))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().bytes(fakePdfBytes));
     }
 }

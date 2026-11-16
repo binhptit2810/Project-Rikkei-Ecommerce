@@ -5,11 +5,12 @@ import com.example.ecommerce.dto.request.CreateOrderRequest;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.OrderResponse;
 import com.example.ecommerce.dto.response.PageResponse;
+import com.example.ecommerce.service.InvoicePdfService;
 import com.example.ecommerce.service.OrderService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.*;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -25,9 +26,11 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/v1/orders")
 @RequiredArgsConstructor
+@Slf4j
 public class OrderController {
 
     private final OrderService orderService;
+    private final InvoicePdfService invoicePdfService;
 
     /**
      * Tạo đơn hàng mới từ giỏ hàng.
@@ -107,5 +110,35 @@ public class OrderController {
                 ? orderService.cancelOrder(id, userDetails.getUsername(), reason.trim())
                 : orderService.cancelOrder(id, userDetails.getUsername());
         return ResponseEntity.ok(ApiResponse.success("Hủy đơn hàng thành công", order));
+    }
+
+    /**
+     * Xuất hóa đơn bán hàng định dạng PDF chuyên nghiệp cho đơn hàng.
+     * GET /api/v1/orders/{id}/invoice-pdf
+     *
+     * Người phụ trách: Đặng Thanh Bình (Thành viên 4 - DTB)
+     * DoD: File PDF hóa đơn xuất ra sắc nét, chuẩn định dạng doanh nghiệp,
+     *      đầy đủ mã đơn, logo, danh sách món kèm size, tiền giảm voucher và tiền thanh toán VNPay.
+     *
+     * @param id ID của đơn hàng
+     * @param userDetails Thông tin tài khoản người dùng đang đăng nhập
+     * @return File PDF dạng byte array với MediaType application/pdf
+     */
+    @GetMapping("/{id}/invoice-pdf")
+    @PreAuthorize("hasRole('CUSTOMER') or hasRole('ADMIN')")
+    public ResponseEntity<byte[]> getOrderInvoicePdf(
+            @PathVariable Long id,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        log.info("Yêu cầu xuất PDF hóa đơn cho đơn hàng ID: {} bởi user: {}", id, userDetails.getUsername());
+        byte[] pdfBytes = invoicePdfService.generateInvoicePdf(id, userDetails.getUsername());
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_PDF);
+        headers.setContentDisposition(ContentDisposition.inline()
+                .filename("invoice-" + id + ".pdf")
+                .build());
+        headers.setContentLength(pdfBytes.length);
+
+        return new ResponseEntity<>(pdfBytes, headers, HttpStatus.OK);
     }
 }

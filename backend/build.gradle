@@ -57,6 +57,9 @@ dependencies {
     // Bean Validation
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    // PDF Generation — OpenPDF (LGPL/MPL open-source iText fork)
+    implementation 'com.github.librepdf:openpdf:2.0.3'
+
     // Lombok
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
