@@ -420,8 +420,10 @@ public class ProductService {
         boolean hasVariants = Boolean.TRUE.equals(request.getHasVariants())
                 || (request.getVariants() != null && !request.getVariants().isEmpty());
 
+        Product updatedProduct;
         if (hasVariants && request.getVariants() != null) {
             saveOrUpdateProductVariants(product, request.getVariants());
+            updatedProduct = product;
         } else if (Boolean.FALSE.equals(request.getHasVariants()) && productVariantRepository != null) {
             // Tắt biến thể: kiểm tra xem có biến thể nào đã phát sinh đơn hàng chưa
             List<ProductVariant> existing = productVariantRepository.findByProductId(id);
@@ -433,13 +435,11 @@ public class ProductService {
             }
             productVariantRepository.deleteAll(existing);
             product.setStockQuantity(request.getStockQuantity() != null ? request.getStockQuantity() : 0);
-            productRepository.save(product);
+            updatedProduct = productRepository.save(product);
         } else {
             product.setStockQuantity(request.getStockQuantity() != null ? request.getStockQuantity() : 0);
-            productRepository.save(product);
+            updatedProduct = productRepository.save(product);
         }
-
-        Product updatedProduct = productRepository.save(product);
 
         List<ProductVariantResponse> variantResponses = null;
         if (productVariantRepository != null) {
