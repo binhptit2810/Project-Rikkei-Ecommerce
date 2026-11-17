@@ -901,7 +901,7 @@ public class PaymentService {
                     ? request.getTransactionNote().trim()
                     : "Thanh toán tiền mặt khi nhận hàng (COD)");
             order.setPaymentStatus(PaymentStatus.UNPAID);
-        } else if (method == PaymentMethod.SIMULATED || method == PaymentMethod.VNPAY || method == PaymentMethod.SEPAY) {
+        } else if (method == PaymentMethod.SIMULATED) {
             boolean success = request.isSuccessSimulation();
             if (success) {
                 payment.setStatus(PaymentStatus.PAID);
@@ -920,6 +920,19 @@ public class PaymentService {
                         ? request.getTransactionNote().trim()
                         : "Thanh toán trực tuyến thất bại (FAILED)");
                 order.setPaymentStatus(PaymentStatus.FAILED);
+            }
+        } else if (method == PaymentMethod.SEPAY) {
+            // Thanh toán SePay VietQR bắt buộc phải qua biến động số dư tài khoản ngân hàng MBBank (Webhook)
+            // Tuyệt đối không cho phép client tự ý gọi processPayment xác nhận khi chưa nhận được tiền
+            if (payment.getStatus() != PaymentStatus.PAID) {
+                log.warn("Từ chối tự ý xác nhận thanh toán SEPAY cho đơn hàng #{}. Chưa nhận được Webhook từ SePay.", order.getId());
+                throw new BusinessException("Hệ thống chưa nhận được tiền từ ngân hàng cho đơn hàng #" + order.getOrderCode() + ". Vui lòng quét mã VietQR và chuyển khoản trước khi xác nhận.");
+            }
+        } else if (method == PaymentMethod.VNPAY) {
+            // Thanh toán VNPay bắt buộc phải qua Cổng VNPay Sandbox IPN Webhook
+            if (payment.getStatus() != PaymentStatus.PAID) {
+                log.warn("Từ chối tự ý xác nhận thanh toán VNPAY cho đơn hàng #{}. Chưa nhận được IPN từ VNPay.", order.getId());
+                throw new BusinessException("Giao dịch VNPay chưa được xác nhận từ Cổng thanh toán VNPay.");
             }
         }
 

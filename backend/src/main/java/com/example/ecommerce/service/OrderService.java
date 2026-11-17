@@ -262,11 +262,18 @@ public class OrderService {
         logAfterCommitOrNow(() -> {
             log.info("userId={} | action=CREATE_ORDER | result=SUCCESS | orderId={} | totalAmount={}",
                     userId, savedOrderId, finalTotalAmount);
-            // Gửi email xác nhận đặt hàng thành công tới khách hàng
-            try {
-                emailService.sendOrderConfirmationEmail(user.getEmail(), savedOrder.getRecipientName(), savedOrder);
-            } catch (Exception mailEx) {
-                log.warn("Không thể gửi email xác nhận đặt hàng cho đơn #{}: {}", savedOrder.getOrderCode(), mailEx.getMessage());
+            // Chỉ gửi email xác nhận đặt hàng ngay lập tức cho đơn COD.
+            // Các đơn thanh toán trực tuyến (SEPAY, VNPAY) chỉ gửi email sau khi Cổng thanh toán/Webhook xác nhận đã nhận được tiền!
+            PaymentMethod method = savedOrder.getPayment() != null ? savedOrder.getPayment().getPaymentMethod() : null;
+            if (method == PaymentMethod.COD) {
+                try {
+                    emailService.sendOrderConfirmationEmail(user.getEmail(), savedOrder.getRecipientName(), savedOrder);
+                } catch (Exception mailEx) {
+                    log.warn("Không thể gửi email xác nhận đặt hàng cho đơn #{}: {}", savedOrder.getOrderCode(), mailEx.getMessage());
+                }
+            } else {
+                log.info("Đơn hàng #{} thanh toán qua {}, tạm hoãn gửi email xác nhận cho tới khi SePay/VNPay Webhook xác nhận thanh toán thành công.",
+                        savedOrder.getOrderCode(), method);
             }
         });
 

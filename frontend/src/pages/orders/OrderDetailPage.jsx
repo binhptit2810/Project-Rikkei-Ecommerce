@@ -29,8 +29,6 @@ import { useCartStore } from '../../store/useCartStore'
 import { useToastStore } from '../../store/useToastStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import CancelOrderModal from './CancelOrderModal'
-import SimulatePaymentModal from './SimulatePaymentModal'
-import VNPayQRModal from './VNPayQRModal'
 import {
   OrderStatusBadge,
   PaymentStatusBadge,
@@ -98,28 +96,16 @@ export const OrderDetailPage = () => {
     Boolean(location.state?.orderSuccess || location.state?.justCreated)
   )
 
-  // Thông báo lỗi thanh toán mô phỏng nếu chuyển từ checkout
-  const [paymentFailedNotice, setPaymentFailedNotice] = useState(
-    Boolean(location.state?.paymentFailed)
-  )
-
   // Copy mã đơn
   const [copiedCode, setCopiedCode] = useState(false)
 
   // Cancel order modal
   const [cancelModalOpen, setCancelModalOpen] = useState(false)
 
-  // Simulate payment modal
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false)
-
-  // VNPay QR modal & Inline QR Box
-  const [vnpayQRModalOpen, setVnpayQRModalOpen] = useState(false)
-  const [vnpayQRData, setVnpayQRData] = useState(null)
-  const [loadingVNPayQR, setLoadingVNPayQR] = useState(false)
+  // Inline QR Box (SePay VietQR)
   const [showInlineQR, setShowInlineQR] = useState(true)
   const [copiedStk, setCopiedStk] = useState(false)
   const [copiedAmount, setCopiedAmount] = useState(false)
-  const hasAutoOpenedQR = useRef(false)
 
   const handleCopyText = (text, type) => {
     if (!text || !navigator?.clipboard?.writeText) return
@@ -154,85 +140,6 @@ export const OrderDetailPage = () => {
     }
   }
 
-  const handleOpenVNPayQR = async () => {
-    if (!order?.id) return
-    setLoadingVNPayQR(true)
-    try {
-      const res = await paymentService.createVNPayPayment(
-        order.id,
-        'NCB',
-        `Thanh toan don hang #${order.orderCode || order.id}`
-      )
-      const data = res?.data || res
-      setVnpayQRData(data)
-      setVnpayQRModalOpen(true)
-    } catch (err) {
-      const fallbackQR = {
-        orderId: order.id,
-        orderCode: order.orderCode,
-        amount: order.totalAmount,
-        bankCode: 'NCB',
-        bankName: 'Ngân hàng Quốc Dân (NCB)',
-        accountNumber: '9704198526191432198',
-        accountName: 'CONG TY TNHH E-COMMERCE RIKKEI',
-        vnpTxnRef: order.transactionCode || `PAY-${order.orderCode || order.id}`,
-        qrCodeUrl: `https://img.vietqr.io/image/NCB-9704198526191432198-compact2.png?amount=${Math.round(
-          order.totalAmount || 0
-        )}&addInfo=${encodeURIComponent(order.orderCode || order.id)}&accountName=CONG%20TY%20TNHH%20E-COMMERCE%20RIKKEI`,
-      }
-      setVnpayQRData(fallbackQR)
-      setVnpayQRModalOpen(true)
-    } finally {
-      setLoadingVNPayQR(false)
-    }
-  }
-
-  // Tự động mở modal mã QR VNPAY nếu được điều hướng từ CheckoutPage với cờ openVNPayQR (chỉ cho đơn thanh toán online chưa thanh toán)
-  useEffect(() => {
-    if (
-      location.state?.openVNPayQR &&
-      !hasAutoOpenedQR.current &&
-      order?.paymentMethod !== 'COD' &&
-      order?.paymentStatus !== 'PAID' &&
-      order?.orderStatus !== 'CONFIRMED'
-    ) {
-      hasAutoOpenedQR.current = true
-      if (location.state?.vnpayPaymentData) {
-        setVnpayQRData(location.state.vnpayPaymentData)
-      }
-      setVnpayQRModalOpen(true)
-
-      // Xóa cờ openVNPayQR khỏi router history state để không bị tự mở lại khi re-render
-      try {
-        const cleanState = { ...location.state }
-        delete cleanState.openVNPayQR
-        window.history.replaceState({ ...window.history.state, usr: cleanState }, document.title)
-      } catch (e) {}
-    }
-  }, [location.state, order?.paymentMethod, order?.paymentStatus, order?.orderStatus])
-
-  // Khởi tạo dữ liệu mã QR hiển thị sẵn trên trang nếu đơn chưa thanh toán VÀ là phương thức thanh toán trực tuyến
-  useEffect(() => {
-    const isOnline =
-      order?.paymentMethod === 'VNPAY' || order?.paymentMethod === 'SIMULATED'
-    if (order?.id && order?.paymentStatus === 'UNPAID' && isOnline && !vnpayQRData) {
-      const defaultQR = {
-        orderId: order.id,
-        orderCode: order.orderCode,
-        amount: order.totalAmount,
-        bankCode: 'NCB',
-        bankName: 'Ngân hàng Quốc Dân (NCB)',
-        accountNumber: '9704198526191432198',
-        accountName: 'CONG TY TNHH E-COMMERCE RIKKEI',
-        vnpTxnRef: order.transactionCode || `PAY-${order.orderCode || order.id}`,
-        qrCodeUrl: `https://img.vietqr.io/image/NCB-9704198526191432198-compact2.png?amount=${Math.round(
-          order.totalAmount || 0
-        )}&addInfo=${encodeURIComponent(order.orderCode || order.id)}&accountName=CONG%20TY%20TNHH%20E-COMMERCE%20RIKKEI`,
-      }
-      setVnpayQRData(defaultQR)
-    }
-  }, [order?.id, order?.paymentStatus, order?.paymentMethod, vnpayQRData])
-
   // Reorder loading
   const [reordering, setReordering] = useState(false)
 
@@ -246,9 +153,17 @@ export const OrderDetailPage = () => {
     })
   }
 
-  // Tự động kích hoạt toast chúc mừng nếu được điều hướng từ CheckoutPage (biến mất sau 2s)
+  // Tự động kích hoạt thông báo nếu được điều hướng từ CheckoutPage
   useEffect(() => {
-    if (location.state?.orderSuccess || location.state?.justCreated) {
+    if (location.state?.waitingPayment) {
+      setJustCreated(true)
+      useToastStore.getState().showToast({
+        title: 'Đơn hàng đang chờ thanh toán',
+        message: `Mã đơn #${location.state.orderCode || ''}. Vui lòng chuyển khoản đúng số tiền để hệ thống tự động xác nhận đơn hàng!`,
+        type: 'info',
+        duration: 3000,
+      })
+    } else if (location.state?.orderSuccess || location.state?.justCreated) {
       setJustCreated(true)
       if (location.state?.paymentFailed) {
         useToastStore.getState().showToast({
@@ -269,15 +184,27 @@ export const OrderDetailPage = () => {
   }, [location.state])
 
   // Tải chi tiết đơn hàng và tra cứu thanh toán tương ứng
-  const fetchOrderDetail = useCallback(async () => {
+  const fetchOrderDetail = useCallback(async (isSilent = false) => {
     if (!id) return
-    setLoading(true)
-    setError(null)
+    if (!isSilent) {
+      setLoading(true)
+      setError(null)
+    }
 
     try {
       const res = await orderService.getOrderById(id)
       const orderData = res?.data || res
-      setOrder(orderData)
+      setOrder((prev) => {
+        if (!prev) return orderData
+        if (
+          prev.orderStatus === orderData.orderStatus &&
+          prev.paymentStatus === orderData.paymentStatus &&
+          prev.updatedAt === orderData.updatedAt
+        ) {
+          return prev
+        }
+        return orderData
+      })
 
       // Tra cứu thêm chi tiết thanh toán giao dịch nếu có
       try {
@@ -287,29 +214,32 @@ export const OrderDetailPage = () => {
         }
       } catch {
         // Tra cứu thanh toán thất bại (chưa tạo bản ghi hoặc đơn COD chờ thu) không làm crash trang chi tiết
-        setPaymentInfo(null)
       }
     } catch (err) {
-      if (err.response?.status === 401) {
-        showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error')
-        navigate('/login')
-        return
+      if (!isSilent) {
+        if (err.response?.status === 401) {
+          showToast('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.', 'error')
+          navigate('/login')
+          return
+        }
+        if (err.response?.status === 403) {
+          setError('Bạn không có quyền truy cập thông tin đơn hàng này.')
+          return
+        }
+        if (err.response?.status === 404) {
+          setError('Đơn hàng không tồn tại hoặc đã bị xóa.')
+          return
+        }
+        const msg =
+          err.response?.data?.message ||
+          err.message ||
+          'Không tìm thấy thông tin đơn hàng hoặc bạn không có quyền xem đơn hàng này.'
+        setError(msg)
       }
-      if (err.response?.status === 403) {
-        setError('Bạn không có quyền truy cập thông tin đơn hàng này.')
-        return
-      }
-      if (err.response?.status === 404) {
-        setError('Đơn hàng không tồn tại hoặc đã bị xóa.')
-        return
-      }
-      const msg =
-        err.response?.data?.message ||
-        err.message ||
-        'Không tìm thấy thông tin đơn hàng hoặc bạn không có quyền xem đơn hàng này.'
-      setError(msg)
     } finally {
-      setLoading(false)
+      if (!isSilent) {
+        setLoading(false)
+      }
     }
   }, [id, navigate])
 
@@ -317,18 +247,18 @@ export const OrderDetailPage = () => {
     fetchOrderDetail()
   }, [fetchOrderDetail])
 
-  // Tự động kiểm tra trạng thái thanh toán khi đơn hàng đang chờ SePay hoặc VNPay
+  // Tự động kiểm tra trạng thái thanh toán khi đơn hàng đang chờ SePay
   useEffect(() => {
     if (!order?.id) return
     const isWaiting =
-      (order.paymentMethod === 'SEPAY' || order.paymentMethod === 'VNPAY') &&
+      order.paymentMethod === 'SEPAY' &&
       order.paymentStatus !== 'PAID' &&
       order.orderStatus === 'PENDING'
 
     if (!isWaiting) return
 
     const timer = setInterval(() => {
-      fetchOrderDetail()
+      fetchOrderDetail(true)
     }, 3000)
 
     return () => clearInterval(timer)
@@ -383,68 +313,35 @@ export const OrderDetailPage = () => {
     }
   }
 
-  // Xử lý khi thanh toán trực tuyến thành công
-  const handlePaymentSuccess = (paymentData) => {
-    // 1. Tắt ngay lập tức modal QR, modal thanh toán và ô QR trên trang
-    setVnpayQRModalOpen(false)
-    setPaymentModalOpen(false)
-    setShowInlineQR(false)
-
-    // 2. Xóa cờ openVNPayQR trong router history state
-    try {
-      const cleanState = { ...location.state }
-      delete cleanState.openVNPayQR
-      delete cleanState.orderSuccess
-      window.history.replaceState({ ...window.history.state, usr: cleanState }, document.title)
-    } catch (e) {}
-
-    // 3. Cập nhật state đơn hàng: ĐÃ THANH TOÁN (PAID) & ĐÃ XÁC NHẬN (CONFIRMED)
-    setOrder((prev) => ({
-      ...prev,
-      paymentStatus: 'PAID',
-      paymentStatusDescription: 'Đã thanh toán',
-      orderStatus: 'CONFIRMED',
-      orderStatusDescription: 'Đã xác nhận',
-      transactionCode: paymentData?.transactionCode || prev?.transactionCode,
-    }))
-    setPaymentInfo(paymentData)
-    clearCart()
-    setPaymentFailedNotice(false)
-    showToast(
-      `🎉 Thanh toán thành công cho đơn #${order?.orderCode || order?.id}! Đơn hàng đã được xác nhận.`,
-      'success'
-    )
-    fetchOrderDetail()
-  }
-
-  // Xử lý khi thanh toán mô phỏng thất bại
-  const handlePaymentError = (errorMsg) => {
-    showToast(errorMsg || 'Thanh toán trực tuyến thất bại.', 'error')
-    fetchOrderDetail()
-  }
-
   const [confirmingPayment, setConfirmingPayment] = useState(false)
 
-  // Xử lý xác nhận chuyển khoản trực tiếp từ Banner QR trên trang
-  const handleInlineConfirmPaid = async () => {
+  // Xử lý kiểm tra giao dịch chuyển khoản thực tế (không cho phép tự ý xác nhận khi chưa chuyển tiền)
+  const handleCheckPaymentStatus = async () => {
     if (!order?.id || confirmingPayment) return
     setConfirmingPayment(true)
     try {
-      const note = `Xác nhận thanh toán thành công qua VNPAY-QR (${vnpayQRData?.bankCode || 'NCB'})`
-      const res = await paymentService.simulatePayment(
-        order.id,
-        true,
-        note,
-        order.paymentMethod || 'VNPAY'
-      )
-      const data = res?.data || res
-      if (data?.status === 'PAID') {
-        handlePaymentSuccess(data)
+      // 1. Lấy thông tin đơn hàng mới nhất từ database
+      const res = await orderService.getOrderById(order.id)
+      const freshOrder = res?.data || res
+
+      // 2. Kiểm tra nếu SePay Webhook hoặc cổng thanh toán đã xác nhận PAID
+      if (freshOrder?.paymentStatus === 'PAID') {
+        setOrder(freshOrder)
+        setShowInlineQR(false)
+        showToast(
+          `✓ Thanh toán thành công! Hệ thống đã ghi nhận tiền chuyển khoản cho đơn #${order.orderCode || order.id}.`,
+          'success'
+        )
       } else {
-        showToast('Giao dịch chưa được ghi nhận thành công.', 'error')
+        // 3. Nếu chưa nhận được tiền: THÔNG BÁO RÕ RÀNG VÀ TUYỆT ĐỐI KHÔNG XÁC NHẬN ĐƠN HÀNG
+        const bankInfo = order?.paymentMethod === 'SEPAY' ? 'tài khoản MBBank (0372987662)' : 'cổng thanh toán'
+        showToast(
+          `Hệ thống chưa nhận được tiền vào ${bankInfo} cho đơn hàng #${order.orderCode || order.id}. Quý khách vui lòng quét mã VietQR và hoàn tất chuyển tiền trước!`,
+          'error'
+        )
       }
     } catch (err) {
-      showToast(err.response?.data?.message || err.message || 'Lỗi khi xác nhận giao dịch.', 'error')
+      showToast(err.response?.data?.message || err.message || 'Lỗi khi kiểm tra trạng thái thanh toán.', 'error')
     } finally {
       setConfirmingPayment(false)
     }
@@ -559,29 +456,10 @@ export const OrderDetailPage = () => {
         onError={handleCancelError}
       />
 
-      {/* Modal Mô phỏng thanh toán trực tuyến */}
-      <SimulatePaymentModal
-        isOpen={paymentModalOpen}
-        order={order}
-        onClose={() => setPaymentModalOpen(false)}
-        onSuccess={handlePaymentSuccess}
-        onError={handlePaymentError}
-      />
-
-      {/* Modal Quét mã VNPAY-QR */}
-      <VNPayQRModal
-        isOpen={vnpayQRModalOpen}
-        order={order}
-        paymentData={vnpayQRData}
-        onClose={() => setVnpayQRModalOpen(false)}
-        onSuccess={handlePaymentSuccess}
-        onError={handlePaymentError}
-      />
-
       <div className="max-w-7xl mx-auto">
         {/* Thông báo chúc mừng khi vừa đặt hàng thành công */}
-        {justCreated && !paymentFailedNotice && (
-          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 shadow-sm flex items-start justify-between gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+        {justCreated && (
+          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-950 shadow-sm flex items-start justify-between gap-4">
             <div className="flex items-start gap-3.5">
               <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm shadow-emerald-200">
                 <CheckCircle2 className="w-6 h-6" />
@@ -599,51 +477,6 @@ export const OrderDetailPage = () => {
             <button
               onClick={() => setJustCreated(false)}
               className="text-emerald-700 hover:text-emerald-950 p-1.5 rounded-lg hover:bg-emerald-100 transition-colors cursor-pointer shrink-0"
-              title="Đóng thông báo"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* Banner thông báo khi thanh toán mô phỏng thất bại */}
-        {paymentFailedNotice && (
-          <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 shadow-sm flex items-start justify-between gap-4 animate-in fade-in duration-300">
-            <div className="flex items-start gap-3.5">
-              <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <div>
-                <h3 className="text-sm sm:text-base font-bold text-amber-950">
-                  ⚠️ Đơn hàng #{order?.orderCode || location.state?.orderCode || id} chưa hoàn tất thanh toán
-                </h3>
-                <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                  Giao dịch thanh toán mô phỏng chưa thành công. Giỏ hàng của bạn đã được giữ nguyên và đơn hàng vẫn đang ở trạng thái Chờ xác nhận. Bạn có thể nhấn nút bên dưới để thanh toán lại.
-                </p>
-                <div className="flex flex-wrap items-center gap-2 mt-3">
-                  <button
-                    type="button"
-                    onClick={handleOpenVNPayQR}
-                    disabled={loadingVNPayQR}
-                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors shadow-md shadow-blue-500/20 cursor-pointer disabled:opacity-50"
-                  >
-                    <QrCode className="w-3.5 h-3.5" />
-                    <span>{loadingVNPayQR ? 'Đang tạo QR...' : 'Quét mã VNPAY-QR'}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPaymentModalOpen(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 transition-colors cursor-pointer"
-                  >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    <span>Mô phỏng tức thì</span>
-                  </button>
-                </div>
-              </div>
-            </div>
-            <button
-              onClick={() => setPaymentFailedNotice(false)}
-              className="text-amber-700 hover:text-amber-950 p-1.5 rounded-lg hover:bg-amber-100 transition-colors cursor-pointer shrink-0"
               title="Đóng thông báo"
             >
               <X className="w-4 h-4" />
@@ -935,7 +768,7 @@ export const OrderDetailPage = () => {
               order.paymentStatus !== 'PAID' &&
               order.orderStatus === 'PENDING' &&
               showInlineQR && (
-              <div className="relative bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/90 rounded-3xl border-2 border-emerald-300 shadow-md p-6 sm:p-7 flex flex-col md:flex-row items-center gap-6 animate-in fade-in duration-300">
+              <div className="relative bg-gradient-to-br from-emerald-50/90 via-white to-teal-50/90 rounded-3xl border-2 border-emerald-300 shadow-md p-6 sm:p-7 flex flex-col md:flex-row items-center gap-6">
                 {/* Nút đóng ô QR */}
                 <button
                   type="button"
@@ -946,24 +779,29 @@ export const OrderDetailPage = () => {
                   <X className="w-5 h-5" />
                 </button>
 
-                <div className="bg-white p-3 rounded-2xl border border-emerald-200 shadow-sm shrink-0 text-center">
-                  <img
-                    src={`https://qr.sepay.vn/img?acc=0372987662&bank=MBBank&amount=${Math.round(
-                      order.totalAmount || 0
-                    )}&des=${encodeURIComponent(order.orderCode || `ORD-${order.id}`)}&template=compact2`}
-                    alt="Mã VietQR SePay MBBank"
-                    className="w-48 h-48 sm:w-56 sm:h-56 object-contain rounded-xl mx-auto shadow-xs"
-                    onError={(e) => {
-                      e.target.onerror = null
-                      e.target.src =
-                        'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' +
-                        encodeURIComponent(
-                          `SEPAY-ORDER:${order.orderCode || order.id}|AMOUNT:${order.totalAmount}|ACC:0372987662`
-                        )
-                    }}
-                  />
+                <div className="bg-white p-3 rounded-2xl border border-emerald-200 shadow-sm shrink-0 text-center w-56 sm:w-64">
+                  <div className="w-48 h-48 sm:w-56 sm:h-56 mx-auto bg-slate-50 rounded-xl overflow-hidden flex items-center justify-center">
+                    <img
+                      src={`https://qr.sepay.vn/img?acc=0372987662&bank=MBBank&amount=${Math.round(
+                        order.totalAmount || 0
+                      )}&des=${encodeURIComponent(order.orderCode || `ORD-${order.id}`)}&template=compact2`}
+                      alt="Mã VietQR SePay MBBank"
+                      width={224}
+                      height={224}
+                      loading="eager"
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        e.target.onerror = null
+                        e.target.src =
+                          'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' +
+                          encodeURIComponent(
+                            `SEPAY-ORDER:${order.orderCode || order.id}|AMOUNT:${order.totalAmount}|ACC:0372987662`
+                          )
+                      }}
+                    />
+                  </div>
                   <div className="flex items-center justify-center gap-1.5 mt-2 text-[11px] font-bold text-emerald-700">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
                     <span>Tự động khớp lệnh 24/7</span>
                   </div>
                 </div>
@@ -1041,154 +879,47 @@ export const OrderDetailPage = () => {
                     <button
                       type="button"
                       disabled={confirmingPayment}
-                      onClick={handleInlineConfirmPaid}
+                      onClick={handleCheckPaymentStatus}
                       className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.98] transition-all shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {confirmingPayment ? (
                         <LoadingSpinner size="sm" />
                       ) : (
-                        <Check className="w-4 h-4" />
+                        <RefreshCw className="w-4 h-4" />
                       )}
-                      <span>✓ Tôi đã chuyển khoản xong</span>
+                      <span>{confirmingPayment ? 'Đang kiểm tra biến động số dư...' : 'Kiểm tra trạng thái chuyển khoản'}</span>
                     </button>
                     <div className="flex items-center gap-2 text-xs text-slate-500">
-                      <RefreshCw className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
-                      <span>Hệ thống đang tự động lắng nghe SePay Webhook...</span>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                      <span>Hệ thống tự động xác nhận ngay khi tiền vào MBBank...</span>
                     </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 2. Banner/Card hiển thị Mã QR thanh toán VNPAY (Chỉ hiển thị khi chọn thanh toán online VNPAY / SIMULATED và chưa thanh toán) */}
-            {(order.paymentMethod === 'VNPAY' || order.paymentMethod === 'SIMULATED') &&
-              order.paymentStatus !== 'PAID' &&
-              order.orderStatus === 'PENDING' &&
-              showInlineQR && (
-              <div className="relative bg-gradient-to-br from-blue-50/90 via-white to-indigo-50/90 rounded-3xl border-2 border-blue-200 shadow-md p-6 sm:p-7 flex flex-col md:flex-row items-center gap-6 animate-in fade-in duration-300">
-                {/* Nút đóng ô QR */}
-                <button
-                  type="button"
-                  onClick={() => setShowInlineQR(false)}
-                  className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
-                  title="Đóng ô mã QR"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-
-                <div className="bg-white p-3 rounded-2xl border border-blue-200 shadow-sm shrink-0 text-center">
-                  <img
-                    src={
-                      vnpayQRData?.qrCodeUrl ||
-                      `https://img.vietqr.io/image/NCB-9704198526191432198-compact2.png?amount=${Math.round(
-                        order.totalAmount || 0
-                      )}&addInfo=${encodeURIComponent(
-                        order.transactionCode || order.orderCode || `ORD-${order.id}`
-                      )}&accountName=CONG%20TY%20TNHH%20E-COMMERCE%20RIKKEI`
-                    }
-                    alt="Mã QR thanh toán VNPAY"
-                    className="w-48 h-48 sm:w-56 sm:h-56 object-contain rounded-xl mx-auto shadow-xs"
-                    onError={(e) => {
-                      e.target.onerror = null
-                      e.target.src =
-                        'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' +
-                        encodeURIComponent(
-                          `VNPAY-ORDER:${order.orderCode || order.id}|AMOUNT:${order.totalAmount}|ACC:9704198526191432198`
-                        )
-                    }}
-                  />
-                  <span className="text-[10px] font-extrabold text-blue-700 uppercase tracking-wider block mt-2">
-                    Quét bằng App Ngân hàng
-                  </span>
-                </div>
-
-                <div className="flex-1 space-y-3.5 w-full">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-gradient-to-r from-blue-600 to-indigo-600 text-white tracking-wider shadow-xs">
-                      VNPAY-QR (Mô phỏng)
-                    </span>
-                    <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                      Mã QR thanh toán đơn hàng #{order.orderCode}
-                    </h3>
-                  </div>
-
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    Vui lòng mở ứng dụng ngân hàng hoặc ví VNPAY trên điện thoại, quét mã QR bên cạnh để chuyển khoản chính xác số tiền:{' '}
-                    <span className="font-extrabold text-blue-700 text-sm">
-                      {formatPrice(order.totalAmount)}
-                    </span>
-                  </p>
-
-                  <div className="bg-white/95 rounded-2xl p-3.5 border border-slate-200/90 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs shadow-2xs">
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Ngân hàng thụ hưởng:</span>
-                      <span className="font-bold text-slate-900">Quốc Dân (NCB)</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Số tài khoản:</span>
-                      <span className="font-mono font-bold text-slate-900">9704198526191432198</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Chủ tài khoản:</span>
-                      <span className="font-bold text-slate-900">CONG TY TNHH E-COMMERCE RIKKEI</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 block text-[11px]">Nội dung chuyển khoản:</span>
-                      <span className="font-mono font-bold text-blue-700">
-                        {order.transactionCode || order.orderCode}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-3 pt-1">
-                    <button
-                      type="button"
-                      disabled={confirmingPayment}
-                      onClick={handleInlineConfirmPaid}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 active:scale-[0.98] transition-all shadow-md shadow-emerald-500/20 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      {confirmingPayment ? (
-                        <LoadingSpinner size="sm" />
-                      ) : (
-                        <Check className="w-4 h-4" />
-                      )}
-                      <span>✓ Tôi đã hoàn tất chuyển khoản</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleOpenVNPayQR}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-blue-700 bg-blue-100/80 hover:bg-blue-100 transition-colors cursor-pointer"
-                    >
-                      <QrCode className="w-3.5 h-3.5" />
-                      <span>Xem mã phóng to</span>
-                    </button>
                   </div>
                 </div>
               </div>
             )}
 
             {/* 2b. Banner hiển thị khi đơn hàng đã thanh toán online thành công và được xác nhận */}
-            {(order.paymentMethod === 'VNPAY' || order.paymentMethod === 'SIMULATED' || order.paymentMethod === 'SEPAY') &&
+            {order.paymentMethod === 'SEPAY' &&
               order.paymentStatus === 'PAID' &&
               order.orderStatus !== 'CANCELLED' && (
-              <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 rounded-3xl border-2 border-emerald-300 shadow-md p-6 sm:p-7 flex flex-col sm:flex-row items-center gap-5 animate-in fade-in duration-300">
+              <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 rounded-3xl border-2 border-emerald-300 shadow-md p-6 sm:p-7 flex flex-col sm:flex-row items-center gap-5">
                 <div className="w-16 h-16 rounded-2xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-200">
                   <CheckCircle2 className="w-8 h-8" />
                 </div>
                 <div className="flex-1 space-y-1 text-center sm:text-left">
                   <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2">
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-emerald-600 text-white tracking-wider">
-                      Đã thanh toán online
+                      Đã thanh toán qua MBBank
                     </span>
                     <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-blue-600 text-white tracking-wider">
                       Đơn hàng đã được xác nhận
                     </span>
                   </div>
                   <h3 className="text-base sm:text-lg font-black text-slate-900 tracking-tight">
-                    Thanh toán trực tuyến thành công cho đơn hàng #{order.orderCode}
+                    Thanh toán VietQR thành công cho đơn hàng #{order.orderCode}
                   </h3>
                   <p className="text-xs text-slate-600 leading-relaxed">
-                    Hệ thống đã ghi nhận thanh toán {formatPrice(order.totalAmount)} qua {order.paymentMethodDescription || order.paymentMethod}. Đơn hàng đã được xác nhận và đang được chuyển sang bộ phận chuẩn bị hàng.
+                    Hệ thống đã nhận đủ {formatPrice(order.totalAmount)} từ tài khoản MBBank. Đơn hàng đã được xác nhận thành công và đang được chuẩn bị hàng!
                   </p>
                 </div>
               </div>
@@ -1365,31 +1096,6 @@ export const OrderDetailPage = () => {
                       </div>
                     )}
 
-                    {/* Nút hành động thanh toán mô phỏng (Chỉ áp dụng khi chọn thanh toán online VNPAY / SIMULATED) */}
-                    {(order.paymentMethod === 'VNPAY' || order.paymentMethod === 'SIMULATED') &&
-                      order.paymentStatus !== 'PAID' &&
-                      order.orderStatus !== 'CANCELLED' && (
-                      <div className="pt-3 border-t border-slate-100 space-y-2">
-                        <button
-                          type="button"
-                          onClick={handleOpenVNPayQR}
-                          disabled={loadingVNPayQR}
-                          className="w-full py-2.5 px-3 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-md shadow-blue-500/20 disabled:opacity-50"
-                        >
-                          <QrCode className="w-3.5 h-3.5" />
-                          <span>{loadingVNPayQR ? 'Đang tạo QR...' : 'Quét mã VNPAY-QR'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPaymentModalOpen(true)}
-                          className="w-full py-2.5 px-3 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                        >
-                          <CreditCard className="w-3.5 h-3.5" />
-                          <span>Mô phỏng tức thì</span>
-                        </button>
-                      </div>
-                    )}
-
                     {/* Nút hành động cho phương thức SePay VietQR */}
                     {order.paymentMethod === 'SEPAY' &&
                       order.paymentStatus !== 'PAID' &&
@@ -1405,12 +1111,12 @@ export const OrderDetailPage = () => {
                         </button>
                         <button
                           type="button"
-                          onClick={handleInlineConfirmPaid}
+                          onClick={handleCheckPaymentStatus}
                           disabled={confirmingPayment}
                           className="w-full py-2.5 px-3 rounded-xl text-xs font-bold text-emerald-800 bg-emerald-100 hover:bg-emerald-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <Check className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>{confirmingPayment ? 'Đang xác nhận...' : 'Mô phỏng xác nhận SePay'}</span>
+                          <RefreshCw className="w-3.5 h-3.5 text-emerald-700" />
+                          <span>{confirmingPayment ? 'Đang kiểm tra...' : 'Kiểm tra tiền đã vào chưa'}</span>
                         </button>
                       </div>
                     )}
