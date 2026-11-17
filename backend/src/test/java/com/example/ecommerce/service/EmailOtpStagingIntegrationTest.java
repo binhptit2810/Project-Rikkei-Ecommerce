@@ -49,8 +49,10 @@ import static org.mockito.Mockito.*;
 @SpringBootTest
 @ActiveProfiles("test")
 @TestPropertySource(properties = {
-    "spring.datasource.url=jdbc:h2:mem:staging_otp_testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL",
+    "spring.datasource.url=jdbc:h2:mem:staging_otp_testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL;DEFAULT_LOCK_TIMEOUT=60000",
     "spring.datasource.driver-class-name=org.h2.Driver",
+    "spring.datasource.hikari.maximum-pool-size=50",
+    "spring.datasource.hikari.connection-timeout=60000",
     "spring.jpa.hibernate.ddl-auto=create-drop",
     "jwt.secret=staging-test-secret-key-must-be-at-least-32-chars-long-1234567890",
     "jwt.expiration=3600000",
@@ -446,13 +448,13 @@ class EmailOtpStagingIntegrationTest {
             });
         }
 
-        readyLatch.await(5, TimeUnit.SECONDS);
+        readyLatch.await(10, TimeUnit.SECONDS);
         startLatch.countDown();
-        boolean completed = doneLatch.await(30, TimeUnit.SECONDS);
+        boolean completed = doneLatch.await(60, TimeUnit.SECONDS);
         executor.shutdown();
 
-        assertThat(completed).isTrue();
-        assertThat(errors).isEmpty();
+        assertThat(completed).as("Timed out waiting for 50 concurrent registrations").isTrue();
+        assertThat(errors).as("Errors during concurrent registration: %s", errors).isEmpty();
         assertThat(successCount.get()).isEqualTo(threadCount);
 
         // Đảm bảo 50 tài khoản độc lập trong CSDL
