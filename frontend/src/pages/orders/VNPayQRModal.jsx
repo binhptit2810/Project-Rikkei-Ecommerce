@@ -98,19 +98,25 @@ export const VNPayQRModal = ({
         ? `Xác nhận thanh toán thành công qua VNPAY-QR (${bankCode})`
         : `Mô phỏng thanh toán thất bại qua VNPAY-QR (${bankCode})`
 
-      const res = await paymentService.simulatePayment(order.id, isSuccess, note)
+      const res = await paymentService.simulatePayment(
+        order.id,
+        isSuccess,
+        note,
+        order.paymentMethod || 'VNPAY'
+      )
       const data = res?.data || res
+
+      // Tắt ô QR / modal ngay lập tức khi hoàn tất thanh toán
+      onClose()
 
       if (data?.status === 'PAID') {
         if (onSuccess) {
           onSuccess(data)
         }
-        onClose()
       } else {
         if (onError) {
           onError('Giao dịch VNPAY-QR thất bại hoặc bị từ chối.')
         }
-        onClose()
       }
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'Lỗi khi xác nhận giao dịch VNPAY.'

@@ -14,6 +14,7 @@ import {
   Ticket,
   ChevronRight,
   X,
+  QrCode,
 } from 'lucide-react'
 import { useCartStore } from '../../store/useCartStore'
 import { useAuthStore } from '../../store/useAuthStore'
@@ -214,6 +215,24 @@ export const CheckoutPage = () => {
       })
 
       // Xử lý theo phương thức thanh toán
+      if (formData.paymentMethod === 'SEPAY') {
+        if (!isBuyNow) {
+          clearCart()
+        }
+
+        navigate(`/orders/${createdOrder.id}`, {
+          state: {
+            orderSuccess: true,
+            justCreated: true,
+            openSePayQR: true,
+            orderCode: createdOrder.orderCode,
+            totalAmount: createdOrder.totalAmount,
+          },
+          replace: true,
+        })
+        return
+      }
+
       if (formData.paymentMethod === 'VNPAY' || formData.paymentMethod === 'SIMULATED') {
         let vnpData = null
         try {
@@ -494,6 +513,60 @@ export const CheckoutPage = () => {
                       </p>
                     </div>
                   </label>
+
+                  {/* Chuyển khoản VietQR tự động qua SePay (MBBank) */}
+                  <div
+                    className={`rounded-2xl border transition-all ${formData.paymentMethod === 'SEPAY'
+                      ? 'border-emerald-600 bg-emerald-50/50 shadow-sm'
+                      : 'border-slate-200 hover:border-slate-300'
+                      }`}
+                  >
+                    <label
+                      className={`flex items-start gap-3.5 p-4 cursor-pointer ${isSubmitting ? 'pointer-events-none opacity-70' : ''
+                        }`}
+                    >
+                      <input
+                        type="radio"
+                        name="paymentMethod"
+                        value="SEPAY"
+                        checked={formData.paymentMethod === 'SEPAY'}
+                        onChange={handleChange}
+                        disabled={isSubmitting}
+                        className="mt-0.5 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <QrCode className="w-4 h-4 text-emerald-600" />
+                          <span className="font-bold text-sm text-slate-900">
+                            Chuyển khoản VietQR qua SePay (MBBank)
+                          </span>
+                          <span className="text-[10px] uppercase font-extrabold tracking-wider px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                            Tự động 24/7
+                          </span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          Quét mã VietQR trên ứng dụng ngân hàng. Hệ thống tự động xác nhận đơn hàng ngay khi nhận được tiền.
+                        </p>
+                      </div>
+                    </label>
+
+                    {formData.paymentMethod === 'SEPAY' && (
+                      <div className="px-4 pb-4 pt-2 border-t border-emerald-200/60 pl-11 space-y-1.5 text-xs text-slate-600">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-700">Ngân hàng:</span>
+                          <span className="font-bold text-slate-900">MBBank (Ngân Hàng TMCP Quân Đội)</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-700">Số tài khoản:</span>
+                          <span className="font-mono font-bold text-slate-900">0372987662</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-slate-700">Chủ tài khoản:</span>
+                          <span className="font-bold text-slate-900">DANG THANH BINH</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* Cổng thanh toán VNPay Sandbox */}
                   <div

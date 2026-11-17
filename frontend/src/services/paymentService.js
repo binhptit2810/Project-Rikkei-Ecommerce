@@ -16,17 +16,23 @@ export const paymentService = {
   },
 
   /**
-   * Mô phỏng thanh toán trực tuyến thành công (PAID) hoặc thất bại (FAILED)
+   * Mô phỏng / Xác nhận thanh toán trực tuyến thành công (PAID) hoặc thất bại (FAILED)
    * @param {number|string} orderId
    * @param {boolean} simulateSuccess true nếu thành công, false nếu thất bại
    * @param {string} [transactionNote]
+   * @param {string} [paymentMethod] Phương thức thanh toán (VNPAY hoặc SIMULATED)
    */
-  simulatePayment: async (orderId, simulateSuccess = true, transactionNote = '') => {
-    const response = await apiClient.post(`/payments/order/${orderId}`, {
-      paymentMethod: 'SIMULATED',
+  simulatePayment: async (orderId, simulateSuccess = true, transactionNote = '', paymentMethod = null) => {
+    const payload = {
       simulateSuccess,
-      transactionNote: transactionNote || (simulateSuccess ? 'Mô phỏng thanh toán trực tuyến thành công' : 'Mô phỏng thanh toán thất bại'),
-    })
+      transactionNote: transactionNote || (simulateSuccess ? 'Thanh toán trực tuyến thành công' : 'Thanh toán trực tuyến thất bại'),
+    }
+    if (paymentMethod) {
+      payload.paymentMethod = paymentMethod
+    } else {
+      payload.paymentMethod = 'SIMULATED'
+    }
+    const response = await apiClient.post(`/payments/order/${orderId}`, payload)
     return response.data
   },
 
@@ -69,6 +75,27 @@ export const paymentService = {
    */
   handleVNPayCallback: async (queryParams) => {
     const response = await apiClient.get('/payments/vnpay-callback', { params: queryParams })
+    return response.data
+  },
+
+  /**
+   * Lấy thông tin thanh toán VietQR SePay (mã QR động, MBBank)
+   * @param {number|string} orderId
+   */
+  getSePayInfo: async (orderId) => {
+    const response = await apiClient.get(`/payments/sepay-info/${orderId}`)
+    return response.data
+  },
+
+  /**
+   * Giả lập gửi Webhook từ SePay (cho mục đích test/demo)
+   * @param {Object} payload Dữ liệu webhook SePay
+   * @param {string} [apiKey]
+   */
+  simulateSePayWebhook: async (payload, apiKey = 'rikkei_sepay_secret_2026') => {
+    const response = await apiClient.post('/payments/sepay-webhook', payload, {
+      headers: { Authorization: `Apikey ${apiKey}` },
+    })
     return response.data
   },
 }

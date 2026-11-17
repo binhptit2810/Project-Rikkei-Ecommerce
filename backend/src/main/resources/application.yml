@@ -155,6 +155,17 @@ vnpay:
   curr-code: "VND"
   locale: "vn"
 
+# =============================================================================
+# Cấu hình Cổng thanh toán Quét mã SePay VietQR (sepay)
+# Phụ trách: Đặng Thanh Bình (DTB)
+# =============================================================================
+sepay:
+  bank-code: ${SEPAY_BANK_CODE:MBBank}
+  account-number: ${SEPAY_ACCOUNT_NUMBER:0372987662}
+  account-name: ${SEPAY_ACCOUNT_NAME:DANG THANH BINH}
+  api-key: ${SEPAY_API_KEY:rikkei_sepay_secret_2026}
+  qr-template: ${SEPAY_QR_TEMPLATE:compact2}
+
 # Actuator (health check)
 management:
   endpoints:

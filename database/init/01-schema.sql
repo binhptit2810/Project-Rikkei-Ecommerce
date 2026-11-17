@@ -182,7 +182,7 @@ CREATE TABLE IF NOT EXISTS payments (
     order_id          BIGINT NOT NULL UNIQUE,
     transaction_code  VARCHAR(64) UNIQUE,        -- Mã giao dịch định dạng PAY-YYYYMMDD-XXXX
     vnp_txn_ref       VARCHAR(64),               -- Mã tham chiếu giao dịch VNPay (đối soát & IPN)
-    payment_method    ENUM('COD', 'SIMULATED', 'VNPAY') NOT NULL,
+    payment_method    ENUM('COD', 'SIMULATED', 'VNPAY', 'SEPAY') NOT NULL,
     status            ENUM('UNPAID','PAID','FAILED','REFUNDED') NOT NULL DEFAULT 'UNPAID',
     amount            DECIMAL(15, 2) NOT NULL CHECK (amount >= 0),
     transaction_note  VARCHAR(255),              -- Ghi chú kết quả mô phỏng
@@ -207,7 +207,7 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
     vnp_transaction_no    VARCHAR(64),
     amount                DECIMAL(15, 2) NOT NULL,
     bank_code             VARCHAR(20),
-    payment_method        ENUM('COD', 'SIMULATED', 'VNPAY') NOT NULL DEFAULT 'VNPAY',
+    payment_method        ENUM('COD', 'SIMULATED', 'VNPAY', 'SEPAY') NOT NULL DEFAULT 'VNPAY',
     status                ENUM('UNPAID', 'PAID', 'FAILED', 'REFUNDED') NOT NULL DEFAULT 'UNPAID',
     reconciliation_status VARCHAR(30) NOT NULL DEFAULT 'NONE',
     response_code         VARCHAR(10),

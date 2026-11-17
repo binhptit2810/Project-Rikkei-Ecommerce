@@ -1,9 +1,12 @@
 package com.example.ecommerce.service;
 
+import com.example.ecommerce.config.SePayConfig;
 import com.example.ecommerce.config.VNPayConfig;
 import com.example.ecommerce.dto.request.CreateVNPayPaymentRequest;
 import com.example.ecommerce.dto.request.ProcessPaymentRequest;
+import com.example.ecommerce.dto.request.SePayWebhookPayload;
 import com.example.ecommerce.dto.response.PaymentResponse;
+import com.example.ecommerce.dto.response.SePayPaymentResponse;
 import com.example.ecommerce.dto.response.VNPayIpnResponse;
 import com.example.ecommerce.dto.response.VNPayPaymentResponse;
 import com.example.ecommerce.entity.*;
@@ -36,6 +39,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Service quản lý thanh toán (Payment Module).
@@ -55,6 +59,7 @@ public class PaymentService {
     private final VNPayConfig vnPayConfig;
     private final EmailService emailService;
     private final PaymentTransactionRepository paymentTransactionRepository;
+    private final SePayConfig sePayConfig;
 
     @Autowired(required = false)
     private Environment environment;
@@ -136,12 +141,12 @@ public class PaymentService {
     }
 
     public PaymentService(PaymentRepository paymentRepository, OrderRepository orderRepository, UserRepository userRepository) {
-        this(paymentRepository, orderRepository, userRepository, new VNPayConfig(), null, null);
+        this(paymentRepository, orderRepository, userRepository, new VNPayConfig(), null, null, null);
     }
 
     public PaymentService(PaymentRepository paymentRepository, OrderRepository orderRepository, UserRepository userRepository,
                           VNPayConfig vnPayConfig) {
-        this(paymentRepository, orderRepository, userRepository, vnPayConfig, null, null);
+        this(paymentRepository, orderRepository, userRepository, vnPayConfig, null, null, null);
     }
 
     public PaymentService(PaymentRepository paymentRepository,
@@ -149,7 +154,16 @@ public class PaymentService {
                           UserRepository userRepository,
                           VNPayConfig vnPayConfig,
                           EmailService emailService) {
-        this(paymentRepository, orderRepository, userRepository, vnPayConfig, emailService, null);
+        this(paymentRepository, orderRepository, userRepository, vnPayConfig, emailService, null, null);
+    }
+
+    public PaymentService(PaymentRepository paymentRepository,
+                          OrderRepository orderRepository,
+                          UserRepository userRepository,
+                          VNPayConfig vnPayConfig,
+                          EmailService emailService,
+                          PaymentTransactionRepository paymentTransactionRepository) {
+        this(paymentRepository, orderRepository, userRepository, vnPayConfig, emailService, paymentTransactionRepository, null);
     }
 
     @Autowired
@@ -158,13 +172,15 @@ public class PaymentService {
                           UserRepository userRepository,
                           VNPayConfig vnPayConfig,
                           @Autowired(required = false) EmailService emailService,
-                          @Autowired(required = false) PaymentTransactionRepository paymentTransactionRepository) {
+                          @Autowired(required = false) PaymentTransactionRepository paymentTransactionRepository,
+                          @Autowired(required = false) SePayConfig sePayConfig) {
         this.paymentRepository = paymentRepository;
         this.orderRepository = orderRepository;
         this.userRepository = userRepository;
         this.vnPayConfig = vnPayConfig != null ? vnPayConfig : new VNPayConfig();
         this.emailService = emailService;
         this.paymentTransactionRepository = paymentTransactionRepository;
+        this.sePayConfig = sePayConfig != null ? sePayConfig : new SePayConfig();
     }
 
     /**
@@ -180,6 +196,8 @@ public class PaymentService {
             initialNote = "Chờ thanh toán qua cổng mô phỏng (SIMULATED)";
         } else if (method == PaymentMethod.VNPAY) {
             initialNote = "Chờ thanh toán qua Cổng VNPay Sandbox";
+        } else if (method == PaymentMethod.SEPAY) {
+            initialNote = "Chờ chuyển khoản VietQR qua SePay (" + sePayConfig.getBankCode() + ": " + sePayConfig.getAccountNumber() + ")";
         } else {
             initialNote = "Thanh toán tiền mặt khi nhận hàng (COD)";
         }
@@ -883,14 +901,14 @@ public class PaymentService {
                     ? request.getTransactionNote().trim()
                     : "Thanh toán tiền mặt khi nhận hàng (COD)");
             order.setPaymentStatus(PaymentStatus.UNPAID);
-        } else if (method == PaymentMethod.SIMULATED) {
+        } else if (method == PaymentMethod.SIMULATED || method == PaymentMethod.VNPAY || method == PaymentMethod.SEPAY) {
             boolean success = request.isSuccessSimulation();
             if (success) {
                 payment.setStatus(PaymentStatus.PAID);
                 payment.setPaidAt(LocalDateTime.now());
                 payment.setTransactionNote(request.getTransactionNote() != null && !request.getTransactionNote().trim().isEmpty()
                         ? request.getTransactionNote().trim()
-                        : "Thanh toán trực tuyến mô phỏng thành công (PAID)");
+                        : "Thanh toán trực tuyến thành công (PAID)");
                 order.setPaymentStatus(PaymentStatus.PAID);
                 if (order.getOrderStatus() == OrderStatus.PENDING) {
                     order.setOrderStatus(OrderStatus.CONFIRMED);
@@ -900,7 +918,7 @@ public class PaymentService {
                 payment.setPaidAt(null);
                 payment.setTransactionNote(request.getTransactionNote() != null && !request.getTransactionNote().trim().isEmpty()
                         ? request.getTransactionNote().trim()
-                        : "Thanh toán trực tuyến mô phỏng thất bại (FAILED)");
+                        : "Thanh toán trực tuyến thất bại (FAILED)");
                 order.setPaymentStatus(PaymentStatus.FAILED);
             }
         }
@@ -992,6 +1010,229 @@ public class PaymentService {
                 .createdAt(payment.getCreatedAt())
                 .updatedAt(payment.getUpdatedAt())
                 .build();
+    }
+
+    /**
+     * Tra cứu thông tin thanh toán VietQR qua Cổng SePay cho đơn hàng.
+     * Trả về URL mã QR động và thông tin tài khoản ngân hàng thụ hưởng (MBBank).
+     */
+    @Transactional(readOnly = true)
+    public SePayPaymentResponse getSePayPaymentInfo(Long orderId, String userEmail) {
+        log.info("Lấy thông tin VietQR SePay cho đơn hàng ID: {} bởi user: {}", orderId, userEmail);
+        Order order = orderRepository.findById(orderId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đơn hàng với id: " + orderId));
+
+        if (userEmail != null) {
+            User user = userRepository.findByEmail(userEmail)
+                    .orElseThrow(() -> new ResourceNotFoundException("Người dùng không tồn tại"));
+
+            if (user.getRole() != Role.ADMIN && (order.getUser() != null && !order.getUser().getId().equals(user.getId()))) {
+                throw new BusinessException("Bạn không có quyền xem thông tin thanh toán của đơn hàng này");
+            }
+        }
+
+        BigDecimal amount = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        String qrUrl = sePayConfig.generateQrUrl(amount, order.getOrderCode());
+
+        return SePayPaymentResponse.builder()
+                .orderId(order.getId())
+                .orderCode(order.getOrderCode())
+                .amount(amount)
+                .bankCode(sePayConfig.getBankCode())
+                .bankName("Ngân Hàng TMCP Quân Đội (MB)")
+                .accountNumber(sePayConfig.getAccountNumber())
+                .accountName(sePayConfig.getAccountName())
+                .qrCodeUrl(qrUrl)
+                .transferContent(order.getOrderCode())
+                .paymentStatus(order.getPaymentStatus())
+                .orderStatus(order.getOrderStatus())
+                .message("Lấy thông tin thanh toán VietQR SePay thành công")
+                .build();
+    }
+
+    /**
+     * Xử lý Webhook gửi từ Cổng thanh toán SePay khi có biến động số dư tiền vào tài khoản MBBank.
+     * Tự động xác thực API Key, phân tích nội dung chuyển khoản để nhận diện mã đơn hàng ORD-...,
+     * cập nhật trạng thái đơn hàng sang CONFIRMED và thanh toán sang PAID.
+     *
+     * @param payload Dữ liệu giao dịch SePay gửi về
+     * @param authHeader Header Authorization (chứa Apikey <API_KEY>)
+     * @return Map phản hồi trạng thái cho SePay
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public Map<String, Object> handleSePayWebhook(SePayWebhookPayload payload, String authHeader) {
+        log.info("Tiếp nhận SePay Webhook: id={}, amount={}, content={}, referenceCode={}",
+                payload != null ? payload.getId() : null,
+                payload != null ? payload.getTransferAmount() : null,
+                payload != null ? payload.getContent() : null,
+                payload != null ? payload.getReferenceCode() : null);
+
+        // 1. Xác thực API Key bảo mật
+        String expectedApiKey = sePayConfig.getApiKey();
+        if (StringUtils.hasText(expectedApiKey)) {
+            if (!StringUtils.hasText(authHeader)) {
+                log.warn("SePay webhook bị từ chối: Thiếu header Authorization");
+                throw new BusinessException("SePay webhook thiếu header Authorization");
+            }
+            String cleanAuth = authHeader.trim();
+            if (cleanAuth.regionMatches(true, 0, "apikey ", 0, 7)) {
+                cleanAuth = cleanAuth.substring(7).trim();
+            } else if (cleanAuth.regionMatches(true, 0, "bearer ", 0, 7)) {
+                cleanAuth = cleanAuth.substring(7).trim();
+            }
+            if (!cleanAuth.equals(expectedApiKey) && !authHeader.contains(expectedApiKey)) {
+                log.warn("SePay webhook bị từ chối: API Key không hợp lệ. Nhận được: {}", authHeader);
+                throw new BusinessException("SePay webhook API Key không hợp lệ");
+            }
+        }
+
+        Map<String, Object> response = new HashMap<>();
+
+        if (payload == null) {
+            log.warn("SePay webhook payload rỗng");
+            response.put("success", false);
+            response.put("message", "Payload rỗng");
+            return response;
+        }
+
+        // 2. Chỉ xử lý biến động số dư TIỀN VÀO ("in")
+        if (payload.getTransferType() != null && !"in".equalsIgnoreCase(payload.getTransferType().trim())) {
+            log.info("Bỏ qua giao dịch SePay biến động tiền ra (transferType={})", payload.getTransferType());
+            response.put("success", true);
+            response.put("message", "Bỏ qua giao dịch không phải tiền vào");
+            return response;
+        }
+
+        // 3. Trích xuất mã đơn hàng từ content hoặc description
+        String textToScan = (payload.getContent() != null ? payload.getContent() : "") + " "
+                + (payload.getDescription() != null ? payload.getDescription() : "");
+        textToScan = textToScan.trim();
+
+        Order foundOrder = findOrderFromContent(textToScan);
+        if (foundOrder == null) {
+            log.warn("Không tìm thấy đơn hàng tương ứng với nội dung chuyển khoản SePay: '{}'", textToScan);
+            response.put("success", false);
+            response.put("message", "Không tìm thấy mã đơn hàng phù hợp trong nội dung chuyển khoản: " + textToScan);
+            return response;
+        }
+
+        // Khóa bi quan bản ghi Order để chống Race Condition
+        final Order order = orderRepository.findByIdForUpdate(foundOrder.getId())
+                .orElse(foundOrder);
+
+        BigDecimal transferAmount = payload.getTransferAmount() != null ? payload.getTransferAmount() : BigDecimal.ZERO;
+        Payment payment = paymentRepository.findByOrderId(order.getId())
+                .orElseGet(() -> createInitialPayment(order, PaymentMethod.SEPAY));
+
+        // Kiểm tra nếu đơn hàng đã được thanh toán trước đó
+        if (payment.getStatus() == PaymentStatus.PAID && order.getPaymentStatus() == PaymentStatus.PAID) {
+            log.info("Đơn hàng #{} ({}) đã được thanh toán thành công trước đó", order.getId(), order.getOrderCode());
+            response.put("success", true);
+            response.put("orderCode", order.getOrderCode());
+            response.put("message", "Đơn hàng đã được xác nhận thanh toán trước đó");
+            return response;
+        }
+
+        // 4. Cập nhật Payment sang PAID
+        payment.setStatus(PaymentStatus.PAID);
+        payment.setPaymentMethod(PaymentMethod.SEPAY);
+        payment.setPaidAt(LocalDateTime.now());
+        String refCode = payload.getReferenceCode() != null ? payload.getReferenceCode() : String.valueOf(payload.getId());
+        payment.setTransactionNote("Thanh toán thành công qua SePay VietQR (MBBank). Mã tham chiếu: " + refCode);
+        paymentRepository.save(payment);
+
+        // 5. Cập nhật Order sang CONFIRMED và PAID
+        order.setPaymentStatus(PaymentStatus.PAID);
+        if (order.getOrderStatus() == OrderStatus.PENDING) {
+            order.setOrderStatus(OrderStatus.CONFIRMED);
+        }
+        orderRepository.save(order);
+
+        // 6. Ghi nhận PaymentTransaction vào cơ sở dữ liệu
+        if (paymentTransactionRepository != null) {
+            try {
+                String txnRef = "SEPAY-" + (payload.getId() != null ? payload.getId() : (refCode != null ? refCode : System.currentTimeMillis()));
+                if (!paymentTransactionRepository.existsByTxnRef(txnRef)) {
+                    PaymentTransaction tx = PaymentTransaction.builder()
+                            .payment(payment)
+                            .order(order)
+                            .txnRef(txnRef)
+                            .vnpTransactionNo(refCode)
+                            .amount(transferAmount)
+                            .bankCode(payload.getGateway() != null ? payload.getGateway() : sePayConfig.getBankCode())
+                            .paymentMethod(PaymentMethod.SEPAY)
+                            .status(PaymentStatus.PAID)
+                            .reconciliationStatus(ReconciliationStatus.NONE)
+                            .responseCode("00")
+                            .transactionStatus("00")
+                            .transactionNote("SePay VietQR: " + (payload.getContent() != null ? payload.getContent() : ""))
+                            .payDate(LocalDateTime.now())
+                            .build();
+                    paymentTransactionRepository.save(tx);
+                }
+            } catch (Exception ex) {
+                log.warn("Không thể lưu PaymentTransaction cho SePay webhook: {}", ex.getMessage());
+            }
+        }
+
+        // 7. Gửi email xác nhận đơn hàng thành công
+        sendOrderConfirmationEmailSafe(order);
+
+        Long finalOrderId = order.getId();
+        String finalOrderCode = order.getOrderCode();
+        logAfterCommitOrNow(() ->
+                log.info("action=SEPAY_WEBHOOK | result=SUCCESS | orderId={} | orderCode={} | amount={} | sepayId={}",
+                        finalOrderId, finalOrderCode, transferAmount, payload.getId())
+        );
+
+        response.put("success", true);
+        response.put("orderCode", order.getOrderCode());
+        response.put("orderStatus", order.getOrderStatus().name());
+        response.put("paymentStatus", order.getPaymentStatus().name());
+        response.put("message", "Xác nhận thanh toán SePay VietQR thành công cho đơn hàng " + order.getOrderCode());
+        return response;
+    }
+
+    /**
+     * Tìm Order tương ứng dựa vào chuỗi nội dung chuyển khoản của SePay.
+     */
+    private Order findOrderFromContent(String text) {
+        if (!StringUtils.hasText(text)) {
+            return null;
+        }
+
+        // 1. Tìm theo regex mã ORD-...
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("(?i)(ORD[A-Za-z0-9-]+)");
+        java.util.regex.Matcher matcher = pattern.matcher(text);
+        while (matcher.find()) {
+            String candidate = matcher.group(1).trim();
+            // Thử tìm chính xác candidate
+            var opt = orderRepository.findByOrderCode(candidate);
+            if (opt.isPresent()) {
+                return opt.get();
+            }
+            // Thử tìm theo chữ hoa
+            opt = orderRepository.findByOrderCode(candidate.toUpperCase());
+            if (opt.isPresent()) {
+                return opt.get();
+            }
+        }
+
+        // 2. Fallback: duyệt qua 50 đơn hàng gần nhất xem mã đơn hàng có xuất hiện trong text không
+        List<Order> recentOrders = orderRepository.findTop50ByOrderByCreatedAtDesc();
+        if (recentOrders != null) {
+            String cleanText = text.replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+            for (Order ord : recentOrders) {
+                if (ord.getOrderCode() != null) {
+                    String cleanCode = ord.getOrderCode().replaceAll("[^a-zA-Z0-9]", "").toLowerCase();
+                    if (!cleanCode.isEmpty() && cleanText.contains(cleanCode)) {
+                        return ord;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
     private void logAfterCommitOrNow(Runnable logAction) {
