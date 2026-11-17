@@ -53,7 +53,11 @@ public class VNPayConfig {
                 log.warn("CẢNH BÁO BẢO MẬT: vnpay.tmn-code hoặc vnpay.hash-secret chưa được cấu hình qua environment variable. Sử dụng fallback từ file cấu hình dev/test.");
             }
         } else if (isProduction && (DEFAULT_SANDBOX_TMN_CODE.equals(tmnCode.trim()) || DEFAULT_SANDBOX_HASH_SECRET.equals(hashSecret.trim()))) {
-            log.warn("CẢNH BÁO BẢO MẬT: Môi trường Production đang cấu hình TMN_CODE hoặc HASH_SECRET trùng với mã Sandbox mẫu của VNPay.");
+            if ("prod".equalsIgnoreCase(activeProfile) || "production".equalsIgnoreCase(activeProfile)) {
+                throw new IllegalStateException("CRITICAL SECURITY ERROR: Môi trường Production không được phép sử dụng credential Sandbox mặc định của VNPay.");
+            } else {
+                log.warn("CẢNH BÁO BẢO MẬT: Môi trường đang cấu hình TMN_CODE hoặc HASH_SECRET trùng với mã Sandbox mẫu của VNPay.");
+            }
         }
     }
 }

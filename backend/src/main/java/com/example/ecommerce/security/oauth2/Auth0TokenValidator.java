@@ -101,15 +101,7 @@ public class Auth0TokenValidator {
             OAuth2TokenValidator<Jwt> defaultIssuerValidator = JwtValidators.createDefaultWithIssuer(issuer);
 
             // 2. Audience Validator: aud claim bắt buộc phải chứa Auth0 Client ID của ứng dụng
-            OAuth2TokenValidator<Jwt> audienceValidator = token -> {
-                List<String> audiences = token.getAudience();
-                if (audiences != null && audiences.contains(clientId)) {
-                    return OAuth2TokenValidatorResult.success();
-                }
-                log.warn("Auth0 ID Token bị từ chối do Audience không khớp: expected={}, actual={}", clientId, audiences);
-                OAuth2Error error = new OAuth2Error("invalid_audience", "Audience không khớp với Client ID ứng dụng", null);
-                return OAuth2TokenValidatorResult.failure(error);
-            };
+            OAuth2TokenValidator<Jwt> audienceValidator = createAudienceValidator(clientId);
 
             OAuth2TokenValidator<Jwt> combinedValidator =
                     new DelegatingOAuth2TokenValidator<>(defaultIssuerValidator, audienceValidator);
@@ -118,6 +110,21 @@ public class Auth0TokenValidator {
             this.jwtDecoder = decoder;
             return this.jwtDecoder;
         }
+    }
+
+    /**
+     * Tạo Audience Validator kiểm tra aud claim có chứa clientId của ứng dụng hay không.
+     */
+    static OAuth2TokenValidator<Jwt> createAudienceValidator(String clientId) {
+        return token -> {
+            List<String> audiences = token.getAudience();
+            if (audiences != null && audiences.contains(clientId)) {
+                return OAuth2TokenValidatorResult.success();
+            }
+            log.warn("Auth0 ID Token bị từ chối do Audience không khớp: expected={}, actual={}", clientId, audiences);
+            OAuth2Error error = new OAuth2Error("invalid_audience", "Audience không khớp với Client ID ứng dụng", null);
+            return OAuth2TokenValidatorResult.failure(error);
+        };
     }
 
     /**

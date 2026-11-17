@@ -37,7 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     "spring.jpa.hibernate.ddl-auto=create-drop",
     "jwt.secret=test-secret-key-for-unit-tests-must-be-at-least-32-characters-long",
     "jwt.expiration=3600000",
-    "cors.allowed-origins=http://localhost:3000,http://localhost:5173"
+    "cors.allowed-origins=http://localhost:3000,http://localhost:5173,http://rikkei-shop.me"
 })
 class CorsIntegrationTest {
 
@@ -48,6 +48,8 @@ class CorsIntegrationTest {
     private RefreshTokenService refreshTokenService;
 
     private static final String ALLOWED_ORIGIN = "http://localhost:3000";
+    private static final String ALLOWED_ORIGIN_5173 = "http://localhost:5173";
+    private static final String DEMO_ORIGIN = "http://rikkei-shop.me";
     private static final String DISALLOWED_ORIGIN = "http://evil-attacker.com";
 
     @Test
@@ -185,6 +187,54 @@ class CorsIntegrationTest {
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Authorization"))
                 .andExpect(status().isOk())
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ALLOWED_ORIGIN))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
+    }
+
+    @Test
+    @DisplayName("CORS-13: Preflight OPTIONS request từ demo domain http://rikkei-shop.me thành công")
+    void preflightOptions_DemoOrigin_ReturnsCorsHeaders() throws Exception {
+        mockMvc.perform(options("/api/v1/auth/login")
+                        .header(HttpHeaders.ORIGIN, DEMO_ORIGIN)
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Authorization,Content-Type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, DEMO_ORIGIN))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"))
+                .andExpect(header().exists(HttpHeaders.ACCESS_CONTROL_ALLOW_METHODS))
+                .andExpect(header().exists(HttpHeaders.ACCESS_CONTROL_ALLOW_HEADERS));
+    }
+
+    @Test
+    @DisplayName("CORS-14: Preflight OPTIONS với custom header X-Guest-Session-Id và Cache-Control thành công")
+    void preflightOptions_CustomHeaders_Allowed() throws Exception {
+        mockMvc.perform(options("/api/v1/chat")
+                        .header(HttpHeaders.ORIGIN, DEMO_ORIGIN)
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Content-Type,X-Guest-Session-Id,Cache-Control"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, DEMO_ORIGIN))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
+    }
+
+    @Test
+    @DisplayName("CORS-15: Request GET công khai từ http://rikkei-shop.me nhận được header CORS")
+    void getPublicEndpoint_DemoOrigin_ReturnsCorsHeader() throws Exception {
+        mockMvc.perform(get("/api/v1/health")
+                        .header(HttpHeaders.ORIGIN, DEMO_ORIGIN))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, DEMO_ORIGIN))
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
+    }
+
+    @Test
+    @DisplayName("CORS-16: Preflight OPTIONS request từ origin http://localhost:5173 thành công")
+    void preflightOptions_Localhost5173_ReturnsCorsHeaders() throws Exception {
+        mockMvc.perform(options("/api/v1/auth/login")
+                        .header(HttpHeaders.ORIGIN, ALLOWED_ORIGIN_5173)
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "POST")
+                        .header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "Authorization,Content-Type"))
+                .andExpect(status().isOk())
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, ALLOWED_ORIGIN_5173))
                 .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_CREDENTIALS, "true"));
     }
 }

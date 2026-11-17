@@ -36,5 +36,5 @@ COPY --from=builder /app/build/libs/*.jar app.jar
 
 EXPOSE 8080
 
-# Chờ database sẵn sàng qua healthcheck của Docker Compose; tự động bổ sung fallback HMAC bí mật an toàn nếu thiếu biến môi trường
-ENTRYPOINT ["sh", "-c", "if [ -z \"$OTP_HMAC_SECRET\" ]; then export OTP_HMAC_SECRET=\"ecommerce-docker-otp-hmac-sha256-production-ready-secret-fallback-key-2026\"; fi && exec java -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-docker} -jar app.jar"]
+# Chờ database sẵn sàng qua healthcheck của Docker Compose; nạp cấu hình qua biến môi trường runtime
+ENTRYPOINT ["sh", "-c", "exec java -Djava.security.egd=file:/dev/./urandom -Dspring.profiles.active=${SPRING_PROFILES_ACTIVE:-docker} -jar app.jar"]

@@ -4,8 +4,11 @@ import com.example.ecommerce.exception.BusinessException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.security.oauth2.core.OAuth2TokenValidator;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 
 import java.time.Instant;
@@ -221,6 +224,92 @@ class Auth0TokenValidatorTest {
         assertEquals("user@example.com", userInfo.getEmail());
         assertNull(userInfo.getName());
         assertNull(userInfo.getPicture());
+    }
+
+    // =========================================================================
+    // SEC-03: Kiểm thử từ chối Auth0 Token sai Issuer
+    // =========================================================================
+
+    @Test
+    @DisplayName("SEC-03-A: Token có Issuer không đúng Auth0 tenant -> Decoder ném BadJwtException -> validateToken ném BusinessException")
+    void validateToken_WrongIssuer_ThrowsBusinessException() {
+        String token = "wrong.issuer.token";
+        when(mockDecoder.decode(token))
+                .thenThrow(new BadJwtException("The iss claim is not valid: expected https://" + DOMAIN + "/ but received https://malicious-tenant.auth0.com/"));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> validator.validateToken(token));
+        assertTrue(ex.getMessage().contains("không hợp lệ hoặc đã hết hạn"));
+    }
+
+    @Test
+    @DisplayName("SEC-03-B: defaultIssuerValidator trực tiếp từ chối JWT có Issuer không khớp Auth0 domain")
+    void defaultIssuerValidator_RejectsWrongIssuer() {
+        String expectedIssuer = "https://" + DOMAIN + "/";
+        OAuth2TokenValidator<Jwt> issuerValidator = JwtValidators.createDefaultWithIssuer(expectedIssuer);
+
+        Jwt wrongIssuerJwt = Jwt.withTokenValue("mock.token")
+                .header("alg", "RS256")
+                .issuer("https://evil-attacker-tenant.auth0.com/")
+                .audience(List.of(CLIENT_ID))
+                .subject("google-oauth2|123456")
+                .issuedAt(Instant.now().minusSeconds(10))
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
+
+        OAuth2TokenValidatorResult result = issuerValidator.validate(wrongIssuerJwt);
+        assertTrue(result.hasErrors(), "Issuer validator bắt buộc phải báo lỗi khi issuer không khớp");
+    }
+
+    // =========================================================================
+    // SEC-04: Kiểm thử từ chối Auth0 Token sai Audience
+    // =========================================================================
+
+    @Test
+    @DisplayName("SEC-04-A: Token có Audience không khớp Client ID -> Decoder ném BadJwtException -> validateToken ném BusinessException")
+    void validateToken_WrongAudience_ThrowsBusinessException() {
+        String token = "wrong.audience.token";
+        when(mockDecoder.decode(token))
+                .thenThrow(new BadJwtException("Audience không khớp với Client ID ứng dụng: expected=" + CLIENT_ID));
+
+        BusinessException ex = assertThrows(BusinessException.class, () -> validator.validateToken(token));
+        assertTrue(ex.getMessage().contains("không hợp lệ hoặc đã hết hạn"));
+    }
+
+    @Test
+    @DisplayName("SEC-04-B: createAudienceValidator trực tiếp từ chối JWT có Audience không chứa Client ID")
+    void createAudienceValidator_RejectsMissingClientIdInAudience() {
+        OAuth2TokenValidator<Jwt> audienceValidator = Auth0TokenValidator.createAudienceValidator(CLIENT_ID);
+
+        Jwt wrongAudienceJwt = Jwt.withTokenValue("mock.token")
+                .header("alg", "RS256")
+                .issuer("https://" + DOMAIN + "/")
+                .audience(List.of("different-app-client-id-789"))
+                .subject("google-oauth2|123456")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
+
+        OAuth2TokenValidatorResult result = audienceValidator.validate(wrongAudienceJwt);
+        assertTrue(result.hasErrors(), "Audience validator phải báo lỗi khi token không có Client ID của ứng dụng");
+        assertEquals("invalid_audience", result.getErrors().iterator().next().getErrorCode());
+    }
+
+    @Test
+    @DisplayName("SEC-04-C: createAudienceValidator trực tiếp chấp nhận JWT có Audience chứa Client ID")
+    void createAudienceValidator_AcceptsValidClientIdInAudience() {
+        OAuth2TokenValidator<Jwt> audienceValidator = Auth0TokenValidator.createAudienceValidator(CLIENT_ID);
+
+        Jwt validAudienceJwt = Jwt.withTokenValue("mock.token")
+                .header("alg", "RS256")
+                .issuer("https://" + DOMAIN + "/")
+                .audience(List.of(CLIENT_ID, "https://api.rikkei-shop.me"))
+                .subject("google-oauth2|123456")
+                .issuedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(3600))
+                .build();
+
+        OAuth2TokenValidatorResult result = audienceValidator.validate(validAudienceJwt);
+        assertFalse(result.hasErrors(), "Audience validator phải chấp nhận khi token chứa Client ID");
     }
 }
 

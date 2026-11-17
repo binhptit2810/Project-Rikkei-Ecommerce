@@ -4,6 +4,6 @@
 
 app:
   mail:
-    from: ${MAIL_FROM:binhbadboy2810@gmail.com}
+    from: ${MAIL_FROM:noreply@rikkei-shop.me}
     from-name: ${MAIL_FROM_NAME:Rikkei Store}
 

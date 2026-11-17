@@ -1,40 +1,44 @@
 package com.example.ecommerce.config;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.util.StringUtils;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Arrays;
-
-import org.springframework.context.annotation.Bean;
-import org.springframework.web.cors.CorsConfiguration;
-import org.springframework.web.cors.CorsConfigurationSource;
-import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
 import java.util.List;
 
 /**
- * Cấu hình CORS cho phép frontend (http://localhost:3000) gọi API backend.
- * Origins được điều khiển qua cấu hình cors.allowed-origins (biến môi trường CORS_ALLOWED_ORIGINS).
+ * Cấu hình CORS tập trung và bảo mật cho toàn bộ ứng dụng (Spring Security CorsFilter).
+ * Phụ trách: Cao Chí Thiện (CCT)
+ * Task ID: [TSK-D16-CCT] Rà Soát CORS Môi Trường Mạng & Security Audit
+ *
+ * Cho phép các origin:
+ *   - http://localhost:3000 (React / Nginx local)
+ *   - http://localhost:5173 (Vite dev server)
+ *   - http://rikkei-shop.me (Demo domain)
+ *
+ * Tuyệt đối không sử dụng wildcard '*' khi allowCredentials = true.
  */
-// [TSK-D03-CCT]
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
-    @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
+    @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:5173,http://rikkei-shop.me}")
     private String allowedOrigins;
 
     @Value("${app.upload.dir:uploads}")
     private String uploadDir;
 
     /**
-     * Bean CorsConfigurationSource dùng bởi Spring Security (SecurityConfig .cors(Customizer.withDefaults())).
-     * Đảm bảo CORS Filter xử lý ngay trước khi request bị chặn bởi các filter xác thực/phân quyền.
+     * Bean CorsConfigurationSource duy nhất được Spring Security sử dụng (.cors(Customizer.withDefaults())).
+     * Loại bỏ cấu hình addCorsMappings trùng lặp để tránh xung đột hoặc ghi đè cấu hình.
      */
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
@@ -43,11 +47,20 @@ public class CorsConfig implements WebMvcConfigurer {
         List<String> origins = Arrays.stream(allowedOrigins.split(","))
                 .map(String::trim)
                 .filter(StringUtils::hasText)
+                .filter(origin -> !"*".equals(origin)) // Ngăn chặn kết hợp nguy hiểm '*' với credentials=true
                 .toList();
 
         configuration.setAllowedOrigins(origins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"));
+        configuration.setAllowedHeaders(List.of(
+                "Authorization",
+                "Content-Type",
+                "Accept",
+                "Origin",
+                "X-Requested-With",
+                "X-Guest-Session-Id",
+                "Cache-Control"
+        ));
         configuration.setExposedHeaders(List.of("Authorization", "Set-Cookie"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
@@ -55,22 +68,6 @@ public class CorsConfig implements WebMvcConfigurer {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
         return source;
-    }
-
-    @Override
-    public void addCorsMappings(CorsRegistry registry) {
-        String[] origins = Arrays.stream(allowedOrigins.split(","))
-                .map(String::trim)
-                .filter(StringUtils::hasText)
-                .toArray(String[]::new);
-
-        registry.addMapping("/**")
-                .allowedOrigins(origins)
-                .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                .allowedHeaders("Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With")
-                .exposedHeaders("Authorization", "Set-Cookie")
-                .allowCredentials(true)
-                .maxAge(3600);
     }
 
     @Override

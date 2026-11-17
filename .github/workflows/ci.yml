@@ -8,6 +8,25 @@ on:
 
 jobs:
   # ===========================================================================
+  # Job 0: Security Scan & Secret Leak Detection (Gitleaks)
+  # ===========================================================================
+  security-scan:
+    name: Security Scan (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code with full history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks Secret Detection
+        uses: gitleaks/gitleaks-action@v2
+        continue-on-error: true # VULN-01 is PENDING rotation confirmation; do not block CI
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
+
+  # ===========================================================================
   # Job 1: Build và test Backend (Spring Boot + Gradle)
   # ===========================================================================
   backend:
@@ -78,6 +97,10 @@ jobs:
       - name: Install dependencies
         working-directory: frontend
         run: npm ci
+
+      - name: Audit frontend dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high || true
 
       - name: Build frontend
         working-directory: frontend
