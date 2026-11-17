@@ -268,7 +268,114 @@ Gửi lại mã OTP xác thực qua email cho tài khoản chưa kích hoạt. *
 
 ---
 
-### `POST /api/v1/auth/forgot-password`
+### `POST /api/v1/auth/refresh`
+Làm mới Access Token khi hết hạn (15 phút) sử dụng Refresh Token truyền qua HttpOnly Cookie. **Không cần Bearer token.**
+(Task: **TSK-D02-CCT** - Refresh Token Rotation & Session Management)
+
+**Header/Cookie:**
+- Cookie: `refresh_token=<opaque_token_string>`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Làm mới token thành công",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "tokenType": "Bearer",
+    "expiresIn": 900,
+    "user": {
+      "id": 1,
+      "email": "user@example.com",
+      "fullName": "Nguyễn Văn A",
+      "role": "CUSTOMER"
+    }
+  },
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+*Lưu ý bảo mật (RTR):* Refresh Token cũ bị hủy ngay lập tức trên Redis, hệ thống cấp Refresh Token mới và set lại HttpOnly Cookie trong header `Set-Cookie`.
+
+**Lỗi 401** — Refresh Token không tồn tại, hết hạn, hoặc bị tái sử dụng (Token Reuse):
+```json
+{
+  "success": false,
+  "message": "Refresh token không tồn tại trong cookie hoặc đã hết hạn",
+  "data": null,
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+
+---
+
+### `POST /api/v1/auth/logout`
+Đăng xuất tài khoản người dùng: thu hồi toàn bộ phiên trong Redis và xóa HttpOnly Cookie trên trình duyệt. **Không cần Bearer token.**
+(Task: **TSK-D02-CCT** - Thu hồi phiên làm việc & Xóa Token)
+
+**Header/Cookie:**
+- Cookie: `refresh_token=<opaque_token_string>` (tuỳ chọn nếu có)
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Đăng xuất thành công",
+  "data": null,
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+*Lưu ý:* Header `Set-Cookie` trả về lệnh xóa cookie: `refresh_token=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax`.
+
+---
+
+### `POST /api/v1/auth/oauth2/exchange`
+Trao đổi One-Time Ticket lấy cặp JWT Access Token và Refresh Token sau khi hoàn tất xác thực Google OAuth2. **Không cần xác thực.**
+(Task: **TSK-D11-CCT / TSK-D15-CCT** - Google OAuth2 & Ticket Exchange)
+
+**Request:**
+```json
+{
+  "ticket": "8f3b6a2c-9d1e-4f0a-b5c8-123456789abc"
+}
+```
+*(Kèm Cookie tùy chọn `oauth2_binding` chống CSRF Ticket Exchange).*
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Đăng nhập bằng tài khoản Google thành công",
+  "data": {
+    "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "tokenType": "Bearer",
+    "expiresIn": 900,
+    "user": {
+      "id": 5,
+      "email": "customer@gmail.com",
+      "fullName": "Google User",
+      "role": "CUSTOMER"
+    }
+  },
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+
+---
+
+### `POST /api/v1/auth/auth0/exchange`
+Trao đổi Auth0 ID Token lấy JWT Access Token và Refresh Token nội bộ hệ thống. **Không cần xác thực.**
+(Task: **TSK-D11-CCT** - Auth0 / Google OIDC Bridge)
+
+**Request:**
+```json
+{
+  "idToken": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+**Response 200:** Cùng format với `POST /api/v1/auth/oauth2/exchange`.
+
+---
 Yêu cầu mã OTP đặt lại mật khẩu qua email. **Không cần xác thực.**
 (Task: **TSK-D10-CCT** - Quên mật khẩu & Xác thực OTP qua Redis/Email)
 
@@ -537,6 +644,9 @@ Danh sách danh mục active. **Không cần xác thực.**
 
 | Method | Endpoint | Auth | Mô tả |
 |--------|----------|------|-------|
+| POST | `/api/v1/payments/create-vnpay` | CUSTOMER, ADMIN | Khởi tạo URL giao dịch VNPay Sandbox |
+| GET | `/api/v1/payments/vnpay-callback` | Public | Return URL tiếp nhận phản hồi từ trình duyệt VNPay |
+| GET | `/api/v1/payments/vnpay-ipn` | Public | Webhook IPN xử lý giao dịch ngầm từ VNPay Server |
 | POST | `/api/v1/payments/{orderId}/pay` | CUSTOMER, ADMIN | Xử lý thanh toán đơn hàng (COD hoặc SIMULATED) |
 | GET | `/api/v1/payments/order/{orderId}` | CUSTOMER, ADMIN | Tra cứu thông tin thanh toán theo ID đơn hàng |
 | GET | `/api/v1/payments/transaction/{transactionCode}` | CUSTOMER, ADMIN | Tra cứu thông tin thanh toán theo mã giao dịch PAY-* |
@@ -645,6 +755,11 @@ Cập nhật thông tin hồ sơ (chỉ cập nhật trường không null).
 | GET | `/api/v1/admin/users` | Danh sách người dùng (phân trang PageResponse) |
 | PATCH | `/api/v1/admin/users/{id}/lock` | Khóa tài khoản người dùng kèm lý do (BR-AUTH-04) |
 | PATCH | `/api/v1/admin/users/{id}/unlock` | Mở khóa tài khoản người dùng |
+| DELETE | `/api/v1/admin/users/{id}` | Xóa tài khoản người dùng khỏi hệ thống |
+| GET | `/api/v1/admin/reviews` | Danh sách toàn bộ đánh giá sản phẩm (lọc rating, ẩn/hiện) |
+| POST | `/api/v1/admin/reviews/{id}/reply` | Quản trị viên phản hồi đánh giá khách hàng |
+| PATCH | `/api/v1/admin/reviews/{id}/visibility` | Bật/tắt trạng thái ẩn/hiện đánh giá |
+| DELETE | `/api/v1/admin/reviews/{id}` | Xóa đánh giá vi phạm và dọn dẹp file ảnh storage |
 
 ### `GET /api/v1/admin/users`
 Lấy danh sách người dùng trong hệ thống có phân trang. **Yêu cầu role ADMIN.**
@@ -779,7 +894,248 @@ Mở khóa tài khoản người dùng đã bị khóa trước đó. **Yêu c�
 
 ---
 
-## 🤖 Chatbot AI Tư Vấn Bán Hàng (TSK-D11-CCT)
+### `DELETE /api/v1/admin/users/{id}`
+Xóa tài khoản người dùng khỏi hệ thống. **Yêu cầu role ADMIN.**
+(Task: **TSK-D04-CCT** - Quản lý người dùng nâng cao)
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Xóa tài khoản người dùng thành công",
+  "data": null,
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+
+**Lỗi 400:** Không thể xóa tài khoản Admin khác hoặc xóa chính mình.
+
+---
+
+## ⭐ Đánh giá & Nhận xét sản phẩm (Product Reviews & Ratings)
+
+Hệ thống đánh giá sản phẩm tích hợp hình ảnh thực tế, tính nhất quán DB-Storage và quy trình kiểm duyệt Admin.
+(Phụ trách: **Đỗ Đức Mạnh [TSK-D11-DDM]**, **Cao Chí Thiện [TSK-D13-CCT, TSK-D14-CCT]** & **Đỗ Hoàng Anh [TSK-D14-DHA]**)
+
+### `GET /api/v1/products/{productId}/reviews`
+Lấy danh sách đánh giá của một sản phẩm có phân trang. **Không cần xác thực.**
+
+**Query params:**
+| Tham số | Kiểu | Mặc định | Mô tả |
+|---------|------|----------|-------|
+| `page` | number | 0 | Trang hiện tại |
+| `size` | number | 10 | Số đánh giá/trang |
+| `sortBy` | string | `createdAt` | Sắp xếp theo: `createdAt`, `rating` |
+| `sortDir` | string | `desc` | `asc` hoặc `desc` |
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": null,
+  "data": {
+    "content": [
+      {
+        "id": 1,
+        "productId": 10,
+        "userId": 3,
+        "userName": "Nguyễn Văn A",
+        "userAvatar": "https://...",
+        "rating": 5,
+        "comment": "Sản phẩm chất lượng rất tốt, đóng gói cẩn thận!",
+        "images": [
+          "http://localhost:8080/uploads/reviews/uuid-1.jpg",
+          "http://localhost:8080/uploads/reviews/uuid-2.png"
+        ],
+        "adminReply": "Cảm ơn bạn đã tin tưởng ủng hộ shop ạ!",
+        "createdAt": "2026-11-12T14:30:00"
+      }
+    ],
+    "pageNumber": 0,
+    "pageSize": 10,
+    "totalElements": 1,
+    "totalPages": 1,
+    "last": true
+  },
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+
+---
+
+### `GET /api/v1/products/{productId}/reviews/summary`
+Lấy thống kê điểm đánh giá trung bình và số lượng từng mức sao (1-5 sao). **Không cần xác thực.**
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": null,
+  "data": {
+    "averageRating": 4.8,
+    "totalReviews": 125,
+    "ratingBreakdown": {
+      "5": 100,
+      "4": 20,
+      "3": 3,
+      "2": 1,
+      "1": 1
+    }
+  },
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+
+---
+
+### `GET /api/v1/products/{productId}/reviews/eligibility`
+Kiểm tra điều kiện khách hàng hiện tại có được phép đánh giá sản phẩm hay không. **Yêu cầu đã đăng nhập.**
+*Điều kiện:* Khách hàng đã mua sản phẩm này trong đơn hàng có trạng thái `COMPLETED`.
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Kiểm tra điều kiện đánh giá thành công",
+  "data": {
+    "eligible": true,
+    "hasReviewed": false,
+    "orderId": 45
+  },
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+
+---
+
+### `POST /api/v1/products/{productId}/reviews`
+Gửi đánh giá sản phẩm mới kèm danh sách URL hình ảnh đã tải lên. **Yêu cầu đã đăng nhập (CUSTOMER).**
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Request:**
+```json
+{
+  "rating": 5,
+  "comment": "Chất lượng vải mềm mịn, form áo vừa vặn rất ưng ý!",
+  "imageUrls": [
+    "/uploads/reviews/c8a2b1f4-5e9a-4c22-b912-abcdef123456.jpg"
+  ]
+}
+```
+
+**Response 201 Created:**
+```json
+{
+  "success": true,
+  "message": "Đánh giá sản phẩm thành công",
+  "data": {
+    "id": 12,
+    "productId": 10,
+    "rating": 5,
+    "comment": "Chất lượng vải mềm mịn, form áo vừa vặn rất ưng ý!",
+    "images": [
+      "/uploads/reviews/c8a2b1f4-5e9a-4c22-b912-abcdef123456.jpg"
+    ],
+    "createdAt": "2026-11-17T10:05:00"
+  },
+  "timestamp": "2026-11-17T10:05:00"
+}
+```
+
+---
+
+### `DELETE /api/v1/products/{productId}/reviews/{reviewId}`
+Xóa đánh giá sản phẩm của chính mình (hoặc Admin xóa). **Yêu cầu đăng nhập.**
+(Task: **TSK-D07-CCT** IDOR Protection & **TSK-D14-CCT** Review Deletion)
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Xóa đánh giá thành công",
+  "data": null,
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+*Lưu ý an toàn:* Xóa các file ảnh vật lý đính kèm thông qua `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`.
+
+---
+
+### `GET /api/v1/admin/reviews`
+Lấy toàn bộ danh sách đánh giá của hệ thống kèm bộ lọc phục vụ kiểm duyệt. **Yêu cầu role ADMIN.**
+(Task: **TSK-D14-CCT / TSK-D14-DHA**)
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Query params:**
+- `page`, `size`, `sortBy`, `sortDir`
+- `productId`: Lọc theo ID sản phẩm
+- `rating`: Lọc theo số sao (1-5)
+- `isVisible` / `isHidden`: Lọc theo trạng thái ẩn/hiển thị
+
+**Response 200:** Chuẩn PageResponse danh sách review kèm đầy đủ thông tin người đánh giá và ảnh đính kèm.
+
+---
+
+### `PATCH /api/v1/admin/reviews/{reviewId}/visibility`
+Ẩn hoặc hiện một đánh giá có nội dung không phù hợp. **Yêu cầu role ADMIN.**
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Cập nhật trạng thái hiển thị đánh giá thành công",
+  "data": {
+    "id": 12,
+    "isVisible": false
+  },
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+
+---
+
+### `POST /api/v1/admin/reviews/{reviewId}/reply`
+Quản trị viên gửi phản hồi chính thức cho đánh giá khách hàng. **Yêu cầu role ADMIN.**
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Request:**
+```json
+{
+  "reply": "Dạ shop cảm ơn bạn rất nhiều! Chúc bạn có trải nghiệm tuyệt vời cùng sản phẩm ạ."
+}
+```
+
+**Response 200:** Cập nhật thông tin review kèm nội dung phản hồi từ Admin.
+
+---
+
+### `DELETE /api/v1/admin/reviews/{reviewId}`
+Quản trị viên xóa vĩnh viễn đánh giá vi phạm tiêu chuẩn cộng đồng và dọn dẹp các tệp ảnh khỏi storage. **Yêu cầu role ADMIN.**
+
+**Header:** `Authorization: Bearer <accessToken>`
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Xóa đánh giá thành công",
+  "data": null,
+  "timestamp": "2026-11-17T10:00:00"
+}
+```
+
+---
 
 Dịch vụ Chatbot AI tư vấn bán hàng thông minh dựa trên **Spring AI**, mô hình ngôn ngữ **Google Gemini**, **Redis Chat Memory** phân tán và cơ chế **RAG Function Calling (Product / Inventory / Order Tools)**.
 
