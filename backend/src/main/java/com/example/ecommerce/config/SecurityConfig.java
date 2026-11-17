@@ -167,6 +167,8 @@ public class SecurityConfig {
                 // VNPay callback (Return URL) & IPN webhook endpoint (không yêu cầu JWT đăng nhập)
                 .requestMatchers(HttpMethod.GET, "/api/v1/payments/vnpay-callback", "/payments/vnpay-callback").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/payments/vnpay-ipn", "/payments/vnpay-ipn").permitAll()
+                // SePay Webhook endpoint (xác thực qua API Key header thay vì JWT)
+                .requestMatchers(HttpMethod.POST, "/api/v1/payments/sepay-webhook", "/payments/sepay-webhook").permitAll()
                 // GET sản phẩm và danh mục: khách vãng lai được xem
                 .requestMatchers(HttpMethod.GET, "/api/v1/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/categories/**").permitAll()

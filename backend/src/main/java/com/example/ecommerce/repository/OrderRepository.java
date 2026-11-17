@@ -40,6 +40,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     List<Order> findAllByOrderByCreatedAtDesc();
 
+    List<Order> findTop50ByOrderByCreatedAtDesc();
+
     boolean existsByOrderCode(String orderCode);
 
     List<Order> findByCouponCode(String couponCode);

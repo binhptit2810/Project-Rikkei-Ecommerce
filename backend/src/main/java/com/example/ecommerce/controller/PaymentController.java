@@ -2,8 +2,10 @@ package com.example.ecommerce.controller;
 
 import com.example.ecommerce.dto.request.CreateVNPayPaymentRequest;
 import com.example.ecommerce.dto.request.ProcessPaymentRequest;
+import com.example.ecommerce.dto.request.SePayWebhookPayload;
 import com.example.ecommerce.dto.response.ApiResponse;
 import com.example.ecommerce.dto.response.PaymentResponse;
+import com.example.ecommerce.dto.response.SePayPaymentResponse;
 import com.example.ecommerce.dto.response.VNPayIpnResponse;
 import com.example.ecommerce.dto.response.VNPayPaymentResponse;
 import com.example.ecommerce.service.PaymentService;
@@ -128,6 +130,34 @@ public class PaymentController {
         String email = userDetails != null ? userDetails.getUsername() : null;
         PaymentResponse response = paymentService.getPaymentByTransactionCode(transactionCode, email);
         return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    /**
+     * Lấy thông tin thanh toán VietQR qua Cổng SePay (ảnh QR động, thông tin MBBank).
+     * GET /api/v1/payments/sepay-info/{orderId}
+     * GET /payments/sepay-info/{orderId}
+     */
+    @GetMapping({"/sepay-info/{orderId}", "/sepay/info/{orderId}"})
+    public ResponseEntity<ApiResponse<SePayPaymentResponse>> getSePayPaymentInfo(
+            @PathVariable Long orderId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        String email = userDetails != null ? userDetails.getUsername() : null;
+        SePayPaymentResponse response = paymentService.getSePayPaymentInfo(orderId, email);
+        return ResponseEntity.ok(ApiResponse.success("Lấy thông tin thanh toán VietQR SePay thành công", response));
+    }
+
+    /**
+     * Webhook tiếp nhận biến động số dư từ Cổng thanh toán SePay khi khách hàng chuyển khoản VietQR.
+     * Xác thực thông qua header Authorization: Apikey <API_KEY>.
+     * POST /api/v1/payments/sepay-webhook
+     * POST /payments/sepay-webhook
+     */
+    @PostMapping("/sepay-webhook")
+    public ResponseEntity<Map<String, Object>> handleSePayWebhook(
+            @RequestBody(required = false) SePayWebhookPayload payload,
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+        Map<String, Object> response = paymentService.handleSePayWebhook(payload, authHeader);
+        return ResponseEntity.ok(response);
     }
 }
 
