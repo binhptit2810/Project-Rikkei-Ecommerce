@@ -101,7 +101,9 @@ public class ProductService {
 
     private static final int DEFAULT_PAGE_SIZE = 12;
     private static final int MAX_PAGE_SIZE = 50;
-    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("id", "price", "createdAt", "name", "stockQuantity");
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+            "id", "price", "createdAt", "name", "stockQuantity", "ratingAverage", "totalReviews"
+    );
 
     /**
      * Tìm kiếm và lọc sản phẩm đang active dành cho khách mua sắm (hỗ trợ lọc theo khoảng giá minPrice, maxPrice).
