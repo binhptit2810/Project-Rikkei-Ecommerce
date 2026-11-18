@@ -156,17 +156,25 @@ const BestSellerCard = ({ product, rank, maxSold, shouldReduceMotion }) => {
             {productName}
           </h3>
 
-          {/* Đánh giá sao nếu có */}
+          {/* Đánh giá sao thực tế từ khách hàng */}
           <div className="flex items-center gap-1.5 mt-2">
-            <div className="flex items-center text-amber-400">
-              <Star className="w-3.5 h-3.5 fill-amber-400" />
+            <div className="flex items-center">
+              <Star className={`w-3.5 h-3.5 ${Number(product.totalReviews || 0) > 0 ? 'fill-amber-400 text-amber-400' : 'fill-slate-100 text-slate-300'}`} />
             </div>
-            <span className="text-xs font-semibold text-slate-700">
-              {Number(product.ratingAverage || 5.0).toFixed(1)}
-            </span>
-            <span className="text-xs text-slate-400">
-              ({product.totalReviews || 0})
-            </span>
+            {Number(product.totalReviews || 0) > 0 ? (
+              <>
+                <span className="text-xs font-semibold text-slate-700">
+                  {Number(product.ratingAverage || 0).toFixed(1)}
+                </span>
+                <span className="text-xs text-slate-400">
+                  ({product.totalReviews})
+                </span>
+              </>
+            ) : (
+              <span className="text-xs text-slate-400">
+                Chưa có đánh giá
+              </span>
+            )}
           </div>
 
           {/* Giá tiền */}

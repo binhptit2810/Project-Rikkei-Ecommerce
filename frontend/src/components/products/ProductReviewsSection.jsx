@@ -50,7 +50,7 @@ const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024 // 5MB
  * [2] Tích hợp lightbox phóng to khi click vào ảnh đánh giá của khách.
  * [3] Thiết kế khung "Phản hồi từ Người bán" bo góc màu xám nhạt dưới review.
  */
-export const ProductReviewsSection = ({ productId }) => {
+export const ProductReviewsSection = ({ productId, onRatingSummaryChange }) => {
   const navigate = useNavigate()
   const location = useLocation()
   const { isAuthenticated, user } = useAuthStore()
@@ -134,6 +134,7 @@ export const ProductReviewsSection = ({ productId }) => {
           totalReviews: res.data.totalReviews ?? 0,
           ratingCounts: res.data.ratingCounts ?? { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
         })
+        onRatingSummaryChange?.(res.data)
       }
     } catch (err) {
       console.warn('Lỗi tải thống kê đánh giá:', err)
@@ -599,7 +600,7 @@ export const ProductReviewsSection = ({ productId }) => {
   }
 
   return (
-    <section className="mt-12 pt-10 border-t border-slate-200 animate-in fade-in duration-300">
+    <section id="reviews-section" className="mt-12 pt-10 border-t border-slate-200 animate-in fade-in duration-300">
       {/* Toast Notification */}
       {toast && (
         <div
@@ -1143,7 +1144,9 @@ export const ProductReviewsSection = ({ productId }) => {
               <MessageSquareHeart className="w-7 h-7 text-slate-400" />
             </div>
             <h4 className="text-sm font-bold text-slate-700 mb-1">
-              Chưa có đánh giá nào cho mức này
+              {selectedRatingFilter !== null
+                ? `Chưa có đánh giá nào cho mức ${selectedRatingFilter} sao`
+                : 'Chưa có đánh giá nào cho sản phẩm này'}
             </h4>
             <p className="text-xs text-slate-500 max-w-sm mx-auto">
               Hãy là người đầu tiên trải nghiệm sản phẩm và để lại đánh giá hữu ích cho cộng đồng!
