@@ -130,6 +130,18 @@ export const ProductDetailPage = () => {
     }
   }, [id])
 
+  const handleRatingSummaryChange = (summary) => {
+    if (!summary) return
+    setProduct((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        ratingAverage: summary.ratingAverage ?? 0.0,
+        totalReviews: summary.totalReviews ?? 0,
+      }
+    })
+  }
+
   const formatPrice = (price) => {
     return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price || 0)
   }
@@ -391,18 +403,39 @@ export const ProductDetailPage = () => {
                 {product.name}
               </h1>
 
-              {/* Rating row */}
-              <div className="flex items-center gap-3 text-xs">
-                <div className="flex text-amber-400">
-                  {[...Array(5)].map((_, i) => (
-                    <Star key={i} className="w-4 h-4 fill-current" />
-                  ))}
+              {/* Rating row (dữ liệu đánh giá thật) */}
+              <div 
+                className="flex items-center gap-3 text-xs cursor-pointer group select-none"
+                title="Bấm để xem chi tiết nhận xét đánh giá"
+                onClick={() => {
+                  const el = document.getElementById('reviews-section')
+                  if (el) el.scrollIntoView({ behavior: 'smooth' })
+                }}
+              >
+                <div className="flex">
+                  {[...Array(5)].map((_, i) => {
+                    const isFilled = (Number(product.totalReviews || 0) > 0) && (i < Math.round(Number(product.ratingAverage || 0)))
+                    return (
+                      <Star 
+                        key={i} 
+                        className={`w-4 h-4 ${isFilled ? 'fill-amber-400 text-amber-400' : 'fill-slate-100 text-slate-300'}`} 
+                      />
+                    )
+                  })}
                 </div>
-                <span className="font-bold text-slate-800">4.8</span>
-                <span className="text-slate-400">•</span>
-                <span className="text-slate-500 underline cursor-pointer">
-                  {(product.id * 23) % 400 + 150} Đánh giá đã xác thực
-                </span>
+                {Number(product.totalReviews || 0) > 0 ? (
+                  <>
+                    <span className="font-bold text-slate-800">
+                      {Number(product.ratingAverage || 0).toFixed(1)}
+                    </span>
+                    <span className="text-slate-400">•</span>
+                    <span className="text-slate-500 underline group-hover:text-blue-600 transition-colors">
+                      {product.totalReviews} đánh giá đã xác thực
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-slate-400 italic">Chưa có đánh giá</span>
+                )}
               </div>
 
               {/* Price Display */}
@@ -621,7 +654,10 @@ export const ProductDetailPage = () => {
 
         {/* Phân hệ Đánh giá & Nhận xét sản phẩm [TSK-D12-DDM] */}
         {product && product.id && (
-          <ProductReviewsSection productId={product.id} />
+          <ProductReviewsSection 
+            productId={product.id} 
+            onRatingSummaryChange={handleRatingSummaryChange} 
+          />
         )}
       </div>
     </div>
