@@ -101,7 +101,9 @@ public class ProductService {
 
     private static final int DEFAULT_PAGE_SIZE = 12;
     private static final int MAX_PAGE_SIZE = 50;
-    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of("id", "price", "createdAt", "name", "stockQuantity");
+    private static final Set<String> ALLOWED_SORT_FIELDS = Set.of(
+            "id", "price", "createdAt", "name", "stockQuantity", "ratingAverage", "totalReviews"
+    );
 
     /**
      * Tìm kiếm và lọc sản phẩm đang active dành cho khách mua sắm (hỗ trợ lọc theo khoảng giá minPrice, maxPrice).
@@ -771,12 +773,18 @@ public class ProductService {
             }
         }
 
-        BigDecimal salePrice = dealProduct.getPrice();
+        BigDecimal salePrice = dealProduct.getPrice() != null ? dealProduct.getPrice() : BigDecimal.ZERO;
+        if (discountPercentage <= 0 || discountPercentage >= 100) {
+            discountPercentage = 25;
+        }
         // Giá gốc tính theo tỷ lệ chiết khấu: originalPrice = salePrice / (1 - discountPercentage / 100)
         BigDecimal oneMinusDiscount = BigDecimal.ONE.subtract(
                 BigDecimal.valueOf(discountPercentage).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP)
         );
-        BigDecimal originalPrice = salePrice.divide(oneMinusDiscount, 0, RoundingMode.HALF_UP);
+        BigDecimal originalPrice = salePrice;
+        if (oneMinusDiscount.compareTo(BigDecimal.ZERO) > 0) {
+            originalPrice = salePrice.divide(oneMinusDiscount, 0, RoundingMode.HALF_UP);
+        }
 
         return DealOfTheDayResponse.builder()
                 .id(dealProduct.getId())

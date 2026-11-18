@@ -231,16 +231,29 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
             {product.name}
           </h3>
 
-          {/* Đánh giá sao TechNova (4.8 rating) */}
+          {/* Đánh giá sao thực tế từ khách hàng */}
           <div className="flex items-center gap-1.5 pt-0.5 text-xs">
-            <div className="flex text-amber-400">
-              {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-3.5 h-3.5 fill-current" />
-              ))}
+            <div className="flex">
+              {[...Array(5)].map((_, i) => {
+                const isFilled = (Number(product.totalReviews || 0) > 0) && (i < Math.round(Number(product.ratingAverage || 0)))
+                return (
+                  <Star 
+                    key={i} 
+                    className={`w-3.5 h-3.5 ${isFilled ? 'fill-amber-400 text-amber-400' : 'fill-slate-100 text-slate-300'}`} 
+                  />
+                )
+              })}
             </div>
-            <span className="text-slate-500 font-semibold text-[11px]">
-              4.8 <span className="text-slate-400 font-normal">({(Number(product.id) * 17) % 300 + 120})</span>
-            </span>
+            {Number(product.totalReviews || 0) > 0 ? (
+              <span className="text-slate-600 font-bold text-[11px]">
+                {Number(product.ratingAverage || 0).toFixed(1)}{' '}
+                <span className="text-slate-400 font-normal">({product.totalReviews})</span>
+              </span>
+            ) : (
+              <span className="text-slate-400 font-normal text-[11px]">
+                Chưa có đánh giá
+              </span>
+            )}
           </div>
 
           {/* Hàng giá tiền: Giá bán + Giá gốc gạch ngang + Tag giảm */}

@@ -222,16 +222,29 @@ export const WishlistPage = () => {
                         {item.name}
                       </h3>
 
-                      {/* Đánh giá sao */}
-                      <div className="flex items-center gap-1.5 text-xs text-amber-400">
+                      {/* Đánh giá sao thực tế */}
+                      <div className="flex items-center gap-1.5 text-xs">
                         <div className="flex">
-                          {[...Array(5)].map((_, i) => (
-                            <Star key={i} className="w-3.5 h-3.5 fill-current" />
-                          ))}
+                          {[...Array(5)].map((_, i) => {
+                            const isFilled = (Number(item.totalReviews || 0) > 0) && (i < Math.round(Number(item.ratingAverage || 0)))
+                            return (
+                              <Star 
+                                key={i} 
+                                className={`w-3.5 h-3.5 ${isFilled ? 'fill-amber-400 text-amber-400' : 'fill-slate-100 text-slate-300'}`} 
+                              />
+                            )
+                          })}
                         </div>
-                        <span className="text-slate-600 font-bold text-[11px] ml-1">
-                          {item.ratingAverage ? Number(item.ratingAverage).toFixed(1) : '5.0'}
-                        </span>
+                        {Number(item.totalReviews || 0) > 0 ? (
+                          <span className="text-slate-600 font-bold text-[11px] ml-1">
+                            {Number(item.ratingAverage || 0).toFixed(1)}{' '}
+                            <span className="text-slate-400 font-normal">({item.totalReviews})</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal text-[11px] ml-1">
+                            Chưa có đánh giá
+                          </span>
+                        )}
                       </div>
 
                       {/* Giá bán */}
