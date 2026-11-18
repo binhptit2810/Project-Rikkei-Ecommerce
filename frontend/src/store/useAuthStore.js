@@ -355,6 +355,7 @@ export const useAuthStore = create((set, get) => ({
       try {
         localStorage.clear()
         sessionStorage.clear()
+        window.dispatchEvent(new CustomEvent('auth:logout'))
       } catch (e) {
         // Bỏ qua nếu môi trường chặn truy cập storage
       }

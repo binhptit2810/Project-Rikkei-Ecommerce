@@ -37,8 +37,11 @@ import java.time.ZoneId;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Service quản lý sản phẩm (Product Module).
@@ -131,7 +134,32 @@ public class ProductService {
                 pageable
         );
 
-        return PageResponse.from(productPage, ProductResponse::fromEntity);
+        PageResponse<ProductResponse> pageResponse = PageResponse.from(productPage, ProductResponse::fromEntity);
+        if (productVariantRepository != null && !productPage.getContent().isEmpty()) {
+            try {
+                List<Long> productIds = productPage.getContent().stream()
+                        .map(Product::getId)
+                        .filter(Objects::nonNull)
+                        .toList();
+                List<ProductVariant> variants = productVariantRepository.findByProductIdIn(productIds);
+                if (variants != null && !variants.isEmpty()) {
+                    Map<Long, List<ProductVariantResponse>> variantsByProduct = variants.stream()
+                            .collect(Collectors.groupingBy(
+                                    v -> v.getProduct().getId(),
+                                    Collectors.mapping(ProductVariantResponse::fromEntity, Collectors.toList())
+                            ));
+                    for (ProductResponse res : pageResponse.getContent()) {
+                        if (res != null && variantsByProduct.containsKey(res.getId())) {
+                            res.setVariants(variantsByProduct.get(res.getId()));
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Không thể nạp biến thể kích cỡ cho danh sách sản phẩm: {}", e.getMessage());
+            }
+        }
+
+        return pageResponse;
     }
 
     /**
@@ -294,7 +322,32 @@ public class ProductService {
                 pageable
         );
 
-        return PageResponse.from(productPage, ProductResponse::fromEntity);
+        PageResponse<ProductResponse> pageResponse = PageResponse.from(productPage, ProductResponse::fromEntity);
+        if (productVariantRepository != null && !productPage.getContent().isEmpty()) {
+            try {
+                List<Long> productIds = productPage.getContent().stream()
+                        .map(Product::getId)
+                        .filter(Objects::nonNull)
+                        .toList();
+                List<ProductVariant> variants = productVariantRepository.findByProductIdIn(productIds);
+                if (variants != null && !variants.isEmpty()) {
+                    Map<Long, List<ProductVariantResponse>> variantsByProduct = variants.stream()
+                            .collect(Collectors.groupingBy(
+                                    v -> v.getProduct().getId(),
+                                    Collectors.mapping(ProductVariantResponse::fromEntity, Collectors.toList())
+                            ));
+                    for (ProductResponse res : pageResponse.getContent()) {
+                        if (res != null && variantsByProduct.containsKey(res.getId())) {
+                            res.setVariants(variantsByProduct.get(res.getId()));
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Không thể nạp biến thể kích cỡ cho danh sách sản phẩm: {}", e.getMessage());
+            }
+        }
+
+        return pageResponse;
     }
 
     /**

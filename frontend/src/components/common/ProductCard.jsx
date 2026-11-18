@@ -1,9 +1,11 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ShoppingBag, ShoppingCart, Star, Heart, Eye } from 'lucide-react'
 import { motion, useReducedMotion } from 'framer-motion'
 import { useAuthStore } from '../../store/useAuthStore'
 import { useWishlistStore } from '../../store/useWishlistStore'
+import productService from '../../services/productService'
+import QuickSizeModal from '../products/QuickSizeModal'
 
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=80'
 
@@ -24,14 +26,26 @@ const GLOW_CLASSES = [
  * - Tên thương hiệu in hoa, đánh giá sao vàng
  * - Nút "Thêm vào giỏ" viên thuốc màu xanh hoàng gia (Royal Blue) với micro-interaction
  */
-export const ProductCard = ({ product, onAddToCart, variants }) => {
+export const ProductCard = ({ product, onAddToCart, variants: motionVariants }) => {
   const [imgError, setImgError] = useState(false)
   const { isAuthenticated, user } = useAuthStore()
   const navigate = useNavigate()
   const shouldReduceMotion = useReducedMotion()
-  const isInWishlist = useWishlistStore((state) => state.isInWishlist)
+  const isLiked = useWishlistStore((state) =>
+    product ? state.wishlistIds.includes(Number(product.id)) : false
+  )
   const toggleWishlist = useWishlistStore((state) => state.toggleWishlist)
-  const isLiked = product ? isInWishlist(product.id) : false
+
+  // Quản lý biến thể kích cỡ cho Quick Size Selection
+  const [isSizeModalOpen, setIsSizeModalOpen] = useState(false)
+  const [variantsList, setVariantsList] = useState(product?.variants || [])
+  const [isLoadingVariants, setIsLoadingVariants] = useState(false)
+
+  useEffect(() => {
+    if (Array.isArray(product?.variants) && product.variants.length > 0) {
+      setVariantsList(product.variants)
+    }
+  }, [product?.variants])
 
   if (!product) return null
 
@@ -80,8 +94,8 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
     currency: 'VND',
   }).format(originalPrice)
 
-  // Xử lý sự kiện click Thêm vào giỏ hàng
-  const handleAddToCartClick = (e) => {
+  // Xử lý sự kiện click Thêm vào giỏ hàng (hỗ trợ chọn Size nhanh)
+  const handleAddToCartClick = async (e) => {
     e.preventDefault()
     e.stopPropagation()
 
@@ -102,8 +116,49 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
       return
     }
 
-    if (!isOutOfStock && onAddToCart) {
-      onAddToCart(product)
+    if (isOutOfStock || isLoadingVariants) return
+
+    let currentVariants = variantsList
+
+    // Nếu chưa nạp biến thể kích cỡ, thử lấy từ product hoặc fetch API
+    if (!Array.isArray(currentVariants) || currentVariants.length === 0) {
+      if (Array.isArray(product.variants) && product.variants.length > 0) {
+        currentVariants = product.variants
+        setVariantsList(currentVariants)
+      } else {
+        try {
+          setIsLoadingVariants(true)
+          const res = await productService.getProductVariants(product.id)
+          const payload = res?.data
+          let loaded = []
+          if (Array.isArray(payload)) {
+            loaded = payload
+          } else if (Array.isArray(payload?.variants)) {
+            loaded = payload.variants
+          }
+          currentVariants = loaded
+          setVariantsList(loaded)
+        } catch (err) {
+          console.warn('[ProductCard] Không thể tải biến thể kích cỡ:', err)
+        } finally {
+          setIsLoadingVariants(false)
+        }
+      }
+    }
+
+    // Nếu sản phẩm có biến thể kích cỡ -> Mở QuickSizeModal
+    if (Array.isArray(currentVariants) && currentVariants.length > 0) {
+      setIsSizeModalOpen(true)
+    } else if (onAddToCart) {
+      // Sản phẩm không có biến thể kích cỡ -> Thêm trực tiếp vào giỏ
+      onAddToCart(product, 1, null, null)
+    }
+  }
+
+  // Xác nhận thêm vào giỏ từ QuickSizeModal
+  const handleConfirmQuickAddToCart = ({ product: prod, quantity, selectedSize, variant }) => {
+    if (onAddToCart) {
+      onAddToCart(prod, quantity, selectedSize, variant)
     }
   }
 
@@ -121,8 +176,8 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
 
   return (
     <motion.div
-      variants={variants}
-      whileHover={shouldReduceMotion ? {} : { y: -6, transition: { duration: 0.25, ease: 'easeOut' } }}
+      variants={motionVariants}
+      whileHover={shouldReduceMotion || isSizeModalOpen ? {} : { y: -6, transition: { duration: 0.25, ease: 'easeOut' } }}
       className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white hover:border-slate-300 shadow-sm hover:shadow-xl transition-shadow duration-300 overflow-hidden"
     >
       <Link to={`/products/${product.id}`} className="block">
@@ -278,7 +333,7 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
           whileTap={shouldReduceMotion || isOutOfStock ? {} : { scale: 0.96 }}
           type="button"
           onClick={handleAddToCartClick}
-          disabled={isOutOfStock}
+          disabled={isOutOfStock || isLoadingVariants}
           className={`w-full py-2.5 px-4 rounded-full text-xs font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs ${
             isOutOfStock
               ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200'
@@ -287,9 +342,18 @@ export const ProductCard = ({ product, onAddToCart, variants }) => {
           title={isOutOfStock ? 'Sản phẩm đã hết hàng' : 'Thêm vào giỏ hàng'}
         >
           <ShoppingCart className="w-4 h-4" />
-          <span>{isOutOfStock ? 'Tạm hết hàng' : 'Thêm vào giỏ'}</span>
+          <span>{isOutOfStock ? 'Tạm hết hàng' : isLoadingVariants ? 'Đang kiểm tra...' : 'Thêm vào giỏ'}</span>
         </motion.button>
       </div>
+
+      {/* Quick Size Modal cho phép chọn size nhanh */}
+      <QuickSizeModal
+        isOpen={isSizeModalOpen}
+        onClose={() => setIsSizeModalOpen(false)}
+        product={product}
+        variants={variantsList}
+        onConfirmAddToCart={handleConfirmQuickAddToCart}
+      />
     </motion.div>
   )
 }

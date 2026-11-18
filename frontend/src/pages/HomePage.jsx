@@ -176,7 +176,7 @@ export const HomePage = () => {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const handleAddToCart = async (product) => {
+  const handleAddToCart = async (product, quantity = 1, selectedSize = null, variant = null) => {
     if (!isAuthenticated) {
       navigate('/login', {
         state: {
@@ -189,7 +189,15 @@ export const HomePage = () => {
 
     if (!product || product.stockQuantity <= 0) return
 
-    const res = await addToCart(product, 1)
+    const productPayload = {
+      ...product,
+      variants: (Array.isArray(product.variants) && product.variants.length > 0)
+        ? product.variants
+        : (variant ? [variant] : []),
+      variantId: variant?.id || product.variantId || null,
+    }
+
+    const res = await addToCart(productPayload, quantity, selectedSize)
     if (res?.requireLogin) {
       navigate('/login', {
         state: {
