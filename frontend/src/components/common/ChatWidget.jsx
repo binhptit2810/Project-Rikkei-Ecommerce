@@ -880,6 +880,11 @@ export const ChatWidget = () => {
   const charCount = inputValue.length
   const showCharWarning = charCount > 800
 
+  // Ẩn hoàn toàn Chatbox và nút bấm khi chưa đăng nhập
+  if (!isAuthenticated) {
+    return null
+  }
+
   return (
     <>
       {/* 1. Expand/Collapse Modal Dialog: Tối ưu chuẩn Mobile 375px full-screen & Desktop floating modal */}

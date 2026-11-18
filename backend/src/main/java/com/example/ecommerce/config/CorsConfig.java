@@ -30,7 +30,7 @@ import java.util.List;
 @Configuration
 public class CorsConfig implements WebMvcConfigurer {
 
-    @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:5173,http://rikkei-shop.me}")
+    @Value("${cors.allowed-origins:http://localhost:3000,http://localhost:5173,http://rikkei-shop.me,https://rikkei-shop.me,https://www.rikkei-shop.me}")
     private String allowedOrigins;
 
     @Value("${app.upload.dir:uploads}")

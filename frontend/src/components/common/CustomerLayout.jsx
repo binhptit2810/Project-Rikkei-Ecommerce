@@ -4,6 +4,7 @@ import { motion, AnimatePresence, useReducedMotion } from 'framer-motion'
 import Navbar from './Navbar'
 import Footer from './Footer'
 import ChatWidget from './ChatWidget'
+import { useAuthStore } from '../../store/useAuthStore'
 
 /**
  * Layout dành riêng cho khu vực khách hàng (Customer Layout).
@@ -13,6 +14,7 @@ import ChatWidget from './ChatWidget'
 export const CustomerLayout = () => {
   const location = useLocation()
   const shouldReduceMotion = useReducedMotion()
+  const { isAuthenticated } = useAuthStore()
 
   return (
     <div className="min-h-screen bg-slate-50/60 text-slate-900 flex flex-col justify-between antialiased selection:bg-blue-600 selection:text-white font-sans">
@@ -32,7 +34,7 @@ export const CustomerLayout = () => {
         </AnimatePresence>
       </main>
       <Footer />
-      <ChatWidget />
+      {isAuthenticated && <ChatWidget />}
     </div>
   )
 }

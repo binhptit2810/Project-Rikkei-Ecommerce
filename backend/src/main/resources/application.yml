@@ -94,7 +94,7 @@ spring:
   # CORS Configuration
   # =============================================================================
 cors:
-  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://rikkei-shop.me}
+  allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173,http://rikkei-shop.me,https://rikkei-shop.me,https://www.rikkei-shop.me}
 
 # =============================================================================
 # JWT & Refresh Token Authentication
