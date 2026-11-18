@@ -154,8 +154,8 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api/v1}
-        VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN:-}
-        VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID:-}
+        VITE_AUTH0_DOMAIN: ${VITE_AUTH0_DOMAIN:-${AUTH0_DOMAIN:-}}
+        VITE_AUTH0_CLIENT_ID: ${VITE_AUTH0_CLIENT_ID:-${AUTH0_CLIENT_ID:-}}
     container_name: ecommerce-frontend
     restart: unless-stopped
     ports:
