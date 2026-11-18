@@ -19,7 +19,7 @@
 - **Quản lý Phiên Bảo mật Cao:** Cơ chế **Dual-Token** kết hợp Access Token ngắn hạn (15 phút) và Refresh Token dài hạn (7 ngày) quản lý tập trung trên Redis với **Refresh Token Rotation (RTR)**, **Grace Period** và **Token Reuse Detection**.
 - **Phân quyền Đa tầng (RBAC):** Phân chia rõ ràng giữa `ROLE_CUSTOMER` và `ROLE_ADMIN` qua 2 lớp phòng thủ: URL Pattern Filtering (`SecurityFilterChain`) và Method-level Security (`@PreAuthorize`).
 - **Phòng chống Lỗ hổng IDOR:** Bảo vệ quyền riêng tư người dùng trong quản lý Đơn hàng, Profile và Đánh giá thông qua nguyên tắc *Context-Bound Ownership Verification*.
-- **Quản trị Đánh giá & Tải ảnh An toàn:** Hệ thống Review đính kèm hình ảnh với **5 lớp phòng thủ** (Apache Tika Magic Bytes, UUID Sanitization, Extension Whitelist, Size Limit, Execution Prevention) và đảm bảo tính nhất quán DB-Filesystem qua Event-driven `@TransactionalEventListener(phase = AFTER_COMMIT)`.
+- **Quản trị Đánh giá & Tải ảnh An toàn:** Hệ thống Review đính kèm hình ảnh với **5 lớp phòng thủ** (Kiểm tra chữ ký nhị phân Magic Bytes thuần Java JPEG/PNG, kiểm tra giải mã ảnh `ImageIO` chống Decompression Bomb $\le 8000$px, UUID Sanitization, Extension Whitelist .jpg/.jpeg/.png, dung lượng < 5MB/ảnh và tối đa 3 ảnh/đánh giá) và dọn dẹp file vật lý an toàn sau COMMIT transaction (`TransactionSynchronization.afterCommit`).
 - **Thanh toán Trực tuyến:** Hỗ trợ thanh toán nhận hàng (COD), mô phỏng (Simulated) và tích hợp cổng thanh toán trực tuyến **VNPay Sandbox**.
 - **Tư vấn Bán hàng Thông minh:** Trợ lý ảo AI tích hợp **Spring AI** và mô hình **Google Gemini 2.5 Flash** hỗ trợ tra cứu sản phẩm, kiểm tra tồn kho và đơn hàng theo thời gian thực.
 
@@ -31,31 +31,35 @@
 
 ```
 [ Khách hàng / Quản trị viên ]
-             │ (HTTPS / HTTP)
+             │ (HTTP / HTTPS)
              ▼
    ┌────────────────────────────────────────────────────────┐
-   │         Nginx Reverse Proxy & Gateway (Port 80)        │
-   │  • Routing: / -> Frontend SPA | /api/ -> Spring Boot  │
-   │  • Static Serving: /uploads/ (Binary Images)           │
+   │    Frontend SPA + Nginx Reverse Proxy (Port 3000)      │
+   │  • Container: ecommerce-frontend (nginx:alpine)        │
+   │  • Routing: / -> React SPA static assets               │
+   │  • Reverse Proxy: /api/ -> backend:8080/api/           │
+   │  • Streaming AI: /api/v1/chat (proxy_buffering off)    │
    └───────────────────────────┬────────────────────────────┘
-                               │ (Docker Bridge: app-network)
+                               │ (Docker Bridge: ecommerce-net)
              ┌─────────────────┴─────────────────┐
              ▼                                   ▼
 ┌─────────────────────────┐         ┌─────────────────────────┐
 │   React 18 Frontend     │         │ Spring Boot 3 REST API  │
-│ • Vite 5.4, TailwindCSS │         │ • Java 21 LTS, Port 8080│
-│ • Axios Interceptors    │         │ • Spring Security 6     │
-│ • Zustand State Store   │         │ • Bucket4j Rate Limit   │
-└─────────────────────────┘         │ • Spring Data JPA / ORM │
-                                    └────────────┬────────────┘
+│ • Vite 5.4, TailwindCSS │         │ • Container: ecommerce- │
+│ • Axios Interceptors    │         │   backend (Java 21)     │
+│ • Zustand State Store   │         │ • Spring Security 6     │
+│ • Port 3000 (Nginx map) │         │ • Port 8080 (Stateless) │
+└─────────────────────────┘         └────────────┬────────────┘
                                                  │
                         ┌────────────────────────┴────────────────────────┐
                         ▼                                                 ▼
              ┌─────────────────────┐                           ┌─────────────────────┐
              │   MySQL 8.0 RDBMS   │                           │    Redis 7.0 Cache  │
-             │ • 14 bảng quan hệ   │                           │ • Opaque RT Store   │
+             │ • Container:        │                           │ • Container:        │
+             │   ecommerce-mysql   │                           │   ecommerce-redis   │
+             │ • Port 3307:3306    │                           │ • Port 6379         │
+             │ • 14 bảng quan hệ   │                           │ • Token Rotation Lua│
              │ • InnoDB ACID       │                           │ • Grace Period TTL  │
-             │ • UTF8MB4 Encoding  │                           │ • OTP & Rate Limit  │
              └─────────────────────┘                           └─────────────────────┘
 ```
 
@@ -64,21 +68,21 @@
 | Tầng kiến trúc | Công nghệ / Thư viện | Phiên bản | Vai trò & Mục đích sử dụng |
 |:---|:---|:---|:---|
 | **Language & Runtime** | Java OpenJDK | 21 LTS | Ngôn ngữ backend chính, tối ưu hóa ảo hóa luồng và GC |
-| **Framework** | Spring Boot | 3.3.5 | Nền tảng microservices & RESTful API framework |
+| **Framework** | Spring Boot | 3.3.5 | Nền tảng RESTful API backend framework |
 | **Security** | Spring Security | 6.3.4 | Filter chain, JWT Stateless Filter, RBAC, OAuth2 Client |
-| **JWT** | JJWT (`jjwt-api`, `jjwt-impl`) | 0.12.6 | Tạo, giải mã và xác minh chữ ký số HMAC-SHA256 (512-bit) |
-| **File Inspection** | Apache Tika Core | 2.9.2 | Nhận diện Magic Bytes nhị phân chống mã độc ngụy trang ảnh |
+| **JWT** | JJWT (`jjwt-api`, `jjwt-impl`) | 0.12.6 | Tạo, giải mã và xác minh chữ ký HMAC-SHA256 (512-bit) |
+| **File Inspection** | Native Java + ImageIO | Java 21 | Kiểm tra Magic Bytes nhị phân JPEG/PNG, chống Decompression Bomb $\le 8000$px |
 | **Rate Limiting** | Bucket4j Core | 8.14.0 | Thuật toán Token Bucket chống Brute Force và DDoS |
-| **AI Assistant** | Spring AI (Gemini) | 1.0.0-M4 | Chatbot tư vấn bán hàng RAG Function Calling |
-| **Database** | MySQL Server | 8.0.39 | Cơ sở dữ liệu quan hệ lưu trữ nghiệp vụ chính (14 bảng) |
+| **AI Assistant** | Spring AI (Gemini) | 1.0.0-M4 | Chatbot tư vấn bán hàng RAG Function Calling qua Gemini 2.5 Flash |
+| **Database** | MySQL Server | 8.0.39 | Cơ sở dữ liệu quan hệ lưu trữ nghiệp vụ chính (14 bảng thực tế) |
 | **ORM / Data Access** | Spring Data JPA / Hibernate | 6.5.x | Quản lý Entity, Transaction ACID, tối ưu hóa câu lệnh SQL |
-| **In-Memory Cache** | Redis / Lettuce Client | 7.0 | Lưu trữ Refresh Token, OTP, Rate Limit counter và Chat Memory |
+| **In-Memory Cache** | Redis / Lettuce Client | 7.0 | Lưu trữ Refresh Token (Lua script), OTP, Rate Limit counter và Chat Memory |
 | **Frontend Framework**| React | 18.3.1 | Thư viện xây dựng giao diện Single Page Application (SPA) |
 | **Build Tool** | Vite | 5.4.10 | Công cụ đóng gói mã nguồn frontend siêu tốc |
 | **Styling** | Tailwind CSS | 3.4.14 | Utility-first CSS framework thiết kế responsive |
 | **State & HTTP** | Zustand / Axios | Mới nhất | Quản lý state toàn cục và cấu hình Axios Interceptors |
-| **Reverse Proxy** | Nginx Alpine | 1.25 | Cổng vào duy nhất, định tuyến request, phục vụ static assets |
-| **Containerization** | Docker & Docker Compose | v2.x | Đóng gói toàn bộ hệ sinh thái chạy độc lập môi trường |
+| **Reverse Proxy** | Nginx Alpine (Frontend container) | 1.25+ | Cổng vào port 3000, định tuyến request API, streaming AI, phục vụ static |
+| **Containerization** | Docker & Docker Compose | v2.x | Đóng gói toàn bộ 4 containers trên mạng nội bộ `ecommerce-net` |
 
 ---
 
@@ -136,7 +140,11 @@ cp .env.example .env
 
 ## 🐳 5. Hướng dẫn Khởi chạy với Docker Compose (Production Ready)
 
-Đây là phương thức khuyến nghị nhanh nhất và chuẩn hóa nhất để triển khai toàn bộ hệ thống (Frontend, Backend, Database, Redis, Nginx) chỉ với 1 lệnh duy nhất.
+Hệ thống được đóng gói thành **4 containers** độc lập, quản lý thông qua `docker-compose.yml` trên mạng bridge `ecommerce-net`:
+1. `ecommerce-mysql`: MySQL 8.0 (Port host `3307:3306`, persistent volume `mysql_data`).
+2. `ecommerce-redis`: Redis 7 Alpine (Port host `6379:6379`, persistent volume `redis_data`, AOF enabled).
+3. `ecommerce-backend`: Spring Boot 3 Java 21 REST API (Port host `8080:8080`, stateless).
+4. `ecommerce-frontend`: React/Vite SPA tích hợp Nginx Reverse Proxy (Port host `3000:80`, định tuyến `/api/` về `backend:8080`).
 
 ### Bước 1: Khởi động toàn bộ cụm dịch vụ
 Từ thư mục gốc của dự án:
@@ -148,14 +156,13 @@ docker compose up -d --build
 ```bash
 docker compose ps
 ```
-*Kết quả chuẩn yêu cầu 5 containers ở trạng thái `running` (hoặc `healthy`):*
+*Kết quả chuẩn yêu cầu 4 containers ở trạng thái `running` (hoặc `healthy`):*
 ```
-NAME                          IMAGE                             COMMAND                  SERVICE      STATUS
-rikkei-ecommerce-nginx-1      nginx:1.25-alpine                 "/docker-entrypoint.…"   nginx        Up (healthy) (port 0.0.0.0:80->80/tcp)
-rikkei-ecommerce-backend-1    rikkei-ecommerce-backend:latest   "java -jar app.jar"      backend      Up (healthy)
-rikkei-ecommerce-frontend-1   rikkei-ecommerce-frontend:latest  "nginx -g 'daemon of…"   frontend     Up
-rikkei-ecommerce-mysql-1      mysql:8.0                         "docker-entrypoint.s…"   mysql        Up (healthy)
-rikkei-ecommerce-redis-1      redis:7.0-alpine                  "docker-entrypoint.s…"   redis        Up (healthy)
+NAME                 IMAGE                             COMMAND                  SERVICE      STATUS
+ecommerce-mysql      mysql:8.0                         "docker-entrypoint.s…"   mysql        Up (healthy) (0.0.0.0:3307->3306/tcp)
+ecommerce-redis      redis:7-alpine                    "docker-entrypoint.s…"   redis        Up (healthy) (0.0.0.0:6379->6379/tcp)
+ecommerce-backend    project-rikkei-ecommerce-backend  "java -jar app.jar"      backend      Up (healthy) (0.0.0.0:8080->8080/tcp)
+ecommerce-frontend   project-rikkei-ecommerce-frontend "/docker-entrypoint.…"   frontend     Up (healthy) (0.0.0.0:3000->80/tcp)
 ```
 
 ### Bước 3: Xem nhật ký hoạt động (Logs)
@@ -168,9 +175,10 @@ docker compose logs -f backend
 ```
 
 ### Bước 4: Truy cập Hệ thống
-- **Giao diện Mua sắm (Frontend):** `http://localhost`
-- **Tài liệu Swagger API (Backend):** `http://localhost/swagger-ui/index.html` (hoặc `http://localhost:8080/swagger-ui/index.html`)
-- **Kiểm tra Sức khỏe Hệ thống (Health Check):** `http://localhost/api/v1/health`
+- **Giao diện Mua sắm (Frontend):** `http://localhost:3000`
+- **Backend REST API Trực tiếp:** `http://localhost:8080` (hoặc qua proxy: `http://localhost:3000/api/v1`)
+- **Tài liệu Swagger API (Backend):** `http://localhost:8080/swagger-ui/index.html`
+- **Kiểm tra Sức khỏe Hệ thống (Health Check):** `http://localhost:8080/api/v1/health` hoặc `http://localhost:8080/api/health`
 
 ### Bước 5: Dừng hoặc Gỡ bỏ Cụm Dịch vụ
 ```bash

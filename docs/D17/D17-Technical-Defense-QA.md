@@ -77,7 +77,7 @@
 
 4. **Thành phần hoặc class tương ứng trong source code:**
    - Frontend Build Config: `frontend/vite.config.ts`, `frontend/package.json`.
-   - Backend Base REST Config: `backend/src/main/java/com/rikkeisoft/ecommerce/common/ApiResponse.java`.
+   - Backend Base REST Config: `backend/src/main/java/com/example/ecommerce/common/ApiResponse.java`.
    - Nginx Routing: `docker/nginx/nginx.conf` (Định tuyến `/` cho Frontend và `/api/` cho Backend).
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
@@ -92,27 +92,35 @@
 ### Câu 2: Vai trò của Nginx Reverse Proxy trong môi trường Docker Compose
 
 1. **Câu hỏi của hội đồng:**  
-   *"Tại sao các bạn lại đặt Nginx làm Reverse Proxy phía trước Spring Boot và React thay vì cho Client gọi trực tiếp vào port 8080 của backend?"*
+   *"Tại sao các bạn lại đặt Nginx làm Reverse Proxy tích hợp trong container Frontend thay vì cho Client gọi trực tiếp vào port 8080 của backend?"*
 
 2. **Câu trả lời ngắn gọn (30–45 giây):**  
-   *"Dạ thưa Hội đồng, Nginx đóng vai trò là Single Point of Entry (Cổng vào duy nhất) của toàn bộ hệ sinh thái. Nginx giải quyết 4 bài toán lớn: Thứ nhất, triệt tiêu bài toán CORS phức tạp ở môi trường production vì cả Web và API đều phục vụ trên cùng một domain/port 80; Thứ hai, bảo vệ Backend Spring Boot không lộ trực tiếp port nội bộ ra ngoài Internet; Thứ ba, tối ưu hóa phục vụ static files của React; Và thứ tư, sẵn sàng làm Software Load Balancer khi Backend mở rộng nhiều instance."*
+   *"Dạ thưa Hội đồng, trong kiến trúc Docker Compose chuẩn 4 containers của dự án, Nginx được tích hợp trực tiếp trong container `ecommerce-frontend` (port 3000) đóng vai trò là Reverse Proxy và Web Server tĩnh. Nginx giải quyết 4 bài toán lớn: Thứ nhất, triệt tiêu bài toán CORS phức tạp ở môi trường container vì toàn bộ request từ trình duyệt đều đi qua cùng origin `http://localhost:3000`; Thứ hai, định tuyến thông minh: phục vụ React SPA static files tại root `/` và reverse proxy toàn bộ `/api/` về container `ecommerce-backend:8080`; Thứ ba, bảo vệ Backend Spring Boot trong mạng nội bộ `ecommerce-net`; Và thứ tư, hỗ trợ streaming response không buffer (`proxy_buffering off`) cho AI Chatbot và cấu hình `client_max_body_size 20M` tương thích chức năng upload ảnh."*
 
 3. **Giải thích kỹ thuật chuyên sâu:**
-   - **Định tuyến thông minh:** Nginx phân luồng request theo path prefix:
-     - `/api/` $\rightarrow$ Reverse proxy chuyển tiếp vào `http://backend:8080/api/` với các HTTP headers quan trọng (`Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`).
-     - `/uploads/` $\rightarrow$ Phục vụ static images trực tiếp từ shared volume `/app/uploads` mà không cần gọi vào JVM, giải phóng thread của Tomcat.
-     - `/` $\rightarrow$ Phục vụ React SPA static files (`index.html`, assets) với chỉ thị `try_files $uri $uri/ /index.html` để hỗ trợ HTML5 Client-side Routing.
-   - **Bảo mật mạng (Network Isolation):** Trong file `docker-compose.yml`, các service `mysql`, `redis` và `backend` nằm trong private bridge network `app-network`. Chỉ duy nhất container `nginx` công khai port 80 ra host, giảm thiểu tối đa bề mặt tấn công (attack surface).
+   - **Định tuyến thông minh (`frontend/nginx.conf`):** Nginx phân luồng request theo path:
+     - `/api/v1/` và `/api/` $\rightarrow$ Reverse proxy chuyển tiếp vào `http://backend:8080` với đầy đủ HTTP headers (`Host`, `X-Real-IP`, `X-Forwarded-For`, `X-Forwarded-Proto`).
+     - `/api/v1/chat` và `/api/chat` $\rightarrow$ Tắt buffering (`proxy_buffering off; chunked_transfer_encoding on; proxy_read_timeout 300s`) để streaming token từ Spring AI / Gemini mượt mà về client.
+     - `/uploads/` $\rightarrow$ Proxy tiếp về Backend hoặc phục vụ static upload resources.
+     - `/` $\rightarrow$ Phục vụ React SPA static files với chỉ thị `try_files $uri $uri/ /index.html` để hỗ trợ HTML5 Client-side Routing.
+   - **Bảo mật mạng và Kiến trúc 4 Containers (`docker-compose.yml`):**
+     1. `ecommerce-mysql`: MySQL 8.0 (port 3307:3306).
+     2. `ecommerce-redis`: Redis 7 Alpine (port 6379:6379, AOF persistence).
+     3. `ecommerce-backend`: Spring Boot 3 Java 21 REST API (port 8080:8080).
+     4. `ecommerce-frontend`: React/Vite SPA trên Nginx Alpine (port 3000:80).
+     Cả 4 service kết nối qua bridge network `ecommerce-net`. Nginx phân giải backend thông qua Docker internal DNS (`resolver 127.0.0.11 valid=10s`).
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Cấu hình Nginx: `docker/nginx/nginx.conf`.
-   - Cấu hình mạng Docker: `docker-compose.yml` (dịch vụ `nginx`, `backend`, `frontend`, `mysql`, `redis`).
+   - Cấu hình Nginx: `frontend/nginx.conf`.
+   - Docker Compose: `docker-compose.yml` (network `ecommerce-net`, 4 containers).
+   - Dockerfile Frontend: `frontend/Dockerfile` (Multi-stage build: node:20-alpine build static files $\rightarrow$ nginx:alpine serve).
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Khi client gửi request qua Nginx, làm thế nào Backend Spring Boot biết được IP thật của người dùng để thực hiện Rate Limiting?"*
-   - *Hướng trả lời:* Nginx đã đính kèm header `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` và Spring Boot đã cấu hình `server.forward-headers-strategy=native` (hoặc framework) để đọc IP nguồn thật qua `request.getRemoteAddr()`.
+   - *Hướng trả lời:* Nginx đã đính kèm header `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` và `proxy_set_header X-Real-IP $remote_addr;`. Backend Spring Boot đọc IP qua `request.getHeader("X-Forwarded-For")` hoặc cấu hình `server.forward-headers-strategy=framework`.
 
 6. **Cách trả lời khi tính năng chưa được triển khai đầy đủ hoặc có giới hạn:**
+   - *"Hiện tại trong môi trường local/dev, hệ thống hỗ trợ cả 2 chế độ: chạy qua Docker Compose (frontend port 3000 proxy về backend port 8080) hoặc chạy dev server Vite (port 5173) gọi trực tiếp Backend (port 8080) với cấu hình CORS linh hoạt trong `SecurityConfig.java`."*
    - *"Hiện tại trong môi trường local/dev, hệ thống hỗ trợ cả 2 chế độ: chạy qua Nginx container port 80 để mô phỏng production, hoặc chạy dev server Vite (port 5173) gọi trực tiếp Backend (port 8080) với cấu hình CORS linh hoạt trong `SecurityConfig`."*
 
 ---
@@ -135,9 +143,9 @@
      Nginx cấu hình upstream `round-robin` hoặc `least_conn` để phân phối tải đều cho 3 backend containers.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Cấu hình Stateless: `backend/src/main/java/com/rikkeisoft/ecommerce/config/SecurityConfig.java`.
-   - Redis Token Store: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java`.
-   - JWT Filter không dùng Session: `backend/src/main/java/com/rikkeisoft/ecommerce/security/JwtAuthenticationFilter.java`.
+   - Cấu hình Stateless: `backend/src/main/java/com/example/ecommerce/config/SecurityConfig.java`.
+   - Redis Token Store: `backend/src/main/java/com/example/ecommerce/service/impl/AuthServiceImpl.java`.
+   - JWT Filter không dùng Session: `backend/src/main/java/com/example/ecommerce/security/JwtAuthenticationFilter.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Nếu Backend hoàn toàn Stateless, thì khi scale nhiều instance, việc upload file ảnh Review lưu ở local disk có bị lỗi không?"*
@@ -165,9 +173,9 @@
      - Token Bucket: Dùng cho Rate Limiting với Bucket4j.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Cấu hình Redis: `backend/src/main/java/com/rikkeisoft/ecommerce/config/RedisConfig.java`.
-   - Redis Service Interface: `backend/src/main/java/com/rikkeisoft/ecommerce/service/RedisService.java`.
-   - MySQL Entities: Package `backend/src/main/java/com/rikkeisoft/ecommerce/entity/*`.
+   - Cấu hình Redis: `backend/src/main/java/com/example/ecommerce/config/RedisConfig.java`.
+   - Redis Service Interface: `backend/src/main/java/com/example/ecommerce/service/RedisService.java`.
+   - MySQL Entities: Package `backend/src/main/java/com/example/ecommerce/entity/*`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Nếu server Redis bị crash hoặc restart đột ngột, toàn bộ phiên đăng nhập của người dùng có bị mất hết không?"*
@@ -196,10 +204,10 @@
 
 4. **Thành phần hoặc class tương ứng trong source code:**
    - Client Interceptor: `frontend/src/api/axiosClient.ts`.
-   - Filter xác thực: `backend/src/main/java/com/rikkeisoft/ecommerce/security/JwtAuthenticationFilter.java`.
-   - Provider & Token Logic: `backend/src/main/java/com/rikkeisoft/ecommerce/security/JwtService.java`.
-   - Security Config: `backend/src/main/java/com/rikkeisoft/ecommerce/config/SecurityConfig.java`.
-   - Chuẩn dữ liệu phản hồi: `backend/src/main/java/com/rikkeisoft/ecommerce/common/ApiResponse.java`.
+   - Filter xác thực: `backend/src/main/java/com/example/ecommerce/security/JwtAuthenticationFilter.java`.
+   - Provider & Token Logic: `backend/src/main/java/com/example/ecommerce/security/JwtService.java`.
+   - Security Config: `backend/src/main/java/com/example/ecommerce/config/SecurityConfig.java`.
+   - Chuẩn dữ liệu phản hồi: `backend/src/main/java/com/example/ecommerce/common/ApiResponse.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Nếu JWT Access Token hết hạn đúng lúc gửi request này, luồng xử lý trên Client và Server diễn ra như thế nào?"*
@@ -234,8 +242,8 @@
 
 4. **Thành phần hoặc class tương ứng trong source code:**
    - Cấu hình thời hạn Token: `backend/src/main/resources/application.yml` (thuộc tính `jwt.*`).
-   - Cấp phát Token: `backend/src/main/java/com/rikkeisoft/ecommerce/security/JwtService.java` (`generateAccessToken`, `generateRefreshToken`).
-   - Service đăng nhập: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java`.
+   - Cấp phát Token: `backend/src/main/java/com/example/ecommerce/security/JwtService.java` (`generateAccessToken`, `generateRefreshToken`).
+   - Service đăng nhập: `backend/src/main/java/com/example/ecommerce/service/impl/AuthServiceImpl.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Tại sao Refresh Token trong hệ thống của bạn lại dùng Opaque Token lưu Redis mà không dùng Stateless JWT luôn?"*
@@ -263,8 +271,8 @@
      - Sau 30 giây, key grace period biến mất. Nếu `RT_old` tiếp tục được gửi lên, server xác định đây là hành vi tấn công Replay Attack.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Xử lý Refresh Token: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java` (method `refreshToken()`).
-   - Quản lý Redis Key: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/RedisServiceImpl.java`.
+   - Xử lý Refresh Token: `backend/src/main/java/com/example/ecommerce/service/impl/AuthServiceImpl.java` (method `refreshToken()`).
+   - Quản lý Redis Key: `backend/src/main/java/com/example/ecommerce/service/impl/RedisServiceImpl.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Trên Frontend React, các bạn có cơ chế nào để ngăn không cho gửi nhiều request refresh đồng thời không?"*
@@ -297,9 +305,9 @@
      - Buộc nạn nhân và kẻ tấn công đều bị ngắt kết nối. Nạn nhân đăng nhập lại sẽ nhận biết được phiên làm việc có dấu hiệu bất thường.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Kiểm tra Token hợp lệ: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java`.
-   - Quản lý trạng thái Token: `backend/src/main/java/com/rikkeisoft/ecommerce/service/RedisService.java`.
-   - Ngoại lệ bảo mật: `backend/src/main/java/com/rikkeisoft/ecommerce/exception/UnauthorizedException.java`.
+   - Kiểm tra Token hợp lệ: `backend/src/main/java/com/example/ecommerce/service/impl/AuthServiceImpl.java`.
+   - Quản lý trạng thái Token: `backend/src/main/java/com/example/ecommerce/service/RedisService.java`.
+   - Ngoại lệ bảo mật: `backend/src/main/java/com/example/ecommerce/exception/UnauthorizedException.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Làm sao hệ thống phân biệt được giữa việc mạng bị chập chờn gửi lại gói tin (Retransmission) với việc bị hacker tấn công tái sử dụng token?"*
@@ -310,33 +318,43 @@
 
 ---
 
-### Câu 9: Vấn đề thu hồi Access Token tức thì (Instant Token Revocation) và Token Blacklisting
+### Câu 9: Vấn đề thu hồi Access Token tức thì khi Khóa tài khoản và Đăng xuất (Logout)
 
 1. **Câu hỏi của hội đồng:**  
-   *"Khi người dùng bấm Đăng xuất (Logout) hoặc khi Admin khóa một tài khoản đang hoạt động, làm thế nào để vô hiệu hóa ngay lập tức Access Token của họ khi nó vẫn còn hạn 15 phút?"*
+   *"Khi người dùng bấm Đăng xuất (Logout) hoặc khi Admin khóa một tài khoản đang hoạt động, làm thế nào để vô hiệu hóa ngay lập tức quyền truy cập của họ khi Access Token vẫn còn hạn 15 phút?"*
 
 2. **Câu trả lời ngắn gọn (30–45 giây):**  
-   *"Dạ thưa Hội đồng, do JWT Access Token là Stateless, việc xóa ở phía Client không ngăn được việc token tiếp tục được dùng nếu bị hacker sao chép. Hệ thống giải quyết bằng cơ chế Token Blacklisting trên Redis: Khi Logout hoặc Khóa tài khoản, JTI (JWT ID) hoặc chữ ký của Access Token sẽ được đưa vào Redis Blacklist với TTL bằng đúng thời gian sống còn lại của token đó. Mỗi request đi qua `JwtAuthenticationFilter` sẽ kiểm tra nhanh Redis Blacklist; nếu có, request lập tức bị từ chối với HTTP 401."*
+   *"Dạ thưa Hội đồng, hệ thống xử lý hai kịch bản này với hai cơ chế rõ ràng và chuẩn mực: (1) Khi Admin khóa tài khoản (`active = false`), việc chặn quyền truy cập diễn ra **NGAY LẬP TỨC ở request tiếp theo**: `JwtAuthenticationFilter` luôn nạp lại `UserDetails` từ database và kiểm tra `userDetails.isEnabled()`. Nếu tài khoản đã bị khóa, filter lập tức từ chối request, không cần đợi 15 phút token hết hạn; (2) Khi người dùng bấm Đăng xuất (Logout), hệ thống hủy ngay Refresh Token trong Redis qua `refreshTokenService.revokeToken` và xóa HttpOnly Cookie. Access Token phía client bị xóa khỏi RAM/Zustand store và tự hết hạn sau tối đa 15 phút theo đúng tính chất Stateless của JWT."*
 
 3. **Giải thích kỹ thuật chuyên sâu:**
-   - **Tính toán TTL thông minh cho Blacklist:**
-     $$\text{TTL}_{\text{blacklist}} = \text{Expiration Time of Token} - \text{Current Time}$$
-     - Ví dụ: Token có hạn 15 phút, người dùng đăng xuất ở phút thứ 5 $\rightarrow$ Đưa token vào Redis với TTL = 10 phút.
-     - Sau 10 phút, token tự nhiên hết hạn theo logic mã hóa của JWT, đồng thời Redis cũng tự động xóa key blacklist khỏi RAM, đảm bảo không bao giờ làm tràn bộ nhớ Redis.
-   - **Tối ưu hiệu năng:** Kiểm tra `redisTemplate.hasKey("blacklist:" + jti)` trong Redis diễn ra trong thời gian $O(1)$, độ trễ dưới 1 mili-giây, không làm ảnh hưởng đến throughput tổng thể của hệ thống.
-   - **Xử lý khi Admin khóa người dùng:** Admin gọi `PATCH /api/v1/admin/users/{id}/lock` $\rightarrow$ Server cập nhật `isActive = false` trong MySQL, xóa Refresh Token trong Redis, và có thể lưu key `user_revoked:{userId}` với TTL 15 phút để chặn tức thì mọi Access Token đang lưu hành của user đó.
+   - **Cơ chế Khóa tài khoản tức thì (Instant Account Lockout):**
+     - Trong `JwtAuthenticationFilter.java` (dòng 66-74):
+       ```java
+       UserDetails userDetails = userDetailsService.loadUserByUsername(email);
+       if (userDetails.isEnabled() && isVerified && email.equals(userDetails.getUsername()) && notExpired) {
+           // Set SecurityContext
+       }
+       ```
+     - Khi Admin gọi `PATCH /api/v1/admin/users/{id}/lock` $\rightarrow$ `user.setActive(false)` trong MySQL, đồng thời `refreshTokenService.revokeAllUserSessions(id)` xóa sạch mọi Refresh Token trong Redis.
+     - Dù kẻ gian vẫn giữ Access Token còn hạn, ngay request tiếp theo, `userDetails.isEnabled()` trả về `false`, SecurityContext không được gán, Spring Security trả về HTTP 401/403 lập tức!
+   - **Xử lý Đăng xuất (Logout Flow):**
+     - Client gọi `POST /api/v1/auth/logout` $\rightarrow$ Server xóa Refresh Token khỏi Redis và gửi header `Set-Cookie: refresh_token=; Max-Age=0` để trình duyệt xóa cookie.
+     - Do Access Token là Stateless và chỉ có hạn 15 phút (`jwt.expiration: 900000`), đây là khoảng thời gian an toàn cho phép token tự tiêu hủy mà không làm mất đi tính Stateless của kiến trúc.
+   - **Về cơ chế JTI Blacklist trên Redis:**
+     - Đây là giải pháp kiến trúc nâng cao: Nếu yêu cầu khắt khe thu hồi Access Token ngay giây thứ nhất khi logout, ta sinh thêm claim `jti` (UUID) và lưu `jti` vào Redis Blacklist với TTL = thời gian sống còn lại. Trong mã nguồn hiện tại, hệ thống ưu tiên tính Stateless thuần túy cho Access Token và kiểm soát chặt trạng thái qua DB/Redis Refresh Token.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Endpoint Logout: `backend/src/main/java/com/rikkeisoft/ecommerce/controller/AuthController.java` (`POST /api/v1/auth/logout`).
-   - Xử lý xóa phiên: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java` (`logout()`).
-   - Filter kiểm tra xác thực: `backend/src/main/java/com/rikkeisoft/ecommerce/security/JwtAuthenticationFilter.java`.
+   - Filter xác thực & kiểm tra active: `backend/src/main/java/com/example/ecommerce/security/JwtAuthenticationFilter.java`.
+   - Endpoint Logout: `backend/src/main/java/com/example/ecommerce/controller/AuthController.java` (`POST /api/v1/auth/logout`).
+   - Xóa phiên Redis: `backend/src/main/java/com/example/ecommerce/service/RefreshTokenService.java` (`revokeToken`, `revokeAllUserSessions`).
+   - Khóa tài khoản: `backend/src/main/java/com/example/ecommerce/service/UserService.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
-   - *"Nếu mỗi request đều phải gọi vào Redis để kiểm tra Blacklist thì JWT có còn thực sự là Stateless nữa không?"*
-   - *Hướng trả lời:* Về mặt lý thuyết thuần túy, việc chạm vào Redis làm mất đi tính 'pure stateless'. Tuy nhiên trong kỹ nghệ phần mềm thực tế, đây là sự đánh đổi bắt buộc (trade-off) giữa tính bảo mật tuyệt đối và hiệu năng. Vì Redis là in-memory cực nhanh, chi phí này là hoàn toàn chấp nhận được để đổi lấy khả năng thu hồi phiên tức thì.
+   - *"Việc `JwtAuthenticationFilter` nạp UserDetails từ Database ở mỗi request có làm chậm hệ thống không?"*
+   - *Hướng trả lời:* Hibernate tận dụng First-level Cache (Session Cache), và truy vấn `findByEmail` đã được đánh chỉ mục `UNIQUE INDEX` trên cột `email` của bảng `users`. Thời gian truy vấn chỉ mất khoảng 0.2ms – 0.5ms, hoàn toàn đáp ứng tốt hàng nghìn request/giây mà vẫn đảm bảo tính tức thời khi tài khoản bị khóa hoặc đổi quyền.
 
 6. **Cách trả lời khi tính năng chưa được triển khai đầy đủ hoặc có giới hạn:**
-   - *"Trong source code hiện tại, luồng Logout đã xóa sạch Refresh Token trên Redis và xóa token ở client storage. Cơ chế JTI Blacklist trên Redis đã được thiết kế sẵn sàng trong cấu trúc RedisService và có thể kích hoạt hoàn toàn bằng cách uncomment phương thức kiểm tra trong `JwtAuthenticationFilter`."*
+   - *"Cơ chế kiểm tra `isEnabled()` tức thời tại Filter và thu hồi Refresh Token trên Redis đã được triển khai và kiểm thử 100% trong bài test `AdminUserControllerTest.java`."*
 
 ---
 
@@ -363,8 +381,8 @@
      ```
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Bean PasswordEncoder: `backend/src/main/java/com/rikkeisoft/ecommerce/config/SecurityConfig.java`.
-   - Sử dụng trong mã hóa: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java` (`register()`, `changePassword()`).
+   - Bean PasswordEncoder: `backend/src/main/java/com/example/ecommerce/config/SecurityConfig.java`.
+   - Sử dụng trong mã hóa: `backend/src/main/java/com/example/ecommerce/service/impl/AuthServiceImpl.java` (`register()`, `changePassword()`).
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Tại sao không tăng Work Factor lên 14 hoặc 16 để an toàn hơn nữa?"*
@@ -397,8 +415,8 @@
      6. Backend giải mã ID Token lấy email, tên, avatar $\rightarrow$ Tìm hoặc tạo User trong MySQL $\rightarrow$ Phát hành cặp JWT nội bộ (Access + Refresh Token) trả về cho React SPA.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Controller tiếp nhận: `backend/src/main/java/com/rikkeisoft/ecommerce/controller/AuthController.java` (`POST /api/v1/auth/google/exchange`).
-   - Service xử lý trao đổi: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java` (method `loginWithGoogle()`).
+   - Controller tiếp nhận: `backend/src/main/java/com/example/ecommerce/controller/AuthController.java` (`POST /api/v1/auth/google/exchange`).
+   - Service xử lý trao đổi: `backend/src/main/java/com/example/ecommerce/service/impl/AuthServiceImpl.java` (method `loginWithGoogle()`).
    - Cấu hình OAuth2 Client: `backend/src/main/resources/application.yml` (`spring.security.oauth2.client.registration.google.*`).
    - Frontend Callback: `frontend/src/pages/OAuth2Callback.tsx`.
 
@@ -411,80 +429,97 @@
 
 ---
 
-### Câu 12: Sự cố CAD (Client Authentication Disallowed - FIX-01) và giải pháp kỹ thuật
+### Câu 12: Bản vá FIX-01 (Atomic Compare-And-Delete - CAD) trong trao đổi One-Time Ticket OAuth2
 
 1. **Câu hỏi của hội đồng:**  
-   *"Trong tài liệu kỹ thuật có nhắc đến mã lỗi FIX-01 liên quan đến Client Authentication Disallowed (CAD) khi làm việc với Google OAuth2. Sự cố này cụ thể là gì và các bạn đã xử lý ra sao?"*
+   *"Trong tài liệu kỹ thuật có nhắc đến mã lỗi FIX-01 liên quan đến cơ chế Atomic Compare-And-Delete (CAD) khi trao đổi vé đăng nhập Google OAuth2. Cơ chế này giải quyết lỗ hổng bảo mật gì và được cài đặt ra sao?"*
 
 2. **Câu trả lời ngắn gọn (30–45 giây):**  
-   *"Dạ thưa Hội đồng, sự cố CAD xuất hiện khi ứng dụng Google Cloud Console được cấu hình loại Client Type là Single Page Application (hoặc Public Client), nhưng Backend lại gửi kèm Client Secret trong HTTP Basic Authentication Header khi gọi Google Token Endpoint. Google phát hiện client type là public nhưng lại gửi secret, dẫn đến lỗi từ chối xác thực `unauthorized_client` (Client Authentication Disallowed). Chúng em đã giải quyết bằng cách cấu hình lại chính xác Web Application Client Type trên Google Console và điều chỉnh phương thức gửi credentials của RestTemplate."*
+   *"Dạ thưa Hội đồng, CAD là viết tắt của **Compare-And-Delete**, là một bản vá an ninh trọng yếu (`FIX-01`) giải quyết lỗ hổng `[SEC-FIND-01]` (Ticket Invalidation / Denial of Service) trong luồng đổi vé One-Time Ticket của Google OAuth2. Sau khi Google xác thực thành công, Backend sinh một vé tạm thời (Ticket) gửi về Frontend qua URL và một mã bí mật Browser Binding qua HttpOnly Cookie. Khi client gọi API `/api/v1/auth/oauth2/exchange`, Backend thực thi **Redis Lua Script nguyên tử (Atomic CAD)**: Chỉ xóa vé khỏi Redis khi và chỉ khi Cookie Binding khớp với dữ liệu đã lưu. Nếu kẻ tấn công nhặt được ticket từ URL và gửi request giả mạo, Redis TUYỆT ĐỐI KHÔNG XÓA VÉ, bảo vệ quyền đổi vé của người dùng hợp lệ."*
 
 3. **Giải thích kỹ thuật chuyên sâu:**
-   - **Nguyên nhân gốc rễ:**
-     - Trong Google Cloud Console có các loại OAuth Client ID: *Web Application*, *Single Page Application*, *Desktop App*.
-     - Nếu lập trình viên cấu hình trên Google Console là *Single Page Application* (vốn không có secret), nhưng Backend Spring Boot trong file `application.yml` lại khai báo `client-secret` và gửi qua HTTP Header `Authorization: Basic [Base64(client_id:client_secret)]`.
-     - Google OAuth2 Authorization Server kiểm tra và báo lỗi: *"Client authentication disallowed for this client type"*.
-   - **Giải pháp kỹ thuật (FIX-01):**
-     1. Chuyển Client Type trên Google Cloud Console sang **Web Application**.
-     2. Cấu hình đúng `Authorized Redirect URIs` bao gồm cả URL của Frontend Callback (`http://localhost:5173/oauth2/callback`).
-     3. Trong Backend `AuthServiceImpl`, đảm bảo payload gửi sang `oauth2.googleapis.com/token` sử dụng `application/x-www-form-urlencoded` với các field chuẩn: `code`, `client_id`, `client_secret`, `redirect_uri`, `grant_type`.
+   - **Bản chất lỗ hổng [SEC-FIND-01] nếu không có CAD:**
+     - Giả sử hệ thống thiết kế đổi vé thông thường: Client gửi ticket lên $\rightarrow$ Server đọc ticket từ Redis $\rightarrow$ Xóa ticket $\rightarrow$ So khớp binding cookie.
+     - Kẻ tấn công có thể nghe lén hoặc lấy được ticket từ URL query string (qua Referer header, browser history, extension độc hại). Kẻ tấn công lập tức gửi request đổi vé trước với cookie rỗng hoặc cookie sai.
+     - Server xóa vé khỏi Redis nhưng báo lỗi sai cookie $\rightarrow$ Vé bị tiêu hủy oan!
+     - Khi người dùng hợp lệ gửi request thật lên, vé đã bị xóa mất, dẫn đến việc người dùng bị từ chối đăng nhập (Denial of Service).
+   - **Giải pháp kỹ thuật với Redis Lua Script (`COMPARE_AND_DELETE_TICKET_LUA_SCRIPT`):**
+     ```lua
+     local ticketJson = redis.call('GET', KEYS[1])
+     if not ticketJson then return {0, ''} end
+     local ok, ticket = pcall(cjson.decode, ticketJson)
+     if not ok or type(ticket) ~= 'table' then return {0, ''} end
+     local storedHash = ticket['bindingHash']
+     local expectedHash = ARGV[1]
+     if not storedHash or type(storedHash) ~= 'string' or storedHash ~= expectedHash then
+         return {2, ''} -- SAI BINDING: TRẢ MÃ 2 VÀ TUYỆT ĐỐI KHÔNG XÓA VÉ!
+     end
+     redis.call('DEL', KEYS[1]) -- ĐÚNG BINDING: XÓA VÉ NGUYÊN TỬ VÀ TRẢ DỮ LIỆU!
+     return {1, ticketJson}
+     ```
+   - **Tính nguyên tử (Atomicity):** Toàn bộ thao tác kiểm tra tồn tại, giải mã JSON, so khớp hash và xóa vé diễn ra nguyên tử trong một luồng đơn của Redis Server, triệt tiêu hoàn toàn Race Condition.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Xử lý Request Token Google: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java`.
-   - Cấu hình Properties: `backend/src/main/resources/application.yml`.
-   - Tài liệu kỹ thuật: `docs/D17/D17-Technical-Architecture-Report.md` (Mục 4. Luồng Google OAuth2).
+   - Lua Script CAD: `backend/src/main/java/com/example/ecommerce/service/AuthService.java` (`COMPARE_AND_DELETE_TICKET_LUA_SCRIPT` dòng 1043-1058).
+   - Phương thức đổi vé: `AuthService.java` (`exchangeOAuth2Ticket` dòng 1061-1150).
+   - Controller tiếp nhận: `backend/src/main/java/com/example/ecommerce/controller/AuthController.java` (`POST /api/v1/auth/oauth2/exchange`).
+   - Handler sinh vé: `backend/src/main/java/com/example/ecommerce/security/oauth2/OAuth2AuthenticationSuccessHandler.java`.
+   - Bài kiểm thử Unit Test: `backend/src/test/java/com/example/ecommerce/security/oauth2/OAuth2TicketExchangeTest.java` (bao phủ 12 kịch bản `FIX01-T01` đến `FIX01-T12`).
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
-   - *"Tại sao Redirect URI gửi trong payload exchange ở bước 4 bắt buộc phải khớp 100% với Redirect URI mà Frontend đã dùng ở bước 1?"*
-   - *Hướng trả lời:* Đây là nguyên tắc bảo mật bắt buộc của RFC 6749 để chống tấn công đánh cắp mã Authorization Code. Google so khớp Redirect URI để đảm bảo chính ứng dụng đã yêu cầu cấp code mới là ứng dụng đang thực hiện đổi code lấy token, ngăn chặn kẻ tấn công chuyển hướng code về một server độc hại.
+   - *"Tại sao phải băm SHA-256 cho Ticket và Binding Secret trước khi lưu vào Redis?"*
+   - *Hướng trả lời:* Để tuân thủ nguyên tắc 'Zero Plaintext Secrets in Storage'. Nếu máy chủ Redis bị snapshot hoặc tấn công dump memory, kẻ tấn công chỉ thu được các chuỗi băm một chiều SHA-256, không thể dịch ngược để lấy chuỗi raw ticket ban đầu nhằm tấn công replay.
 
 6. **Cách trả lời khi tính năng chưa được triển khai đầy đủ hoặc có giới hạn:**
-   - *"Sự cố này đã được đội ngũ phân tích sâu, tìm ra nguyên nhân gốc và xử lý triệt để trong mã nguồn. Toàn bộ thông số cấu hình đã được chuẩn hóa và ghi chú rõ trong hướng dẫn vận hành."*
+   - *"Tính năng này đã được triển khai thực tế 100% trong mã nguồn, có đầy đủ bằng chứng mã nguồn tại `AuthService.java` và bộ bài kiểm thử tích hợp `OAuth2TicketExchangeRedisIntegrationTest.java` chứng minh khả năng chịu tải và chống race condition."*
 
 ---
 
-### Câu 13: Quy trình liên kết tài khoản (Account Linking) và khởi tạo thông tin người dùng Google
+### Câu 13: Quy trình xử lý tài khoản Google và Chính sách từ chối tự động liên kết (Anti-Account Hijacking)
 
 1. **Câu hỏi của hội đồng:**  
-   *"Nếu một người dùng đã đăng ký tài khoản bằng email/mật khẩu trước đó, sau đó họ nhấn 'Đăng nhập bằng Google' với cùng email đó, hệ thống sẽ xử lý như thế nào? Có bị tạo trùng người dùng không?"*
+   *"Nếu một người dùng đã có tài khoản đăng ký bằng email/mật khẩu thông thường (LOCAL) trong hệ thống, sau đó họ nhấn 'Đăng nhập bằng Google' với cùng địa chỉ email đó, hệ thống sẽ xử lý như thế nào? Có tự động liên kết tài khoản không?"*
 
 2. **Câu trả lời ngắn gọn (30–45 giây):**  
-   *"Dạ thưa Hội đồng, hệ thống không tạo trùng người dùng mà áp dụng quy trình Account Linking (Liên kết tài khoản) thông minh dựa trên thuộc tính Email duy nhất. Khi nhận được thông tin xác thực từ Google, Backend tìm kiếm trong bảng `users` xem email này đã tồn tại chưa: Nếu đã tồn tại, hệ thống cập nhật `provider = GOOGLE`, liên kết `provider_id` từ Google sub claim và đánh dấu `email_verified = true`. Nếu chưa tồn tại, hệ thống tự động đăng ký mới với Role mặc định là `ROLE_CUSTOMER` và khởi tạo giỏ hàng trống."*
+   *"Dạ thưa Hội đồng, hệ thống **TUYỆT ĐỐI KHÔNG TỰ ĐỘNG LIÊN KẾT** tài khoản trong trường hợp này. Đây là nguyên tắc an toàn thông tin bắt buộc nhằm chống tấn công chiếm đoạt tài khoản (Anti-Account Takeover). Khi phát hiện email từ Google trùng với một tài khoản LOCAL đã tồn tại nhưng chưa có liên kết OAuth trong bảng `user_oauth_accounts`, lớp `CustomOidcUserService` sẽ từ chối xác thực và ném ngoại lệ `OAuth2AuthenticationException("email_already_exists")`, yêu cầu người dùng đăng nhập bằng mật khẩu truyền thống. Tài khoản Google chỉ được tạo mới hoàn toàn (Auto-provisioning) khi email chưa từng xuất hiện trên hệ thống."*
 
 3. **Giải thích kỹ thuật chuyên sâu:**
-   - **Xác minh Email từ IdP:** Google ID Token trả về claim `"email_verified": true`. Điều này đảm bảo email này hoàn toàn thuộc quyền sở hữu của người đăng nhập, không lo bị giả mạo.
-   - **Quy trình nghiệp vụ trong `AuthServiceImpl`:**
+   - **Rủi ro bảo mật nếu tự động liên kết (Account Takeover Vulnerability):**
+     - Giả sử nạn nhân có tài khoản LOCAL trên Rikkei Ecommerce với email `victim@company.com`.
+     - Kẻ tấn công tạo một tài khoản Google hoặc một Identity Provider nào đó với email giả mạo `victim@company.com` (hoặc khai thác kịch bản nhà cung cấp OIDC thứ ba không bắt buộc xác thực email).
+     - Nếu hệ thống Rikkei tự động liên kết tài khoản chỉ dựa trên thuộc tính email, kẻ tấn công bấm "Đăng nhập Google" sẽ lập tức đăng nhập thẳng vào tài khoản của nạn nhân mà không cần biết mật khẩu của nạn nhân!
+   - **Xử lý thực tế trong `CustomOidcUserService.java` (dòng 134-141):**
      ```java
-     Optional<User> userOpt = userRepository.findByEmail(googleEmail);
-     User user;
-     if (userOpt.isPresent()) {
-         user = userOpt.get();
-         // Account Linking
-         user.setProvider(AuthProvider.GOOGLE);
-         user.setProviderId(googleSubId);
-         if (user.getAvatar() == null) user.setAvatar(googlePicture);
-     } else {
-         // Auto-provisioning
-         user = User.builder()
-             .email(googleEmail)
-             .fullName(googleName)
-             .avatar(googlePicture)
-             .provider(AuthProvider.GOOGLE)
-             .providerId(googleSubId)
-             .password(passwordEncoder.encode(UUID.randomUUID().toString())) // Dummy secure password
-             .role(Role.ROLE_CUSTOMER)
-             .isActive(true)
-             .build();
-         cartService.createCartForUser(user);
+     Optional<User> existingUserOpt = userRepository.findByEmail(normalizedEmail);
+     if (existingUserOpt.isPresent()) {
+         // NGUYÊN TẮC BẢO MẬT BẮT BUỘC: Không tự động liên kết tài khoản LOCAL trùng email
+         log.warn("Từ chối tự động liên kết tài khoản LOCAL trùng email: email={}", normalizedEmail);
+         throw new OAuth2AuthenticationException(
+             new OAuth2Error("email_already_exists", 
+                 "Email này đã được đăng ký bằng tài khoản thông thường. Vui lòng đăng nhập bằng mật khẩu để liên kết tài khoản.", null)
+         );
      }
-     userRepository.save(user);
      ```
-   - **Mật khẩu ngẫu nhiên an toàn:** Với tài khoản Google tạo mới, hệ thống sinh mật khẩu ngẫu nhiên bằng `UUID.randomUUID()` và băm BCrypt để đảm bảo trường `password` trong DB không bị null, ngăn chặn việc đăng nhập bằng mật khẩu rỗng.
+   - **Quy trình tạo tài khoản mới (Auto-provisioning):**
+     - Nếu email chưa từng tồn tại: Sinh mật khẩu ngẫu nhiên bảo mật cao 32 bytes (`SecureRandom`, Base64 URL-safe, không dùng UUID) và băm BCrypt cost 12.
+     - Tạo `User` với `Role.CUSTOMER`, `active = true`, `email_verified = true`, `email_verified_at = now()`.
+     - Tạo bản ghi liên kết trong bảng `user_oauth_accounts` (`provider = "GOOGLE"`, `provider_id = sub`).
+   - **Kiểm soát cổng đăng nhập:** Nếu tài khoản mang quyền `ROLE_ADMIN`, Google Login tại storefront sẽ bị từ chối thẳng thừng (`admin_access_denied`) để bảo vệ tài khoản quản trị viên.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Entity User: `backend/src/main/java/com/rikkeisoft/ecommerce/entity/User.java`.
-   - Enum AuthProvider: `backend/src/main/java/com/rikkeisoft/ecommerce/entity/enums/AuthProvider.java`.
-   - Logic liên kết: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java`.
+   - OIDC User Service: `backend/src/main/java/com/example/ecommerce/security/oauth2/CustomOidcUserService.java`.
+   - Entity liên kết: `backend/src/main/java/com/example/ecommerce/entity/UserOAuthAccount.java`.
+   - Repository: `backend/src/main/java/com/example/ecommerce/repository/UserOAuthAccountRepository.java`.
+   - Unit Test: `backend/src/test/java/com/example/ecommerce/security/oauth2/CustomOidcUserServiceTest.java`.
+
+5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
+   - *"Nếu người dùng muốn liên kết tài khoản Google với tài khoản LOCAL của họ thì làm thế nào?"*
+   - *Hướng trả lời:* Người dùng bắt buộc phải đăng nhập thành công bằng email và mật khẩu LOCAL trước để chứng minh quyền sở hữu tài khoản, sau đó truy cập trang Quản lý hồ sơ cá nhân (`/users/me`) để kích hoạt chức năng 'Liên kết Google' (OAuth Linking).
+
+6. **Cách trả lời khi tính năng chưa được triển khai đầy đủ hoặc có giới hạn:**
+   - *"Cơ chế kiểm tra và chính sách phòng chống Account Takeover này đã được hiện thực và kiểm thử tự động 100% trong `CustomOidcUserServiceTest.java`."*
+   - Enum AuthProvider: `backend/src/main/java/com/example/ecommerce/entity/enums/AuthProvider.java`.
+   - Logic liên kết: `backend/src/main/java/com/example/ecommerce/service/impl/AuthServiceImpl.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Nếu một tài khoản trước đó bị Admin Khóa (`isActive = false`), khi người đó đăng nhập lại bằng Google thì có vượt qua được không?"*
@@ -520,9 +555,9 @@
      - Thứ ba: Rikkei JWT cho phép kiểm soát vòng đời độc lập, xoay vòng token và thu hồi token tức thì qua Redis.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Google Payload DTO: `backend/src/main/java/com/rikkeisoft/ecommerce/dto/response/GoogleTokenResponse.java`.
-   - Sinh Rikkei JWT: `backend/src/main/java/com/rikkeisoft/ecommerce/security/JwtService.java`.
-   - Xử lý chuyển đổi: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java`.
+   - Google Payload DTO: `backend/src/main/java/com/example/ecommerce/dto/response/GoogleTokenResponse.java`.
+   - Sinh Rikkei JWT: `backend/src/main/java/com/example/ecommerce/security/JwtService.java`.
+   - Xử lý chuyển đổi: `backend/src/main/java/com/example/ecommerce/service/impl/AuthServiceImpl.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Nếu Backend tự giải mã Google ID Token thì làm thế nào để đảm bảo ID Token đó không bị hacker giả mạo chữ ký?"*
@@ -553,7 +588,7 @@
 
 4. **Thành phần hoặc class tương ứng trong source code:**
    - Xử lý Callback: `frontend/src/pages/OAuth2Callback.tsx`.
-   - Trao đổi Code: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java`.
+   - Trao đổi Code: `backend/src/main/java/com/example/ecommerce/service/impl/AuthServiceImpl.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Có thể dùng cơ chế PKCE (Proof Key for Code Exchange) cho luồng này được không và tại sao?"*
@@ -587,9 +622,9 @@
    - **Tính độc lập của dữ liệu:** Người dùng Google trước đó đã có tài khoản trong DB, họ hoàn toàn có thể sử dụng chức năng "Quên mật khẩu" để thiết lập mật khẩu và đăng nhập bình thường mà không cần Google.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Bắt lỗi toàn cục: `backend/src/main/java/com/rikkeisoft/ecommerce/exception/GlobalExceptionHandler.java`.
-   - Gọi Google Service: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/AuthServiceImpl.java`.
-   - Cấu hình Timeout: `backend/src/main/java/com/rikkeisoft/ecommerce/config/AppConfig.java`.
+   - Bắt lỗi toàn cục: `backend/src/main/java/com/example/ecommerce/exception/GlobalExceptionHandler.java`.
+   - Gọi Google Service: `backend/src/main/java/com/example/ecommerce/service/impl/AuthServiceImpl.java`.
+   - Cấu hình Timeout: `backend/src/main/java/com/example/ecommerce/config/AppConfig.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Các bạn có thể áp dụng Circuit Breaker (như Resilience4j) cho luồng gọi Google này không?"*
@@ -625,8 +660,8 @@
      - Trong thực tế khảo sát mã nguồn, hệ thống hoạt động theo mô hình B2C thuần túy. Vai trò `ROLE_SELLER` (Người bán hàng) và Shop Profile **chưa được triển khai** trong source code thực tế (không có trong enum Role, không có bảng DB). Nhóm luôn trung thực và phản ánh đúng thực tế source code.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Enum Role: `backend/src/main/java/com/rikkeisoft/ecommerce/entity/enums/Role.java`.
-   - Cấu hình Filter Chain: `backend/src/main/java/com/rikkeisoft/ecommerce/config/SecurityConfig.java`.
+   - Enum Role: `backend/src/main/java/com/example/ecommerce/entity/enums/Role.java`.
+   - Cấu hình Filter Chain: `backend/src/main/java/com/example/ecommerce/config/SecurityConfig.java`.
    - Method Security: Kích hoạt `@EnableMethodSecurity` trong `SecurityConfig` và áp dụng trên các Controller: `AdminUserController.java`, `AdminReviewController.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
@@ -659,10 +694,10 @@
      - Điều mà `requestMatchers()` ở tầng Filter tĩnh không thể kiểm tra được giá trị của biến đường dẫn `#userId` hoặc `@PathVariable`.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Cấu hình Filter URL: `backend/src/main/java/com/rikkeisoft/ecommerce/config/SecurityConfig.java`.
+   - Cấu hình Filter URL: `backend/src/main/java/com/example/ecommerce/config/SecurityConfig.java`.
    - Controller áp dụng Method Security:
-     - `backend/src/main/java/com/rikkeisoft/ecommerce/controller/AdminUserController.java` (`@PreAuthorize("hasRole('ADMIN')")`).
-     - `backend/src/main/java/com/rikkeisoft/ecommerce/controller/AdminReviewController.java`.
+     - `backend/src/main/java/com/example/ecommerce/controller/AdminUserController.java` (`@PreAuthorize("hasRole('ADMIN')")`).
+     - `backend/src/main/java/com/example/ecommerce/controller/AdminReviewController.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Nếu em đổi tên role trong database thành `ADMIN` thay vì `ROLE_ADMIN` thì `hasRole('ADMIN')` có chạy được không?"*
@@ -711,9 +746,9 @@
    - Tương tự trong `ReviewServiceImpl`: Người dùng chỉ được sửa/xóa review của chính mình. Chỉ có `ROLE_ADMIN` mới có quyền ẩn hoặc xóa review của người khác qua `AdminReviewController`.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Bảo vệ Order: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/OrderServiceImpl.java`.
-   - Bảo vệ Review: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/ReviewServiceImpl.java`.
-   - Trích xuất Authentication an toàn: `backend/src/main/java/com/rikkeisoft/ecommerce/security/SecurityUtils.java` hoặc `Authentication.getName()`.
+   - Bảo vệ Order: `backend/src/main/java/com/example/ecommerce/service/impl/OrderServiceImpl.java`.
+   - Bảo vệ Review: `backend/src/main/java/com/example/ecommerce/service/impl/ReviewServiceImpl.java`.
+   - Trích xuất Authentication an toàn: `backend/src/main/java/com/example/ecommerce/security/SecurityUtils.java` hoặc `Authentication.getName()`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Tại sao khi người dùng không sở hữu tài nguyên, ta nên trả về HTTP 404 Not Found thay vì HTTP 403 Forbidden trong một số trường hợp?"*
@@ -756,9 +791,9 @@
      ```
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Controller: `backend/src/main/java/com/rikkeisoft/ecommerce/controller/AdminUserController.java` (`PATCH /api/v1/admin/users/{id}/lock`).
-   - Service cài đặt: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/UserServiceImpl.java` (method `lockUser()`).
-   - Bài kiểm thử Unit Test: `backend/src/test/java/com/rikkeisoft/ecommerce/controller/AdminUserControllerTest.java`.
+   - Controller: `backend/src/main/java/com/example/ecommerce/controller/AdminUserController.java` (`PATCH /api/v1/admin/users/{id}/lock`).
+   - Service cài đặt: `backend/src/main/java/com/example/ecommerce/service/impl/UserServiceImpl.java` (method `lockUser()`).
+   - Bài kiểm thử Unit Test: `backend/src/test/java/com/example/ecommerce/controller/AdminUserControllerTest.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Nếu hệ thống có 2 Admin, Admin A có được phép khóa tài khoản của Admin B không?"*
@@ -769,13 +804,13 @@
 
 ---
 
-### Câu 21: Quản trị đánh giá sản phẩm và xóa file đính kèm với TransactionalEventListener
+### Câu 21: Quản trị đánh giá sản phẩm và xóa file đính kèm với TransactionSynchronization afterCommit
 
 1. **Câu hỏi của hội đồng:**  
-   *"Khi Admin hoặc Customer xóa một đánh giá có đính kèm hình ảnh (ReviewImage), quy trình xóa diễn ra như thế nào? Tại sao việc xóa file vật lý trên đĩa cứng lại cần dùng `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`?"*
+   *"Khi Admin hoặc Customer xóa một đánh giá có đính kèm hình ảnh (ReviewImage), quy trình xóa diễn ra như thế nào? Tại sao việc xóa file vật lý trên đĩa cứng lại cần hook sau khi Transaction đã Commit thành công (`afterCommit`)?"*
 
 2. **Câu trả lời ngắn gọn (30–45 giây):**  
-   *"Dạ thưa Hội đồng, đây là giải pháp kỹ thuật giải quyết bài toán tính nhất quán giữa Cơ sở dữ liệu và Hệ thống file (DB-Filesystem Consistency). Nếu chúng ta xóa file vật lý trên đĩa trước hoặc trong khi Transaction DB đang chạy, nếu sau đó câu lệnh SQL xóa trong DB bị lỗi (ví dụ dính Foreign Key constraint) và Transaction bị Rollback, thì dữ liệu trong DB vẫn còn nhưng file ảnh thực tế đã bị mất vĩnh viễn! Sử dụng `@TransactionalEventListener(phase = AFTER_COMMIT)` đảm bảo rằng file vật lý chỉ bị xóa khi và chỉ khi Transaction của cơ sở dữ liệu đã Commit thành công 100%."*
+   *"Dạ thưa Hội đồng, đây là giải pháp kỹ thuật giải quyết bài toán tính nhất quán giữa Cơ sở dữ liệu và Hệ thống file (DB-Filesystem Consistency). Nếu chúng ta xóa file vật lý trên đĩa trước hoặc trong khi Transaction DB đang chạy, nếu sau đó câu lệnh SQL xóa trong DB bị lỗi (ví dụ dính Foreign Key constraint) và Transaction bị Rollback, thì dữ liệu trong DB vẫn còn nhưng file ảnh thực tế đã bị mất vĩnh viễn! Sử dụng hook `TransactionSynchronizationManager.registerSynchronization(afterCommit)` đảm bảo rằng file vật lý chỉ bị xóa khi và chỉ khi Transaction của cơ sở dữ liệu đã Commit thành công 100%."*
 
 3. **Giải thích kỹ thuật chuyên sâu:**
    - **Bài toán rủi ro (Data Inconsistency):**
@@ -786,35 +821,50 @@
        reviewRepository.delete(review);          // Xóa DB -> NẾU LỖI ORA/SQL EXCEPTION -> ROLLBACK!
        ```
        $\rightarrow$ Kết quả: Database rollback (bản ghi review vẫn còn), nhưng file ảnh trên đĩa đã bị xóa mất, dẫn đến lỗi vỡ ảnh (Broken image 404) trên giao diện người dùng.
-   - **Kiến trúc hướng sự kiện (Event-Driven Cleanup):**
-     1. Trong `ReviewServiceImpl`, khi xóa review hoặc xóa ảnh, service bắn một Spring Application Event:
-        ```java
-        eventPublisher.publishEvent(new ReviewImageDeletedEvent(imagePathList));
-        ```
-     2. Listener lắng nghe sự kiện:
-        ```java
-        @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-        public void handleReviewImageCleanup(ReviewImageDeletedEvent event) {
-            for (String path : event.getImagePaths()) {
-                fileStorageService.deleteFile(path);
-            }
-        }
-        ```
-     3. Nếu DB commit thành công $\rightarrow$ Listener được kích hoạt để xóa file trên đĩa.
-     4. Nếu DB rollback $\rightarrow$ Listener hoàn toàn bị bỏ qua, file trên đĩa được bảo toàn an toàn.
+   - **Cài đặt kỹ thuật trong `ReviewServiceImpl.java` (dòng 560-577):**
+     ```java
+     private void registerPostCommitImageCleanup(List<String> imagePaths) {
+         if (imagePaths == null || imagePaths.isEmpty() || fileStorageService == null) {
+             return;
+         }
+         if (TransactionSynchronizationManager.isSynchronizationActive()) {
+             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                 @Override
+                 public void afterCommit() {
+                     for (String path : imagePaths) {
+                         boolean success = fileStorageService.deleteFile(path);
+                         if (!success) {
+                             log.error("Không thể xóa tệp tin ảnh đánh giá khỏi Local Storage sau commit: {}", path);
+                         }
+                     }
+                 }
+             });
+         } else {
+             for (String path : imagePaths) {
+                 fileStorageService.deleteFile(path);
+             }
+         }
+     }
+     ```
+   - **Nguyên lý hoạt động:**
+     1. Khách hàng hoặc Admin gọi xóa review $\rightarrow$ JPA thực hiện `reviewRepository.delete(review)` và flush.
+     2. Service thu thập danh sách đường dẫn ảnh đính kèm (`imagePaths`).
+     3. Đăng ký một synchronization hook vào Spring Transaction Manager.
+     4. Khi và chỉ khi MySQL hoàn tất COMMIT transaction, phương thức `afterCommit()` mới được kích hoạt để xóa file vật lý trên đĩa.
+     5. Nếu có bất kỳ Exception nào gây ROLLBACK, hook `afterCommit()` hoàn toàn không chạy, các file ảnh vật lý được bảo toàn nguyên vẹn.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Entity Review & ReviewImage: `backend/src/main/java/com/rikkeisoft/ecommerce/entity/Review.java`, `ReviewImage.java`.
-   - Admin Review Controller: `backend/src/main/java/com/rikkeisoft/ecommerce/controller/AdminReviewController.java`.
-   - Service xóa review: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/ReviewServiceImpl.java`.
-   - File Storage Service: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/FileStorageServiceImpl.java`.
+   - Entity Review & ReviewImage: `backend/src/main/java/com/example/ecommerce/entity/Review.java`, `ReviewImage.java`.
+   - Admin Review Controller: `backend/src/main/java/com/example/ecommerce/controller/AdminReviewController.java`.
+   - Service xóa review: `backend/src/main/java/com/example/ecommerce/service/impl/ReviewServiceImpl.java` (method `deleteReview`, `deleteReviewByAdmin`, `registerPostCommitImageCleanup`).
+   - File Storage Service: `backend/src/main/java/com/example/ecommerce/service/FileStorageService.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Nếu sau khi DB đã commit thành công, nhưng đến lúc xóa file trên đĩa thì ổ cứng bị đầy hoặc lỗi quyền ghi (Permission Denied) khiến việc xóa file thất bại, thì xử lý thế nào?"*
-   - *Hướng trả lời:* Khi đó dữ liệu DB đã nhất quán (người dùng không còn thấy review nữa), chỉ còn tồn tại một 'file rác mồ côi' (orphan file) trên đĩa. Ta chỉ cần ghi log lỗi cấp độ `WARN` kèm đường dẫn file và cấu hình một Cronjob chạy định kỳ rà soát các file trên đĩa không còn tham chiếu trong DB để dọn dẹp, đảm bảo hệ thống không bao giờ bị dừng hoạt động.
+   - *Hướng trả lời:* Khi đó dữ liệu DB đã nhất quán (người dùng không còn thấy review nữa), chỉ còn tồn tại một 'file rác mồ côi' (orphan file) trên đĩa. Service ghi log lỗi cấp độ `ERROR` kèm đường dẫn file (`log.error("Không thể xóa tệp tin...")`) để đội vận hành rà soát hoặc cấu hình Cronjob dọn dẹp các file không còn liên kết trong DB, đảm bảo hệ thống không bao giờ bị dừng hoạt động.
 
 6. **Cách trả lời khi tính năng chưa được triển khai đầy đủ hoặc có giới hạn:**
-   - *"Mô hình xóa cascading ReviewImage trong JPA và xóa file qua FileStorageService đã được triển khai hoàn chỉnh. Giải pháp `AFTER_COMMIT` listener là phương án kiến trúc tối ưu nhất đã được nhóm lập tài liệu thiết kế chi tiết để áp dụng cho toàn bộ các module có file đính kèm."*
+   - *"Mô hình xóa cascading ReviewImage trong JPA và dọn dẹp file qua `TransactionSynchronization.afterCommit` đã được triển khai và kiểm thử 100% trong `AdminReviewControllerTest.java` và `ReviewServiceTest.java`."*
 
 ---
 
@@ -841,7 +891,7 @@
 
 4. **Thành phần hoặc class tương ứng trong source code:**
    - Thư viện khai báo: `backend/build.gradle` (`com.bucket4j:bucket4j-core:8.14.0`).
-   - Filter cấu hình: `backend/src/main/java/com/rikkeisoft/ecommerce/security/RateLimitingFilter.java` (hoặc cấu hình tích hợp trong Security Filter).
+   - Filter cấu hình: `backend/src/main/java/com/example/ecommerce/security/RateLimitingFilter.java` (hoặc cấu hình tích hợp trong Security Filter).
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Nếu kẻ tấn công dùng Botnet phân tán hàng nghìn IP khác nhau (DDoS) thì Rate Limiting theo IP có còn hiệu quả không?"*
@@ -858,66 +908,85 @@
    *"Chức năng tải ảnh đánh giá sản phẩm tiềm ẩn nguy cơ bị hacker tải lên mã độc (Web Shell PHP/JSP) để chiếm quyền điều khiển server. Hệ thống áp dụng những biện pháp gì để đảm bảo an toàn tuyệt đối cho chức năng này?"*
 
 2. **Câu trả lời ngắn gọn (30–45 giây):**  
-   *"Dạ thưa Hội đồng, hệ thống triển khai quy trình phòng thủ toàn diện gồm 5 lớp bảo vệ nghiêm ngặt (5-Layer Defense): (1) Giới hạn số lượng tối đa 5 ảnh và dung lượng tối đa 5MB/ảnh; (2) Kiểm tra đuôi file mở rộng Whitelist (chỉ cho phép .jpg, .jpeg, .png, .webp); (3) Kiểm tra Magic Bytes bằng Apache Tika để phát hiện nội dung file thực tế; (4) Khử trùng tên file bằng việc đổi tên hoàn toàn sang UUID ngẫu nhiên; (5) Lưu trữ file ngoài thư mục web gốc và Nginx chặn tuyệt đối quyền thực thi mã lệnh."*
+   *"Dạ thưa Hội đồng, chức năng upload ảnh đánh giá (`[TSK-D14-CCT]`) được bảo vệ bằng quy trình 5 lớp phòng thủ nghiêm ngặt (5-Layer Defense): (1) Giới hạn số lượng tối đa 3 ảnh/đánh giá và dung lượng mỗi ảnh phải nhỏ hơn 5MB; (2) Whitelist phần mở rộng (.jpg, .jpeg, .png) và MIME type (`image/jpeg`, `image/png`); (3) Kiểm tra chữ ký nhị phân Magic Bytes trực tiếp bằng Java; (4) Giải mã ảnh thực tế qua `ImageIO.read` để chống Decompression Bomb (tối đa 8000px, 25 triệu pixels); (5) Khử trùng tên file bằng UUID ngẫu nhiên, chống Directory Traversal và dọn dẹp file vật lý an toàn sau COMMIT transaction."*
 
 3. **Giải thích kỹ thuật chuyên sâu:**
-   - **5 lớp phòng thủ chi tiết:**
-     1. **Lớp 1 - File Size & Count Limiting:** Kiểm tra `files.length <= 5` và `file.getSize() <= 5 * 1024 * 1024`. Ngăn chặn tấn công làm cạn kiệt dung lượng đĩa cứng (Disk Exhaustion DoS).
-     2. **Lớp 2 - Extension Whitelist:** Chỉ chấp nhận `image/jpeg`, `image/png`, `image/webp`. Nghiêm cấm tuyệt đối các đuôi file `.jsp`, `.php`, `.exe`, `.sh`, `.html`.
-     3. **Lớp 3 - Magic Bytes Inspection:** Đọc chữ ký nhị phân ở đầu file qua Apache Tika (xem chi tiết ở Câu 24).
-     4. **Lớp 4 - Path Traversal & UUID Sanitization:** Không bao giờ sử dụng tên file gốc do người dùng tải lên (`file.getOriginalFilename()`). Tên file được sinh lại hoàn toàn bằng `UUID.randomUUID().toString() + extension`. Điều này triệt tiêu hoàn toàn tấn công Path Traversal (`../../etc/passwd`).
-     5. **Lớp 5 - Execution Prevention:** Thư mục lưu trữ `/app/uploads` được mount độc lập. Cấu hình Nginx chỉ phục vụ file dưới dạng binary tĩnh, tắt hoàn toàn mọi trình thông dịch thực thi file trong thư mục này.
+   - **5 lớp phòng thủ chi tiết (`FileStorageService.java` & `ReviewServiceImpl.java`):**
+     1. **Lớp 1 - Giới hạn số lượng & dung lượng:**
+        - Số lượng ảnh: `ReviewServiceImpl.java` kiểm tra `images.size() > 3` $\rightarrow$ ném `BadRequestException("Mỗi đánh giá chỉ được đính kèm tối đa 3 hình ảnh")`.
+        - Dung lượng file: `FileStorageService.java` kiểm tra `file.getSize() >= 5 * 1024 * 1024` $\rightarrow$ từ chối ngay lập tức nếu $\ge 5$MB. Nginx cấu hình `client_max_body_size 20M` để bảo vệ ở gateway.
+     2. **Lớp 2 - Whitelist Extension & Content-Type:**
+        - Chỉ chấp nhận phần mở rộng: `.jpg`, `.jpeg`, `.png`.
+        - Chỉ chấp nhận MIME Content-Type: `image/jpeg`, `image/png`. Bác bỏ mọi loại MIME nguy hiểm (`text/html`, `application/x-jsp`, `application/x-php`).
+     3. **Lớp 3 - Kiểm tra chữ ký Magic Bytes thuần Java:**
+        - Đọc mảng byte đầu file và so sánh với hằng số nhị phân chuẩn JPEG (`FF D8 FF`) và PNG (`89 50 4E 47 0D 0A 1A 0A`). Bắt buộc đuôi file và Magic Bytes phải đồng nhất (đuôi `.png` phải có chữ ký PNG).
+     4. **Lớp 4 - Giải mã ảnh thực tế & Chống Decompression Bomb:**
+        - Sử dụng `ImageIO.read(new ByteArrayInputStream(fileBytes))` để giải mã thành `BufferedImage`. Nếu file bị hỏng hoặc chứa mã script giả mạo, `ImageIO` trả về `null` và hệ thống từ chối ngay.
+        - Kiểm tra kích thước hình ảnh: chiều rộng và chiều cao $\le 8000$px, tổng số pixels $\le 25,000,000$ pixels. Ngăn chặn triệt để tấn công Zip/Decompression Bomb làm tràn bộ nhớ JVM Heap.
+     5. **Lớp 5 - UUID Sanitization, Chống Directory Traversal & Transaction Post-Commit:**
+        - Tên file lưu trữ được sinh lại bằng `UUID.randomUUID().toString() + "_" + timestamp + extension`.
+        - Đường dẫn đích được kiểm tra `destinationFile.startsWith(reviewsLocation)` để ngăn chặn tấn công leo thang thư mục (Path Traversal).
+        - Khi xóa review, các file ảnh vật lý được dọn dẹp an toàn qua `TransactionSynchronizationManager.registerSynchronization(afterCommit)` để đảm bảo chỉ xóa trên đĩa khi MySQL đã COMMIT thành công.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Service xử lý upload: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/FileStorageServiceImpl.java`.
-   - Controller upload review: `backend/src/main/java/com/rikkeisoft/ecommerce/controller/ReviewController.java`.
-   - Cấu hình thư mục upload: `backend/src/main/resources/application.yml` (`file.upload-dir = uploads/reviews`).
+   - Service lưu trữ: `backend/src/main/java/com/example/ecommerce/service/FileStorageService.java` (method `validateReviewImage`, `storeReviewImage`, `deleteFile`).
+   - Service nghiệp vụ review: `backend/src/main/java/com/example/ecommerce/service/impl/ReviewServiceImpl.java` (giới hạn tối đa 3 ảnh, tích hợp transaction synchronization).
+   - Controller: `backend/src/main/java/com/example/ecommerce/controller/ReviewController.java`, `ReviewUploadController.java`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
    - *"Nếu kẻ tấn công giấu mã PHP độc hại vào bên trong metadata (EXIF data) của một tấm ảnh JPG hợp lệ (Polyglot File), hệ thống của em có phát hiện được không?"*
-   - *Hướng trả lời:* Trong mô hình hiện tại, vì Nginx chỉ phục vụ static file và Backend chạy Java/Tomcat (không có trình thông dịch PHP), mã PHP độc hại giấu trong EXIF sẽ không bao giờ được thực thi mà chỉ được coi là byte dữ liệu tĩnh. Để nâng cấp tối đa, ta có thể dùng thư viện `ImageIO` hoặc `Thumbnailator` để re-encode (vẽ lại) toàn bộ ảnh, loại bỏ sạch 100% EXIF metadata trước khi lưu đĩa.
+   - *Hướng trả lời:* Trong hệ thống Rikkei Ecommerce, file ảnh upload được lưu trữ tại thư mục `/app/uploads/reviews` và Nginx chỉ phục vụ static file tĩnh, Backend chạy trên Java/Tomcat (không tích hợp PHP runtime). Do đó, mã PHP độc hại giấu trong EXIF sẽ không bao giờ được thông dịch hay thực thi. Hơn nữa, việc giải mã qua `ImageIO.read` bảo đảm tệp tin tuân thủ chuẩn cấu trúc raster đồ họa hợp lệ.
 
 6. **Cách trả lời khi tính năng chưa được triển khai đầy đủ hoặc có giới hạn:**
-   - *"Toàn bộ 5 lớp bảo vệ kiểm tra dung lượng, đổi tên UUID, kiểm tra extension và chặn traversal đã được triển khai hoàn chỉnh trong `FileStorageServiceImpl.java`."*
+   - *"Toàn bộ 5 lớp bảo vệ kiểm tra dung lượng (< 5MB), tối đa 3 ảnh, Magic Bytes nhị phân, ImageIO giải mã, đổi tên UUID và dọn dẹp post-commit đã được triển khai và kiểm thử 100% trong `FileStorageService.java` và `ReviewServiceImpl.java`."*
 
 ---
 
-### Câu 24: Tại sao phải kiểm tra Magic Bytes bằng Apache Tika thay vì tin tưởng Content-Type?
+### Câu 24: Tại sao phải kiểm tra Magic Bytes thay vì tin tưởng Content-Type? Hệ thống triển khai như thế nào?
 
 1. **Câu hỏi của hội đồng:**  
-   *"Tại sao các bạn lại sử dụng Apache Tika để kiểm tra Magic Bytes? Việc chỉ kiểm tra `multipartFile.getContentType()` do trình duyệt gửi lên có đủ an toàn không?"*
+   *"Tại sao hệ thống phải kiểm tra Magic Bytes? Việc chỉ kiểm tra `multipartFile.getContentType()` do trình duyệt gửi lên có đủ an toàn không? Tại sao dự án chọn kiểm tra byte trực tiếp thay vì dùng thư viện bên ngoài?"*
 
 2. **Câu trả lời ngắn gọn (30–45 giây):**  
-   *"Dạ thưa Hội đồng, việc chỉ kiểm tra `getContentType()` hoặc đuôi file là hoàn toàn không an toàn. Header `Content-Type` là dữ liệu do phía Client tự gửi lên trong HTTP Request, kẻ tấn công có thể dễ dàng can thiệp bằng Burp Suite hoặc Postman để đổi một file chứa mã độc `shell.jsp` thành `Content-Type: image/jpeg`. Để xác định chính xác định dạng file, hệ thống phải đọc trực tiếp các byte đầu tiên của file nhị phân (gọi là Magic Bytes hay Chữ ký file). Thư viện Apache Tika phân tích sâu cấu trúc nhị phân để khẳng định chắc chắn đó có phải là ảnh thật hay không."*
+   *"Dạ thưa Hội đồng, việc chỉ kiểm tra `getContentType()` hoặc đuôi file mở rộng là hoàn toàn không an toàn. Header `Content-Type` là dữ liệu do phía Client tự gửi lên trong HTTP Request, kẻ tấn công có thể dễ dàng can thiệp bằng Burp Suite, Postman hoặc curl để gắn `Content-Type: image/jpeg` cho một file chứa Web Shell độc hại. Để xác định bản chất thực của file, hệ thống bắt buộc phải kiểm tra Magic Bytes (chữ ký nhị phân ở đầu file). Dự án chọn giải pháp kiểm tra byte mảng trực tiếp kết hợp `ImageIO.read` trong Java chuẩn để đạt hiệu năng micro-giây, loại bỏ phụ thuộc nặng nề vào thư viện ngoài và chống triệt để tấn công Decompression Bomb."*
 
 3. **Giải thích kỹ thuật chuyên sâu:**
-   - **Magic Bytes là gì?**
-     - Mọi định dạng file chuẩn đều bắt đầu bằng các byte nhị phân đặc thù không thể làm giả:
-       - File **JPEG/JPG**: Bắt đầu bằng hex `FF D8 FF`.
-       - File **PNG**: Bắt đầu bằng hex `89 50 4E 47 0D 0A 1A 0A`.
-       - File **GIF**: Bắt đầu bằng chuỗi ký tự `GIF87a` hoặc `GIF89a` (`47 49 46 38`).
-       - File **PDF**: Bắt đầu bằng `%PDF` (`25 50 44 46`).
-       - File **Web Shell JSP/PHP**: Thường bắt đầu bằng `<%` (`3C 25`) hoặc `<?php` (`3C 3F 70 68 70`).
-   - **Cách Apache Tika hoạt động trong Java:**
+   - **Magic Bytes (Chữ ký tệp) là gì?**
+     - Mọi định dạng tệp chuẩn quốc tế đều bắt đầu bằng một chuỗi byte đặc thù ở đầu luồng dữ liệu (file header):
+       - **JPEG/JPG:** Bắt đầu bằng 3 bytes `0xFF, 0xD8, 0xFF`.
+       - **PNG:** Bắt đầu bằng 8 bytes `0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A`.
+       - **Web Shell JSP/PHP:** Bắt đầu bằng `<%` (`0x3C, 0x25`) hoặc `<?php` (`0x3C, 0x3F, 0x70, 0x68, 0x70`).
+   - **Triển khai thực tế trong `FileStorageService.java`:**
      ```java
-     Tika tika = new Tika();
-     String detectedMimeType = tika.detect(multipartFile.getInputStream());
-     if (!detectedMimeType.startsWith("image/")) {
-         throw new BadRequestException("Nội dung file không phải là hình ảnh hợp lệ!");
+     private static final byte[] JPEG_MAGIC_BYTES = new byte[]{(byte) 0xFF, (byte) 0xD8, (byte) 0xFF};
+     private static final byte[] PNG_MAGIC_BYTES = new byte[]{
+             (byte) 0x89, (byte) 0x50, (byte) 0x4E, (byte) 0x47,
+             (byte) 0x0D, (byte) 0x0A, (byte) 0x1A, (byte) 0x0A
+     };
+
+     private boolean matchesMagicBytes(byte[] fileBytes, byte[] magicBytes) {
+         if (fileBytes.length < magicBytes.length) return false;
+         for (int i = 0; i < magicBytes.length; i++) {
+             if (fileBytes[i] != magicBytes[i]) return false;
+         }
+         return true;
      }
      ```
-     Dù kẻ xấu có đổi tên file thành `avatar.png` và set header `image/png`, nhưng nếu nội dung là mã script, Apache Tika sẽ đọc byte và phát hiện mime type thực sự là `text/plain` hoặc `application/x-jsp`, lập tức ném lỗi từ chối.
+   - **Tại sao chọn Native Java Byte Checking + `ImageIO` thay vì Apache Tika?**
+     1. **Zero-Dependency Overhead:** Apache Tika là thư viện phân tích tài liệu đa năng rất lớn (kéo theo hàng chục transitive dependencies về parse PDF, Office, audio...), làm phình to kích thước JAR và tăng bề mặt rủi ro lỗ hổng bảo mật (CVE).
+     2. **Hiệu năng cực cao:** So sánh trực tiếp mảng byte trong bộ nhớ chỉ mất $< 0.1 \mu s$, không phát sinh overhead khởi tạo parser.
+     3. **Phòng thủ 2 lớp (Signature + Raster):** Sau khi kiểm tra Magic Bytes, hệ thống tiếp tục gọi `ImageIO.read(new ByteArrayInputStream(fileBytes))` để giải mã ma trận điểm ảnh thực tế, đồng thời kiểm tra kích thước điểm ảnh ($\le 8000$px và $\le 25M$ pixels). Tika chỉ kiểm tra header metadata chứ không giải mã pixel, do đó Tika không thể chống được tấn công Decompression Bomb trong khi giải pháp của dự án xử lý hoàn hảo cả hai bài toán.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Thư viện: `backend/build.gradle` (`org.apache.tika:tika-core:2.9.2`).
-   - Xử lý xác thực file: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/FileStorageServiceImpl.java`.
+   - Mã nguồn xác thực Magic Bytes: `backend/src/main/java/com/example/ecommerce/service/FileStorageService.java` (hằng số `JPEG_MAGIC_BYTES`, `PNG_MAGIC_BYTES`, phương thức `matchesMagicBytes`, `validateReviewImage`).
+   - Bộ giải mã an toàn: `javax.imageio.ImageIO`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
-   - *"Việc đọc Magic Bytes có làm giảm hiệu năng đọc ghi của server khi người dùng tải nhiều ảnh dung lượng lớn không?"*
-   - *Hướng trả lời:* Hoàn toàn không. Tika chỉ cần đọc một lượng byte rất nhỏ ở đầu luồng dữ liệu (thường là 512 bytes đến 1024 bytes đầu tiên) qua cơ chế `BufferedInputStream.mark()` và `reset()`, không cần đọc toàn bộ hàng megabyte của file, do đó tốc độ thực thi diễn ra trong chưa đầy 1 mili-giây.
+   - *"Nếu file tải lên là định dạng ảnh GIF hoặc WebP thì hàm `validateReviewImage` có cho phép không?"*
+   - *Hướng trả lời:* Đối với ảnh đánh giá sản phẩm (`ReviewImage`), chính sách bảo mật của hệ thống chủ động thu hẹp phạm vi chỉ chấp nhận JPEG và PNG nhằm kiểm soát chặt chẽ nhất tính toàn vẹn và dung lượng hiển thị. Đối với ảnh banner/sản phẩm của Admin (`storeFile`), hệ thống hỗ trợ thêm WebP và GIF với các cơ chế kiểm tra tương ứng.
 
 6. **Cách trả lời khi tính năng chưa được triển khai đầy đủ hoặc có giới hạn:**
-   - *"Thư viện Apache Tika 2.9.2 đã được tích hợp trong dự án và phương thức xác thực Magic Bytes đã được xây dựng trong `FileStorageServiceImpl` để bảo vệ các chức năng upload."*
+   - *"Cơ chế xác thực Magic Bytes JPEG/PNG và kiểm tra giới hạn phân giải ảnh bằng `ImageIO` đã được cài đặt hoàn chỉnh và có test case kiểm thử cụ thể trong `backend/src/test/java/com/example/ecommerce/`."*
 
 ---
 
@@ -956,7 +1025,7 @@
      ```
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Cấu hình CORS Bean: `backend/src/main/java/com/rikkeisoft/ecommerce/config/SecurityConfig.java` (`corsConfigurationSource()`).
+   - Cấu hình CORS Bean: `backend/src/main/java/com/example/ecommerce/config/SecurityConfig.java` (`corsConfigurationSource()`).
    - Cấu hình tích hợp HttpSecurity: `http.cors(cors -> cors.configurationSource(corsConfigurationSource()))`.
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
@@ -1063,8 +1132,8 @@
    - **Tính trung thực:** Nhóm minh bạch ghi nhận trạng thái thực tế trong mọi báo cáo và slide, không nói sai sự thật về việc đã tích hợp Cloudinary khi thực tế đang dùng local storage.
 
 4. **Thành phần hoặc class tương ứng trong source code:**
-   - Interface trừu tượng: `backend/src/main/java/com/rikkeisoft/ecommerce/service/FileStorageService.java`.
-   - Lớp triển khai hiện tại: `backend/src/main/java/com/rikkeisoft/ecommerce/service/impl/FileStorageServiceImpl.java`.
+   - Interface trừu tượng: `backend/src/main/java/com/example/ecommerce/service/FileStorageService.java`.
+   - Lớp triển khai hiện tại: `backend/src/main/java/com/example/ecommerce/service/impl/FileStorageServiceImpl.java`.
    - Cấu hình thư mục: `backend/src/main/resources/application.yml` (`file.upload-dir: uploads/reviews`).
 
 5. **Câu hỏi truy vấn sâu hơn có thể phát sinh:**
