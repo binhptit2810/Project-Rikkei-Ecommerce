@@ -771,12 +771,18 @@ public class ProductService {
             }
         }
 
-        BigDecimal salePrice = dealProduct.getPrice();
+        BigDecimal salePrice = dealProduct.getPrice() != null ? dealProduct.getPrice() : BigDecimal.ZERO;
+        if (discountPercentage <= 0 || discountPercentage >= 100) {
+            discountPercentage = 25;
+        }
         // Giá gốc tính theo tỷ lệ chiết khấu: originalPrice = salePrice / (1 - discountPercentage / 100)
         BigDecimal oneMinusDiscount = BigDecimal.ONE.subtract(
                 BigDecimal.valueOf(discountPercentage).divide(BigDecimal.valueOf(100), 4, RoundingMode.HALF_UP)
         );
-        BigDecimal originalPrice = salePrice.divide(oneMinusDiscount, 0, RoundingMode.HALF_UP);
+        BigDecimal originalPrice = salePrice;
+        if (oneMinusDiscount.compareTo(BigDecimal.ZERO) > 0) {
+            originalPrice = salePrice.divide(oneMinusDiscount, 0, RoundingMode.HALF_UP);
+        }
 
         return DealOfTheDayResponse.builder()
                 .id(dealProduct.getId())
