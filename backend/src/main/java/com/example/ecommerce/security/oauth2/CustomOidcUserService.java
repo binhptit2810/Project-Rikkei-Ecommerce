@@ -102,6 +102,15 @@ public class CustomOidcUserService extends OidcUserService {
         if (oauthAccountOpt.isPresent()) {
             User user = oauthAccountOpt.get().getUser();
 
+            // Kiểm tra email của User đã liên kết có khớp với email trong Google ID Token không
+            if (!user.getEmail().equalsIgnoreCase(normalizedEmail)) {
+                log.warn("Google sub={} đã liên kết với user ID={}, email={}, nhưng token trả về email={}",
+                        sub, user.getId(), user.getEmail(), normalizedEmail);
+                throw new OAuth2AuthenticationException(
+                        new OAuth2Error("oauth_conflict", "Tài khoản Google này đã được liên kết với một tài khoản khác trong hệ thống.", null)
+                );
+            }
+
             // Kiểm tra trạng thái tài khoản bị Admin khóa
             if (Boolean.FALSE.equals(user.getActive())) {
                 String lockReason = StringUtils.hasText(user.getLockReason()) ? user.getLockReason().trim() : "Tài khoản đã bị vô hiệu hóa";
@@ -133,11 +142,71 @@ public class CustomOidcUserService extends OidcUserService {
         // 5. Nếu chưa có liên kết: Kiểm tra xem email đã tồn tại trong hệ thống chưa
         Optional<User> existingUserOpt = userRepository.findByEmail(normalizedEmail);
         if (existingUserOpt.isPresent()) {
-            // NGUYÊN TẮC BẢO MẬT BẮT BUỘC: Không tự động liên kết tài khoản LOCAL chỉ vì trùng email
-            log.warn("Từ chối tự động liên kết tài khoản LOCAL trùng email: email={}", normalizedEmail);
-            throw new OAuth2AuthenticationException(
-                    new OAuth2Error("email_already_exists", "Email này đã được đăng ký bằng tài khoản thông thường. Vui lòng đăng nhập bằng mật khẩu để liên kết tài khoản.", null)
-            );
+            User existingUser = existingUserOpt.get();
+
+            // Kiểm tra trạng thái tài khoản bị Admin khóa
+            if (Boolean.FALSE.equals(existingUser.getActive())) {
+                String lockReason = StringUtils.hasText(existingUser.getLockReason()) ? existingUser.getLockReason().trim() : "Tài khoản đã bị vô hiệu hóa";
+                log.warn("Từ chối liên kết/đăng nhập Google do tài khoản nội bộ bị khóa: userId={}, reason={}", existingUser.getId(), lockReason);
+                throw new OAuth2AuthenticationException(
+                        new OAuth2Error("account_locked", "Tài khoản của bạn đã bị khóa: " + lockReason, null)
+                );
+            }
+
+            // Phân tách vai trò: Google Login tại storefront chỉ dành cho CUSTOMER
+            if (existingUser.getRole() == Role.ADMIN) {
+                log.warn("Từ chối liên kết/đăng nhập Google tại cổng Khách hàng cho tài khoản ADMIN: email={}", normalizedEmail);
+                throw new OAuth2AuthenticationException(
+                        new OAuth2Error("admin_access_denied", "Tài khoản Quản trị viên (ADMIN) không được phép đăng nhập tại cổng Khách hàng.", null)
+                );
+            }
+
+            // Kiểm tra xem providerId (sub) này có đang thuộc về tài khoản khác không (chống liên kết nhầm / cướp sub)
+            Optional<UserOAuthAccount> existingProviderOpt = userOAuthAccountRepository.findByProviderAndProviderId(PROVIDER_GOOGLE, sub);
+            if (existingProviderOpt.isPresent() && !existingProviderOpt.get().getUser().getId().equals(existingUser.getId())) {
+                log.error("Cảnh báo bảo mật: Định danh Google sub={} đã được liên kết với user ID={} khác, không thể gán cho user ID={}",
+                        sub, existingProviderOpt.get().getUser().getId(), existingUser.getId());
+                throw new OAuth2AuthenticationException(
+                        new OAuth2Error("oauth_conflict", "Tài khoản Google này đã được liên kết với một tài khoản khác trong hệ thống.", null)
+                );
+            }
+
+            // Thực hiện liên kết an toàn (Auto-link) do Google đã xác nhận email_verified == true
+            // Đảm bảo không tạo duplicate liên kết: nếu chưa có liên kết với GOOGLE thì mới tạo
+            Optional<UserOAuthAccount> userGoogleAccountOpt = userOAuthAccountRepository.findByUserIdAndProvider(existingUser.getId(), PROVIDER_GOOGLE);
+            if (userGoogleAccountOpt.isEmpty()) {
+                UserOAuthAccount newOAuthAccount = UserOAuthAccount.builder()
+                        .user(existingUser)
+                        .provider(PROVIDER_GOOGLE)
+                        .providerId(sub)
+                        .email(normalizedEmail)
+                        .build();
+                userOAuthAccountRepository.save(newOAuthAccount);
+                log.info("Đã tự động liên kết thành công Google OAuth vào tài khoản nội bộ: userId={}, email={}", existingUser.getId(), normalizedEmail);
+            }
+
+            // Cập nhật email_verified = true cho tài khoản nội bộ nếu trước đó chưa xác thực
+            boolean userUpdated = false;
+            if (Boolean.FALSE.equals(existingUser.getEmailVerified())) {
+                existingUser.setEmailVerified(true);
+                existingUser.setEmailVerifiedAt(LocalDateTime.now());
+                userUpdated = true;
+                log.info("Tự động kích hoạt trạng thái xác thực email cho user ID={} qua Google OIDC", existingUser.getId());
+            }
+
+            // Đồng bộ avatar từ Google nếu có thay đổi
+            if (StringUtils.hasText(picture) && !picture.equals(existingUser.getAvatarUrl())) {
+                existingUser.setAvatarUrl(picture);
+                userUpdated = true;
+                log.info("Cập nhật avatar từ Google cho user ID={}", existingUser.getId());
+            }
+
+            if (userUpdated) {
+                existingUser = userRepository.save(existingUser);
+            }
+
+            log.info("Đăng nhập Google thành công cho tài khoản đã liên kết: userId={}, email={}", existingUser.getId(), normalizedEmail);
+            return new CustomOidcUser(oidcUser, existingUser);
         }
 
         // 6. Nếu email chưa tồn tại: Tạo tài khoản CUSTOMER mới và tạo liên kết OAuth

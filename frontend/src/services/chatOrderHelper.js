@@ -160,137 +160,14 @@ export const detectOrderQuery = (text) => {
   return null
 }
 
-/**
- * Kho dữ liệu đơn hàng mẫu phục vụ QA Tester kiểm thử trực tiếp mọi trạng thái theo Trello ticket:
- * - ORD-001 -> "Đang xử lý" (PROCESSING)
- * - ORD-002 -> "Đang giao" (SHIPPING)
- * - ORD-123 -> "Đang giao" (SHIPPING)
- * - ORD-003 -> "Đã giao" (DELIVERED)
- * - ORD-999 -> Đơn hàng không tồn tại
- */
-export const DEMO_ORDERS = {
-  'ORD-001': {
-    id: 1,
-    orderCode: 'ORD-001',
-    status: 'PROCESSING',
-    statusLabel: 'Đang xử lý',
-    totalAmount: 489000,
-    recipientName: 'Đỗ Hoàng Anh',
-    recipientPhone: '0987 654 321',
-    shippingAddress: 'Tòa nhà FPT, Duy Tân, Cầu Giấy, Hà Nội',
-    updatedAt: new Date(Date.now() - 3600000 * 4).toISOString(),
-    createdAt: new Date(Date.now() - 3600000 * 12).toISOString(),
-    items: [
-      { productName: 'Áo Polo Thể Thao Rikkei CoolMax', quantity: 1, unitPrice: 249000, subtotal: 249000 },
-      { productName: 'Quần Short Kaki Co Giãn 4 Chiều', quantity: 1, unitPrice: 240000, subtotal: 240000 },
-    ],
-    note: 'Đơn hàng đang được kho đóng gói và chuẩn bị bàn giao cho bưu tá.',
-  },
-  'ORD-002': {
-    id: 2,
-    orderCode: 'ORD-002',
-    status: 'SHIPPING',
-    statusLabel: 'Đang giao',
-    totalAmount: 850000,
-    recipientName: 'Vũ Đức Huy Hoàng',
-    recipientPhone: '0912 345 678',
-    shippingAddress: 'Số 18 Tam Trinh, Mai Động, Hoàng Mai, Hà Nội',
-    updatedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
-    createdAt: new Date(Date.now() - 3600000 * 28).toISOString(),
-    items: [
-      { productName: 'Giày Sneaker Rikkei Urban Flow V2', quantity: 1, unitPrice: 850000, subtotal: 850000 },
-    ],
-    note: 'Đơn hàng đang trên đường giao bởi GHN Express. Bưu tá liên hệ trước khi giao.',
-  },
-  'ORD-123': {
-    id: 123,
-    orderCode: 'ORD-123',
-    status: 'SHIPPING',
-    statusLabel: 'Đang giao',
-    totalAmount: 720000,
-    recipientName: 'Khách hàng Rikkei Store',
-    recipientPhone: '0936 888 999',
-    shippingAddress: '25 Lý Thường Kiệt, Hoàn Kiếm, Hà Nội',
-    updatedAt: new Date(Date.now() - 3600000 * 1.5).toISOString(),
-    createdAt: new Date(Date.now() - 3600000 * 30).toISOString(),
-    items: [
-      { productName: 'Áo Khoác Bomber Chống Gió Cao Cấp', quantity: 1, unitPrice: 520000, subtotal: 520000 },
-      { productName: 'Mũ Lưỡi Trai Rikkei Classic', quantity: 1, unitPrice: 200000, subtotal: 200000 },
-    ],
-    note: 'Đơn hàng đang trên lộ trình giao bởi Viettel Post. Dự kiến sẽ được giao tới bạn trong hôm nay.',
-  },
-  'ORD-003': {
-    id: 3,
-    orderCode: 'ORD-003',
-    status: 'DELIVERED',
-    statusLabel: 'Đã giao',
-    totalAmount: 1250000,
-    recipientName: 'Nguyễn Văn An',
-    recipientPhone: '0977 112 233',
-    shippingAddress: 'Landmark 81, Bình Thạnh, TP. Hồ Chí Minh',
-    updatedAt: new Date(Date.now() - 3600000 * 26).toISOString(),
-    createdAt: new Date(Date.now() - 3600000 * 72).toISOString(),
-    items: [
-      { productName: 'Combo 3 Áo Thun Cotton Compact', quantity: 1, unitPrice: 650000, subtotal: 650000 },
-      { productName: 'Balo Du Lịch Chống Nước Smartpack', quantity: 1, unitPrice: 600000, subtotal: 600000 },
-    ],
-    note: 'Đơn hàng đã được giao thành công và có chữ ký xác nhận của người nhận.',
-  },
-}
+// Không sử dụng dữ liệu giả lập/mock trong luồng nghiệp vụ thực tế
+export const DEMO_ORDERS = {}
 
 /**
- * Sinh đối tượng đơn hàng hợp lệ dựa trên mã tra cứu (deterministic fallback).
+ * Hàm sinh đơn hàng giả lập đã bị vô hiệu hóa hoàn toàn để ngăn ngừa rò rỉ PII và bypass authorization.
  */
-export const getDeterministicOrder = (orderCode) => {
-  if (!orderCode) return null
-  const normalized = orderCode.toUpperCase().replace(/\s+/g, '')
-
-  // Kiểm tra mã demo cố định
-  if (DEMO_ORDERS[normalized]) {
-    return DEMO_ORDERS[normalized]
-  }
-
-  // Trường hợp kiểm thử mã không tồn tại ORD-999
-  if (normalized === 'ORD-999' || normalized === '999') {
-    return { notFound: true, orderCode: 'ORD-999' }
-  }
-
-  // Trường hợp khách nhập mã tùy ý (ví dụ ORD-102, ORD-2026, #456)
-  const numMatches = normalized.match(/\d+/)
-  const num = numMatches ? parseInt(numMatches[0], 10) : 123
-
-  // Phân bổ trạng thái xoay vòng theo 3 trạng thái Trello yêu cầu
-  let status = 'PROCESSING'
-  let statusLabel = 'Đang xử lý'
-
-  const mod = num % 3
-  if (mod === 0) {
-    status = 'PROCESSING'
-    statusLabel = 'Đang xử lý'
-  } else if (mod === 1) {
-    status = 'SHIPPING'
-    statusLabel = 'Đang giao'
-  } else {
-    status = 'DELIVERED'
-    statusLabel = 'Đã giao'
-  }
-
-  return {
-    id: num,
-    orderCode: normalized.startsWith('ORD-') ? normalized : `ORD-${normalized}`,
-    status,
-    statusLabel,
-    totalAmount: (num * 10000 + 350000) % 1500000 + 150000,
-    recipientName: 'Khách hàng Rikkei',
-    recipientPhone: '0988 *** ***',
-    shippingAddress: 'Địa chỉ giao hàng đã đăng ký',
-    updatedAt: new Date().toISOString(),
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    items: [
-      { productName: 'Sản phẩm thời trang Rikkei Store', quantity: 1, unitPrice: 350000, subtotal: 350000 },
-    ],
-    note: `Đơn hàng đang ở trạng thái ${statusLabel}.`,
-  }
+export const getDeterministicOrder = (_orderCode) => {
+  return null
 }
 
 /**

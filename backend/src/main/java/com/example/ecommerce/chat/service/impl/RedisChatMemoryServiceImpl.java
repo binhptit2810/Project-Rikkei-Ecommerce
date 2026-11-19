@@ -53,8 +53,8 @@ public class RedisChatMemoryServiceImpl implements ChatMemoryService {
     public static final String OWNER_GUEST = "GUEST";
     public static final long GUEST_TTL_SECONDS = 86400L;    // 24 giờ
     public static final long USER_TTL_SECONDS = 604800L;    // 7 ngày
-    public static final long LOCK_TTL_MILLIS = 60000L;      // 60 giây (tạo 28s đệm an toàn so với Backend Deadline 32s)
-    public static final long IDEMPOTENCY_IN_PROGRESS_TTL_SECONDS = 60L;   // 60 giây
+    public static final long LOCK_TTL_MILLIS = 120000L;    // 120 giây (tạo 20s đệm an toàn so với Backend Deadline 100s)
+    public static final long IDEMPOTENCY_IN_PROGRESS_TTL_SECONDS = 120L;   // 120 giây (đồng bộ với Lock TTL)
     public static final long IDEMPOTENCY_COMPLETED_TTL_SECONDS = 300L;    // 300 giây (5 phút)
 
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();

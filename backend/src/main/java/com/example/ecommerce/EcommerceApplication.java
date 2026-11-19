@@ -1,19 +1,36 @@
 package com.example.ecommerce;
 
+import jakarta.annotation.PostConstruct;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.context.annotation.Bean;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.ZoneId;
+import java.util.TimeZone;
 
 /**
  * Entry point của ứng dụng E-commerce Backend.
  */
 @SpringBootApplication
 public class EcommerceApplication {
+
+    public static final String TIMEZONE_VIETNAM = "Asia/Ho_Chi_Minh";
+
+    @PostConstruct
+    public void initTimezone() {
+        TimeZone.setDefault(TimeZone.getTimeZone(TIMEZONE_VIETNAM));
+    }
+
+    @Bean
+    public Clock clock() {
+        return Clock.system(ZoneId.of(TIMEZONE_VIETNAM));
+    }
 
     public static void main(String[] args) {
         loadDotEnvIfPresent();

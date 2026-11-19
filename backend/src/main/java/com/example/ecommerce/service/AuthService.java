@@ -1212,6 +1212,13 @@ public class AuthService {
             // Trường hợp A: Đã liên kết Auth0
             user = oauthAccountOpt.get().getUser();
 
+            // Kiểm tra email của User đã liên kết có khớp với email trong Token không
+            if (!user.getEmail().equalsIgnoreCase(normalizedEmail)) {
+                log.warn("OAuth sub={} đã liên kết với user ID={}, email={}, nhưng token trả về email={}",
+                        sub, user.getId(), user.getEmail(), normalizedEmail);
+                throw new BusinessException("Tài khoản xác thực này đã được liên kết với một người dùng khác.");
+            }
+
             // Kiểm tra trạng thái tài khoản bị Admin khóa
             if (Boolean.FALSE.equals(user.getActive())) {
                 String lockReason = StringUtils.hasText(user.getLockReason()) ? user.getLockReason().trim() : null;
@@ -1238,10 +1245,60 @@ public class AuthService {
             // Kiểm tra xem email đã tồn tại trong hệ thống chưa
             Optional<User> existingUserOpt = userRepository.findByEmail(normalizedEmail);
             if (existingUserOpt.isPresent()) {
-                // Trường hợp C: NGUYÊN TẮC BẢO MẬT BẮT BUỘC: Không tự động liên kết tài khoản LOCAL trùng email
-                log.warn("Từ chối tự động liên kết tài khoản LOCAL trùng email qua Auth0: email={}", normalizedEmail);
-                throw new BusinessException("Email này đã được đăng ký bằng phương thức khác. Vui lòng đăng nhập bằng mật khẩu để liên kết tài khoản.");
-            }
+                user = existingUserOpt.get();
+
+                // Kiểm tra trạng thái tài khoản bị Admin khóa
+                if (Boolean.FALSE.equals(user.getActive())) {
+                    String lockReason = StringUtils.hasText(user.getLockReason()) ? user.getLockReason().trim() : null;
+                    log.warn("Auth0 Google login thất bại do tài khoản bị khóa: userId={}, reason={}", user.getId(), lockReason);
+                    throw new LockedAccountException("Tài khoản của bạn đã bị khóa.", lockReason);
+                }
+
+                // Phân tách vai trò: Google Login tại storefront chỉ dành cho CUSTOMER
+                if (user.getRole() == Role.ADMIN) {
+                    log.warn("Từ chối đăng nhập Auth0 Google tại cổng Khách hàng cho tài khoản ADMIN: email={}", normalizedEmail);
+                    throw new BusinessException("Tài khoản Quản trị viên (ADMIN) không được phép đăng nhập tại cổng Khách hàng.");
+                }
+
+                // Kiểm tra xem providerId (sub) này có đang thuộc về tài khoản khác không
+                Optional<UserOAuthAccount> existingProviderOpt = userOAuthAccountRepository.findByProviderAndProviderId(PROVIDER_AUTH0, sub);
+                if (existingProviderOpt.isPresent() && !existingProviderOpt.get().getUser().getId().equals(user.getId())) {
+                    log.error("Cảnh báo bảo mật: Định danh Auth0 sub={} đã được liên kết với user ID={} khác, không thể gán cho user ID={}",
+                            sub, existingProviderOpt.get().getUser().getId(), user.getId());
+                    throw new BusinessException("Tài khoản xác thực này đã được liên kết với một người dùng khác.");
+                }
+
+                // Tự động liên kết tài khoản an toàn khi email đã được Auth0/Google xác minh
+                Optional<UserOAuthAccount> userOAuthOpt = userOAuthAccountRepository.findByUserIdAndProvider(user.getId(), PROVIDER_AUTH0);
+                if (userOAuthOpt.isEmpty()) {
+                    UserOAuthAccount newOAuthAccount = UserOAuthAccount.builder()
+                            .user(user)
+                            .provider(PROVIDER_AUTH0)
+                            .providerId(sub)
+                            .email(normalizedEmail)
+                            .build();
+                    userOAuthAccountRepository.save(newOAuthAccount);
+                    log.info("Đã tự động liên kết thành công Auth0 OAuth vào tài khoản nội bộ: userId={}, email={}", user.getId(), normalizedEmail);
+                }
+
+                boolean userUpdated = false;
+                if (Boolean.FALSE.equals(user.getEmailVerified())) {
+                    user.setEmailVerified(true);
+                    user.setEmailVerifiedAt(LocalDateTime.now());
+                    userUpdated = true;
+                    log.info("Tự động kích hoạt trạng thái xác thực email cho user ID={} qua Auth0", user.getId());
+                }
+
+                if (StringUtils.hasText(picture) && !picture.equals(user.getAvatarUrl())) {
+                    user.setAvatarUrl(picture);
+                    userUpdated = true;
+                    log.info("Đã cập nhật avatar mới từ Auth0 cho user ID={}", user.getId());
+                }
+
+                if (userUpdated) {
+                    user = userRepository.save(user);
+                }
+            } else {
 
             // Trường hợp B: Nếu email chưa tồn tại -> Tạo tài khoản CUSTOMER mới và tạo liên kết OAuth
             String secureRandomPassword = generateCryptographicPassword();
@@ -1280,6 +1337,7 @@ public class AuthService {
                     throw new BusinessException("Lỗi hệ thống khi khởi tạo tài khoản. Vui lòng thử lại.");
                 }
             }
+        }
         }
 
         // 3. Phát hành JWT Access Token và Refresh Token theo cơ chế chuẩn của Rikkei

@@ -36,6 +36,9 @@ import java.util.Collections;
 @Slf4j
 public class GeminiRetryPolicy extends SimpleRetryPolicy {
 
+    private static final String LAST_EVALUATED_THROWABLE = "gemini.last.evaluated.throwable";
+    private static final String LAST_EVALUATED_RESULT = "gemini.last.evaluated.result";
+
     public GeminiRetryPolicy(int maxAttempts) {
         super(maxAttempts, Collections.emptyMap(), true, false);
     }
@@ -46,7 +49,17 @@ public class GeminiRetryPolicy extends SimpleRetryPolicy {
         if (t == null) {
             return context.getRetryCount() < getMaxAttempts();
         }
-        if (!shouldRetry(t)) {
+        // Tránh đánh giá và ghi log lặp lại khi RetryTemplate gọi canRetry nhiều lần cho cùng một exception
+        if (t == context.getAttribute(LAST_EVALUATED_THROWABLE)) {
+            Boolean cached = (Boolean) context.getAttribute(LAST_EVALUATED_RESULT);
+            if (cached != null) {
+                return cached && (context.getRetryCount() < getMaxAttempts());
+            }
+        }
+        boolean retryable = shouldRetry(t);
+        context.setAttribute(LAST_EVALUATED_THROWABLE, t);
+        context.setAttribute(LAST_EVALUATED_RESULT, retryable);
+        if (!retryable) {
             return false;
         }
         return context.getRetryCount() < getMaxAttempts();

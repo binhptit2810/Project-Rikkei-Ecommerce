@@ -55,6 +55,20 @@ public class SpringAiConfig {
     @Value("${spring.ai.openai.chat.options.temperature:0.7}")
     private Double temperature;
 
+    @Value("${spring.ai.openai.connect-timeout:10000}")
+    private int connectTimeout;
+
+    @Value("${spring.ai.openai.read-timeout:60000}")
+    private int readTimeout;
+
+    public int getConnectTimeout() {
+        return connectTimeout;
+    }
+
+    public int getReadTimeout() {
+        return readTimeout;
+    }
+
     @Bean
     public GeminiThoughtSignatureInterceptor geminiThoughtSignatureInterceptor(
             @Autowired(required = false) ObjectMapper objectMapper
@@ -77,8 +91,8 @@ public class SpringAiConfig {
                 cleanBaseUrl, cleanCompletionsPath, modelName);
 
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
-        requestFactory.setConnectTimeout(5000);  // 5s connect timeout
-        requestFactory.setReadTimeout(12000);   // 12s read timeout (giảm từ 15s để nằm trọn trong deadline 32s)
+        requestFactory.setConnectTimeout(connectTimeout);  // 10s connect timeout cấu hình qua application.yml / env
+        requestFactory.setReadTimeout(readTimeout);        // 60s read timeout (tăng từ 12s lên 60s để AI suy luận & gọi tools)
 
         BufferingClientHttpRequestFactory bufferingFactory = new BufferingClientHttpRequestFactory(requestFactory);
 

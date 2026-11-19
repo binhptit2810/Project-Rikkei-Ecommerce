@@ -50,7 +50,7 @@ export const chatService = {
       payload,
       {
         headers,
-        timeout: 40000, // 40 giây timeout riêng cho Chatbot AI (Backend deadline là 32s)
+        timeout: 120000, // 120 giây (120s) timeout riêng cho Chatbot AI, đảm bảo Frontend không ngắt trước Backend/Gemini
       }
     )
 

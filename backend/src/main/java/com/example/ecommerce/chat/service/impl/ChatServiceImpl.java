@@ -31,6 +31,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.model.function.FunctionCallback;
 import org.springframework.ai.retry.NonTransientAiException;
 import org.springframework.ai.retry.TransientAiException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -39,7 +40,12 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.ResourceAccessException;
 
 import java.net.SocketTimeoutException;
+import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.Duration;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -71,6 +77,53 @@ public class ChatServiceImpl implements ChatService {
     private final ChatMemoryService chatMemoryService;
     private final ChatClient chatClient;
     private final ChatToolsConfig chatToolsConfig;
+
+    public static final ZoneId VIETNAM_ZONE_ID = ZoneId.of("Asia/Ho_Chi_Minh");
+    private Clock clock = Clock.system(VIETNAM_ZONE_ID);
+
+    @Autowired(required = false)
+    public void setClock(Clock clock) {
+        if (clock != null) {
+            this.clock = clock;
+        }
+    }
+
+    public Clock getClock() {
+        return this.clock;
+    }
+
+    /**
+     * Sinh System Prompt động kèm ngữ cảnh ngày giờ thực tế theo múi giờ Việt Nam (Asia/Ho_Chi_Minh, UTC+7).
+     * Đảm bảo LLM có mốc thời gian chuẩn xác (Ground Truth) để trả lời các câu hỏi về hôm nay, hôm qua,
+     * ngày mai, tuần này, tuần trước, tháng này và đối chiếu thời gian đơn hàng.
+     */
+    public String buildDynamicSystemPrompt() {
+        ZonedDateTime now = ZonedDateTime.now(clock.withZone(VIETNAM_ZONE_ID));
+        String dayOfWeekVi = getDayOfWeekVietnamese(now.getDayOfWeek());
+        String formattedDate = now.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        String formattedTime = now.format(DateTimeFormatter.ofPattern("HH:mm:ss"));
+
+        return SYSTEM_PROMPT + String.format("""
+
+7. Ngữ cảnh thời gian thực tế của hệ thống:
+- Mốc thời gian thực hiện tại: %s, ngày %s, lúc %s (Múi giờ Việt Nam GMT+7, Asia/Ho_Chi_Minh).
+- Luôn sử dụng mốc thời gian này làm mốc chuẩn duy nhất (ground truth) để trả lời các câu hỏi về thời gian thực tế: bây giờ là mấy giờ, hôm nay là ngày mấy/thứ mấy, ngày mai là ngày bao nhiêu, hôm qua là ngày nào, tuần này, tuần trước, tháng này, năm nay...
+- Tuyệt đối không tự suy đoán, bịa đặt hoặc hallucinate ngày giờ từ dữ liệu huấn luyện cũ của mô hình.
+- Khi đối chiếu với thời gian tạo đơn hàng (createdAt, updatedAt trong Order Tools), hãy tính toán khoảng cách thời gian dựa trên mốc thời gian thực tế này để giải đáp cho khách hàng (ví dụ: "đơn hàng được đặt hôm nay lúc...", "đơn hàng được đặt vào ngày hôm qua...").
+""", dayOfWeekVi, formattedDate, formattedTime);
+    }
+
+    private static String getDayOfWeekVietnamese(DayOfWeek dayOfWeek) {
+        return switch (dayOfWeek) {
+            case MONDAY -> "Thứ Hai";
+            case TUESDAY -> "Thứ Ba";
+            case WEDNESDAY -> "Thứ Tư";
+            case THURSDAY -> "Thứ Năm";
+            case FRIDAY -> "Thứ Sáu";
+            case SATURDAY -> "Thứ Bảy";
+            case SUNDAY -> "Chủ Nhật";
+        };
+    }
 
     /**
      * System prompt cố định cho phiên bản Chatbot tư vấn bán hàng Rikkei Ecommerce.
@@ -130,7 +183,7 @@ Các nguyên tắc bắt buộc tuân thủ:
             MDC.put("clientMessageId", clientMessageId.trim());
         }
         long startTime = System.currentTimeMillis();
-        ChatRequestContext.init(startTime + 32000L, 3); // 32s budget, max 3 turns
+        ChatRequestContext.init(startTime + 100000L, 3); // 100s budget (Gemini 60s + tool execution + network buffer), max 3 turns
 
         // Bước 1: Kiểm tra Idempotency Cache (Chống Duplicate & Xử lý Retry an toàn)
         if (clientMessageId != null && !clientMessageId.isBlank()) {
@@ -160,9 +213,9 @@ Các nguyên tắc bắt buộc tuân thủ:
             ChatSessionMetadata metadata = memoryData.getMetadata();
             Long currentVersion = metadata.getVersion();
 
-            // Bước 4: Chuẩn bị danh sách Messages cho Spring AI
+            // Bước 4: Chuẩn bị danh sách Messages cho Spring AI (kèm System Prompt động chứa ngày giờ thực tế)
             List<Message> springAiMessages = new ArrayList<>();
-            springAiMessages.add(new SystemMessage(SYSTEM_PROMPT));
+            springAiMessages.add(new SystemMessage(buildDynamicSystemPrompt()));
 
             // Gắn lịch sử hội thoại trước đó (tối đa 20 messages gần nhất đã được Redis trim)
             if (memoryData.getMessages() != null && !memoryData.getMessages().isEmpty()) {
@@ -317,6 +370,10 @@ Các nguyên tắc bắt buộc tuân thủ:
                 log.warn("Spring AI exception wraps 429 Rate Limit for sessionId={}: {}", sessionId, e.getMessage());
                 throw new ChatRateLimitExceededException("Dịch vụ tư vấn AI đang nhận lượng yêu cầu lớn từ hệ thống, vui lòng thử lại sau.", 30L);
             }
+            if (isTimeout(e)) {
+                log.error("Spring AI exception wraps timeout for sessionId={}: {}", sessionId, e.getMessage());
+                throw new GeminiTimeoutException("Yêu cầu tư vấn AI vượt quá thời gian xử lý (timeout)", e);
+            }
             log.error("Spring AI API upstream error for sessionId={}: {}", sessionId, e.getMessage());
             throw new GeminiServiceException("Dịch vụ tư vấn AI gặp sự cố upstream: " + e.getMessage(), e);
 
@@ -329,6 +386,10 @@ Các nguyên tắc bắt buộc tuân thủ:
             if (isRateLimitException(e)) {
                 log.warn("Generic exception wraps 429 Rate Limit for sessionId={}: {}", sessionId, e.getMessage());
                 throw new ChatRateLimitExceededException("Dịch vụ tư vấn AI đang nhận lượng yêu cầu lớn từ hệ thống, vui lòng thử lại sau.", 30L);
+            }
+            if (isTimeout(e)) {
+                log.error("Generic exception wraps timeout for sessionId={}: {}", sessionId, e.getMessage());
+                throw new GeminiTimeoutException("Yêu cầu tư vấn AI vượt quá thời gian xử lý (timeout)", e);
             }
             log.error("Unexpected error during Spring AI chat completion for sessionId={}: {}", sessionId, e.getMessage(), e);
             throw new GeminiServiceException("Lỗi xử lý phản hồi từ dịch vụ tư vấn AI: " + e.getMessage(), e);
@@ -352,13 +413,22 @@ Các nguyên tắc bắt buộc tuân thủ:
         return false;
     }
 
-    private boolean isTimeout(ResourceAccessException e) {
-        Throwable cause = e.getCause();
-        if (cause instanceof SocketTimeoutException) {
-            return true;
+    private boolean isTimeout(Throwable t) {
+        Throwable current = t;
+        while (current != null) {
+            if (current instanceof SocketTimeoutException) {
+                return true;
+            }
+            if (current instanceof GeminiTimeoutException) {
+                return true;
+            }
+            String msg = current.getMessage();
+            if (msg != null && (msg.toLowerCase().contains("timed out") || msg.toLowerCase().contains("timeout"))) {
+                return true;
+            }
+            current = current.getCause();
         }
-        String msg = e.getMessage();
-        return msg != null && (msg.toLowerCase().contains("timed out") || msg.toLowerCase().contains("timeout"));
+        return false;
     }
 
     private String sanitizeAssistantReply(String text) {
