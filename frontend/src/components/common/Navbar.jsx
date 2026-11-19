@@ -22,7 +22,7 @@ import { useWishlistStore } from '../../store/useWishlistStore'
 export const Navbar = () => {
   const { user, isAuthenticated, logout } = useAuthStore()
   const totalCartCount = useCartStore((state) => state.getTotalCount())
-  const wishlistCount = useWishlistStore((state) => state.getCount())
+  const wishlistCount = useWishlistStore((state) => state.wishlistIds.length)
   const navigate = useNavigate()
   const location = useLocation()
   

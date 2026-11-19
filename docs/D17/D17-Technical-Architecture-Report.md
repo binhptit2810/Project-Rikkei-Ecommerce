@@ -137,8 +137,12 @@ graph TD
   }
   ```
 - **Thời hạn hiệu lực:** **15 phút** (`900,000ms`). Hạn chế tối đa thời gian kẻ tấn công có thể lợi dụng nếu token bị lộ lọt.
-- **Quy trình xác thực tại Backend:**
-  `JwtAuthenticationFilter` trích xuất chuỗi từ header `Authorization: Bearer <token>`. Gọi `jwtUtils.validateJwtToken()`. Nếu chữ ký hợp lệ và chưa hết hạn, nạp `CustomUserDetails` và gán đối tượng `UsernamePasswordAuthenticationToken` vào `SecurityContextHolder`.
+- **Quy trình xác thực & Kiểm soát trạng thái khóa tại Backend:**
+  - `JwtAuthenticationFilter` trích xuất chuỗi từ header `Authorization: Bearer <token>`. Gọi `jwtUtils.parseClaims(token)`.
+  - Nếu chữ ký hợp lệ và chưa hết hạn, nạp `CustomUserDetails` từ CSDL qua `userDetailsService.loadUserByUsername(email)`.
+  - Kiểm tra `userDetails.isEnabled()` (`user.getActive() == true`).
+  - **Khóa tài khoản tức thì (Instant Lockout):** Khi Admin khóa tài khoản (`active = false`), ngay ở request tiếp theo, `userDetails.isEnabled()` trả về `false` khiến Filter không thiết lập `SecurityContext`, chặn đứng request ngay lập tức với HTTP 401/403 mà KHÔNG cần đợi token hết hạn 15 phút!
+  - **Khi Đăng xuất (Logout):** Server thu hồi phiên trong Redis (`refreshTokenService.revokeToken`) và xóa HttpOnly Cookie. Access Token phía client bị hủy khỏi bộ nhớ RAM/Zustand và sẽ tự hết hạn sau tối đa 15 phút (Stateless). *(Cơ chế JTI Blacklist trên Redis là giải pháp mở rộng được đề xuất khi cần vô hiệu hóa Access Token tức thì khi logout).*
 
 ### 2. Opaque Refresh Token & Cookie HttpOnly
 - **Bản chất Opaque Token:** Chuỗi ngẫu nhiên 64 bytes sinh bởi `SecureRandom` (CSPRNG), mã hóa Base64 URL-safe, hoàn toàn không chứa thông tin người dùng (không phải JWT).
@@ -268,11 +272,20 @@ sequenceDiagram
 - **Authorization Code Flow:** Trình duyệt người dùng không bao giờ nhìn thấy Google Client Secret. Thao tác đổi Authorization Code lấy Token diễn ra hoàn toàn giữa Backend và Google Server qua kênh HTTPS bảo mật.
 - **Phòng chống CSRF bằng State Parameter:** Khi khởi tạo request, Spring Security sinh một chuỗi ngẫu nhiên cryptographically secure `state`. Lớp [`RedisOAuth2AuthorizationRequestRepository.java`](file:///d:/Doanh%20nghiep/20-10-2026/Project-Rikkei-Ecommerce/backend/src/main/java/com/example/ecommerce/security/oauth2/RedisOAuth2AuthorizationRequestRepository.java) lưu request vào Redis thay vì lưu vào session bộ nhớ của Tomcat. Khi Google chuyển hướng về, nếu tham số `state` không trùng khớp, request lập tức bị hủy bỏ.
 - **Không truyền JWT qua URL Query Parameter:** Sau khi đăng nhập Google thành công, backend không trả thẳng JWT qua URL (để tránh lộ token trong Browser History, Server Log và Referer header). Thay vào đó, backend sinh **Vé dùng 1 lần (One-Time Ticket)** có TTL chỉ 60 giây kết hợp cookie HttpOnly `oauth2_binding`.
-- **Bản vá FIX-01 (Atomic Compare-And-Delete):** Triệt tiêu hoàn toàn lỗ hổng DoS chiếm đoạt vé. Nếu kẻ gian nhặt được chuỗi ticket từ URL và cố tình gửi request với cookie giả mạo, Redis Lua script sẽ **bảo toàn nguyên vẹn vé trong Redis** để người dùng thật tiếp tục đổi vé thành công.
-- **Liên kết tài khoản & Xử lý tài khoản bị khóa:**
-  - Nếu email Google chưa tồn tại trong hệ thống: Tự động tạo người dùng mới với vai trò mặc định `CUSTOMER`, đặt `email_verified = true`.
-  - Nếu email đã tồn tại: Hệ thống tự động liên kết bản ghi vào bảng `user_oauth_accounts`, cập nhật URL avatar mới nhất từ Google.
-  - Nếu tài khoản trong MySQL đang mang trạng thái `active = false` (bị Admin khóa): Lập tức ném `LockedAccountException` và chuyển hướng về trang đăng nhập với thông báo lỗi rõ ràng.
+- **Bản vá FIX-01 (Atomic Compare-And-Delete - CAD):**
+  - Khắc phục triệt để lỗ hổng an ninh `[SEC-FIND-01]` (Ticket Invalidation / DoS Vulnerability) thông qua Redis Lua script `COMPARE_AND_DELETE_TICKET_LUA_SCRIPT` trong `AuthService.java`.
+  - **Cơ chế hoạt động:** Khi client gửi request đổi vé kèm cookie `oauth2_binding`, Lua script kiểm tra tính hợp lệ và so khớp `bindingHash` nguyên tử:
+    - Nếu mã binding không khớp (ví dụ kẻ tấn công trộm được ticket từ URL nhưng không có cookie trình duyệt hợp lệ): Script trả về mã `2` và **TUYỆT ĐỐI KHÔNG XÓA VÉ** khỏi Redis.
+    - Nếu mã binding khớp: Xóa vé khỏi Redis (`DEL`) và trả về dữ liệu vé (mã `1`).
+    - Nếu vé không tồn tại hoặc đã hết hạn: Trả về mã `0`.
+  - Ngăn chặn hoàn toàn việc kẻ tấn công cố tình gửi request với ticket trộm được để làm hỏng (invalidate) phiên đăng nhập của người dùng hợp lệ.
+- **Quy trình Liên kết Tài khoản & Chính Sách An Toàn Nghiêm Ngặt:**
+  - **Tài khoản Google đã liên kết:** Nếu `user_oauth_accounts` đã tồn tại bản ghi với `provider = 'GOOGLE'` và `provider_id = sub`, hệ thống tự động đăng nhập, kiểm tra trạng thái khóa tài khoản (`active = true`), kiểm tra cổng đăng nhập (chặn tài khoản `ADMIN` đăng nhập qua cổng storefront khách hàng) và đồng bộ avatar mới nhất từ Google.
+  - **Từ chối Tự Động Liên Kết (Anti-Account Hijacking):** Nếu email Google trùng với một tài khoản cục bộ (`LOCAL`) đã đăng ký bằng mật khẩu trước đó nhưng chưa liên kết OAuth, `CustomOidcUserService` **TUYỆT ĐỐI TỪ CHỐI** tự động liên kết tài khoản, ném `OAuth2AuthenticationException("email_already_exists")` và yêu cầu người dùng đăng nhập bằng mật khẩu để liên kết thủ công. Điều này triệt tiêu hoàn toàn nguy cơ kẻ gian chiếm đoạt tài khoản thông qua việc đăng ký email tương ứng trên các IdP bên ngoài.
+  - **Tạo mới tài khoản tự động (Auto-provisioning):** Nếu email hoàn toàn mới, hệ thống tự động tạo người dùng `User` với `Role.CUSTOMER`, `email_verified = true`, sinh mật khẩu ngẫu nhiên bảo mật cao 32 bytes (`SecureRandom`, không dùng UUID), và lưu bản ghi liên kết vào `user_oauth_accounts`.
+- **Phân Biệt Luồng Google OIDC và Auth0 Token Exchange:**
+  - **Google OIDC (`/api/v1/auth/oauth2/exchange`):** Luồng đăng nhập trực tiếp qua Spring Security `oauth2Login()`, sử dụng `RedisOAuth2AuthorizationRequestRepository` lưu state, sinh One-Time Ticket lưu Redis và đổi vé qua Lua script CAD.
+  - **Auth0 Exchange (`/api/v1/auth/auth0/exchange`):** Luồng đăng nhập qua client SDK `@auth0/auth0-react`. Frontend nhận Auth0 ID Token và gửi về backend; backend sử dụng `Auth0TokenValidator` tích hợp `NimbusJwtDecoder` với JWKS endpoint công khai của Auth0 (`https://<domain>/.well-known/jwks.json`) để xác minh chữ ký bất đối xứng RS256. Đây là 2 cơ chế độc lập, không nhầm lẫn với nhau.
 
 ---
 

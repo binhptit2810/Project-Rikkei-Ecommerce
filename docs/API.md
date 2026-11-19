@@ -1049,6 +1049,70 @@ Gửi đánh giá sản phẩm mới kèm danh sách URL hình ảnh đã tải 
 
 ---
 
+### `POST /api/v1/reviews/{reviewId}/images`
+Tải lên từ 1 đến 3 ảnh đính kèm cho bài đánh giá sản phẩm. **Yêu cầu đăng nhập và là chính chủ của đánh giá.**
+(Task: **TSK-D14-CCT**)
+
+**Header:**
+- `Authorization: Bearer <accessToken>`
+- `Content-Type: multipart/form-data`
+
+**Request Body (multipart/form-data):**
+- `files`: Danh sách 1–3 tệp ảnh (hoặc field `file` nếu upload đơn lẻ).
+- Quy chuẩn an toàn: Mỗi ảnh $< 5$MB, định dạng `.jpg`, `.jpeg`, `.png`, kiểm tra chữ ký Magic Bytes nhị phân thuần Java, giải mã `ImageIO` chống Decompression Bomb ($\le 8000$px, $\le 25M$ pixels).
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Tải lên 2 ảnh đánh giá thành công",
+  "data": [
+    {
+      "id": 101,
+      "imageUrl": "/uploads/reviews/f47ac10b-58cc-4372-a567-0e02b2c3d479_1710000000000.jpg",
+      "createdAt": "2026-11-17T10:06:00"
+    },
+    {
+      "id": 102,
+      "imageUrl": "/uploads/reviews/9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d_1710000000000.png",
+      "createdAt": "2026-11-17T10:06:01"
+    }
+  ],
+  "timestamp": "2026-11-17T10:06:01"
+}
+```
+
+---
+
+### `POST /api/v1/reviews/upload`
+Tải lên từng ảnh đơn lẻ cho bài đánh giá. **Yêu cầu đăng nhập.**
+(Task: **TSK-D14-DHA**)
+
+**Header:**
+- `Authorization: Bearer <accessToken>`
+- `Content-Type: multipart/form-data`
+
+**Request Body (multipart/form-data):**
+- `file`: Tệp ảnh tải lên ($< 5$MB, `.jpg`, `.jpeg`, `.png`).
+
+**Response 200:**
+```json
+{
+  "success": true,
+  "message": "Tải hình ảnh đánh giá thành công",
+  "data": {
+    "url": "/api/v1/uploads/reviews_f47ac10b_1710000000000.jpg",
+    "fileName": "reviews_f47ac10b_1710000000000.jpg",
+    "originalFileName": "my_review_photo.jpg",
+    "size": 1048576,
+    "contentType": "image/jpeg"
+  },
+  "timestamp": "2026-11-17T10:06:00"
+}
+```
+
+---
+
 ### `DELETE /api/v1/products/{productId}/reviews/{reviewId}`
 Xóa đánh giá sản phẩm của chính mình (hoặc Admin xóa). **Yêu cầu đăng nhập.**
 (Task: **TSK-D07-CCT** IDOR Protection & **TSK-D14-CCT** Review Deletion)
@@ -1064,7 +1128,7 @@ Xóa đánh giá sản phẩm của chính mình (hoặc Admin xóa). **Yêu c�
   "timestamp": "2026-11-17T10:00:00"
 }
 ```
-*Lưu ý an toàn:* Xóa các file ảnh vật lý đính kèm thông qua `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)`.
+*Lưu ý an toàn:* Xóa các file ảnh vật lý đính kèm trên đĩa thông qua `TransactionSynchronizationManager.registerSynchronization(afterCommit)` để đảm bảo chỉ dọn dẹp file khi và chỉ khi MySQL đã COMMIT transaction thành công.
 
 ---
 

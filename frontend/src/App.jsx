@@ -171,14 +171,7 @@ function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/wishlist"
-            element={
-              <ProtectedRoute requiredRole="CUSTOMER">
-                <WishlistPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/wishlist" element={<WishlistPage />} />
           <Route
             path="/checkout"
             element={

@@ -129,8 +129,8 @@ export const ProductListPage = () => {
     })
   }
 
-  // Xử lý thêm vào giỏ hàng
-  const handleAddToCart = async (product) => {
+  // Xử lý thêm vào giỏ hàng (hỗ trợ đầy đủ biến thể kích cỡ)
+  const handleAddToCart = async (product, quantity = 1, selectedSize = null, variant = null) => {
     if (!isAuthenticated) {
       navigate('/login', {
         state: {
@@ -142,7 +142,14 @@ export const ProductListPage = () => {
     }
 
     try {
-      const res = await addToCart(product, 1)
+      const productPayload = {
+        ...product,
+        variants: (Array.isArray(product.variants) && product.variants.length > 0)
+          ? product.variants
+          : (variant ? [variant] : []),
+        variantId: variant?.id || product.variantId || null,
+      }
+      const res = await addToCart(productPayload, quantity, selectedSize)
       if (res?.requireLogin) {
         navigate('/login', {
           state: {

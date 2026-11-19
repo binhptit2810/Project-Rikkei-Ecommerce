@@ -30,7 +30,7 @@ export const useWishlistStore = create((set, get) => ({
 
     try {
       const ids = await wishlistService.getWishlistProductIds()
-      set({ wishlistIds: Array.isArray(ids) ? ids.map(Number) : [] })
+      set({ wishlistIds: Array.isArray(ids) ? ids.filter((id) => id != null).map(Number) : [] })
     } catch (err) {
       console.error('[WishlistStore] Lỗi tải wishlist IDs:', err)
     }
@@ -49,9 +49,10 @@ export const useWishlistStore = create((set, get) => ({
     set({ loading: true, error: null })
     try {
       const data = await wishlistService.getWishlist()
-      const list = Array.isArray(data) ? data : []
+      const rawList = Array.isArray(data) ? data : []
+      const list = rawList.filter((item) => item && item.id != null)
       const ids = list.map((item) => Number(item.id))
-      set({ items: list, wishlistIds: ids, loading: false })
+      set({ items: list, wishlistIds: ids, loading: false, error: null })
     } catch (err) {
       console.error('[WishlistStore] Lỗi tải wishlist:', err)
       set({
@@ -77,7 +78,7 @@ export const useWishlistStore = create((set, get) => ({
     if (isCurrentlyLiked) {
       // Xóa khỏi wishlist
       const newIds = prevIds.filter((id) => id !== numId)
-      const newItems = prevItems.filter((item) => Number(item.id) !== numId)
+      const newItems = prevItems.filter((item) => item && Number(item.id) !== numId)
       set({ wishlistIds: newIds, items: newItems })
     } else {
       // Thêm vào wishlist
@@ -113,7 +114,7 @@ export const useWishlistStore = create((set, get) => ({
       } else if (!liked && get().wishlistIds.includes(numId)) {
         set({
           wishlistIds: get().wishlistIds.filter((id) => id !== numId),
-          items: get().items.filter((item) => Number(item.id) !== numId),
+          items: get().items.filter((item) => item && Number(item.id) !== numId),
         })
       }
 
@@ -149,6 +150,13 @@ export const useWishlistStore = create((set, get) => ({
     set({ wishlistIds: [], items: [], loading: false, error: null })
   },
 }))
+
+// Lắng nghe sự kiện đăng xuất từ authStore để dọn sạch wishlist tức thì
+if (typeof window !== 'undefined') {
+  window.addEventListener('auth:logout', () => {
+    useWishlistStore.getState().resetWishlist()
+  })
+}
 
 export default useWishlistStore
 

@@ -20,7 +20,7 @@ export const CustomerLayout = () => {
     <div className="min-h-screen bg-slate-50/60 text-slate-900 flex flex-col justify-between antialiased selection:bg-blue-600 selection:text-white font-sans">
       <Navbar />
       <main className="flex-1 flex flex-col">
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={location.pathname}
             initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 6 }}
