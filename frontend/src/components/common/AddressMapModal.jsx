@@ -68,10 +68,11 @@ export const AddressMapModal = ({
           zoomControl: true,
         })
 
-        // Tile layer miễn phí từ OpenStreetMap
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        // Tile layer từ CartoDB Voyager (dựa trên dữ liệu OpenStreetMap, sắc nét, CDN Singapore cực nhanh, không lỗi DNS tại VN)
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
           maxZoom: 19,
-          attribution: '© OpenStreetMap contributors',
+          subdomains: 'abcd',
+          attribution: '© OpenStreetMap contributors © CARTO',
         }).addTo(map)
 
         // Marker có thể kéo thả
@@ -102,9 +103,24 @@ export const AddressMapModal = ({
         mapInstanceRef.current.invalidateSize()
       }
 
-      // Nếu đã có initialAddress thì cố gắng tìm kiếm vị trí ban đầu
+      // Nếu đã có initialAddress thì gán ngay làm địa chỉ hiển thị
       if (initialAddress && initialAddress.trim().length > 3) {
-        handleSearch(initialAddress)
+        setResolvedAddress(initialAddress.trim())
+        // Cố gắng tìm vị trí trên bản đồ tương ứng với địa chỉ ban đầu
+        searchLocation(initialAddress.trim(), currentCoords)
+          .then((results) => {
+            if (results && results.length > 0) {
+              const first = results[0]
+              const lat = parseFloat(first.lat)
+              const lng = parseFloat(first.lon || first.lng)
+              if (mapInstanceRef.current && markerRef.current) {
+                mapInstanceRef.current.flyTo([lat, lng], 16, { duration: 0.8 })
+                markerRef.current.setLatLng([lat, lng])
+              }
+              setCurrentCoords({ lat, lng })
+            }
+          })
+          .catch((e) => console.warn('Lỗi định vị vị trí ban đầu:', e))
       } else {
         // Hoặc giải mã tọa độ mặc định
         updateLocation(currentCoords.lat, currentCoords.lng)
@@ -184,20 +200,20 @@ export const AddressMapModal = ({
 
   // Tìm kiếm địa điểm
   const handleSearch = async (queryText) => {
-    const q = queryText || searchQuery
+    const q = queryText !== undefined ? queryText : searchQuery
     if (!q || !q.trim()) return
 
     setIsSearching(true)
     setGpsError(null)
     try {
-      const results = await searchLocation(q)
+      const results = await searchLocation(q, currentCoords)
       setSearchResults(results)
-      if (results.length > 0) {
-        const first = results[0]
-        selectSearchResult(first)
+      if (results.length === 0) {
+        setGpsError(`Không tìm thấy kết quả nào khớp với "${q.trim()}". Vui lòng thử từ khóa khác.`)
       }
     } catch (err) {
       console.warn('Lỗi tìm kiếm:', err)
+      setGpsError('Lỗi kết nối khi tìm kiếm địa điểm.')
     } finally {
       setIsSearching(false)
     }
@@ -206,17 +222,18 @@ export const AddressMapModal = ({
   // Chọn một kết quả tìm kiếm từ danh sách gợi ý
   const selectSearchResult = (item) => {
     const lat = parseFloat(item.lat)
-    const lng = parseFloat(item.lon)
+    const lng = parseFloat(item.lon || item.lng)
 
     if (mapInstanceRef.current && markerRef.current) {
-      mapInstanceRef.current.flyTo([lat, lng], 16, { duration: 1 })
+      mapInstanceRef.current.flyTo([lat, lng], 16, { duration: 0.8 })
       markerRef.current.setLatLng([lat, lng])
     }
 
-    setResolvedAddress(item.display_name)
+    const addr = item.display_name || item.formattedAddress
+    setResolvedAddress(addr)
     setCurrentCoords({ lat, lng })
     setSearchResults([])
-    setSearchQuery('')
+    setSearchQuery(addr)
   }
 
   // Xác nhận vị trí đã chọn

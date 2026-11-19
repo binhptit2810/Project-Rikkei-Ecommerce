@@ -91,68 +91,167 @@ export const setDefaultAddress = (userId, addressId) => {
 }
 
 /**
- * Hàm hỗ trợ Reverse Geocoding qua OpenStreetMap Nominatim miễn phí.
- * Chuyển đổi tọa độ (lat, lng) thành chuỗi địa chỉ chi tiết tại Việt Nam.
+ * Chuẩn hóa chuỗi địa chỉ tiếng Việt từ kết quả Photon (Komoot OSM).
+ */
+export const buildPhotonAddress = (props) => {
+  if (!props) return ''
+  const parts = []
+
+  // Tên địa điểm cụ thể (nếu có và không trùng với tên đường)
+  if (props.name && props.name !== props.street && !props.name.startsWith(props.street || '___')) {
+    parts.push(props.name)
+  }
+
+  // Số nhà + Tên đường
+  if (props.housenumber && props.street) {
+    parts.push(`Số ${props.housenumber} ${props.street}`)
+  } else if (props.street) {
+    parts.push(props.street)
+  }
+
+  // Phường / Xã / Khu dân cư / Tổ dân phố (locality)
+  if (props.locality && props.locality !== props.name) {
+    parts.push(props.locality)
+  }
+
+  // Quận / Huyện (district)
+  if (props.district) {
+    parts.push(props.district)
+  }
+
+  // Tỉnh / Thành phố (city hoặc state)
+  if (props.city) {
+    parts.push(props.city)
+  } else if (props.state && props.state !== props.city) {
+    parts.push(props.state)
+  }
+
+  // Quốc gia (nếu chuỗi địa chỉ quá ngắn)
+  if (parts.length <= 1 && props.country) {
+    parts.push(props.country)
+  }
+
+  // Lọc các phần tử trùng lặp
+  const uniqueParts = parts.filter((p, idx) => Boolean(p) && parts.indexOf(p) === idx)
+  return uniqueParts.join(', ')
+}
+
+/**
+ * Chuẩn hóa chuỗi địa chỉ tiếng Việt từ BigDataCloud.
+ */
+export const buildBigDataCloudAddress = (data) => {
+  if (!data) return ''
+  const parts = []
+  if (data.locality) parts.push(data.locality)
+  if (data.city && data.city !== data.locality) parts.push(data.city)
+  if (data.principalSubdivision && data.principalSubdivision !== data.city) {
+    parts.push(data.principalSubdivision)
+  }
+  if (parts.length === 0 && data.countryName) parts.push(data.countryName)
+  return parts.filter(Boolean).join(', ')
+}
+
+/**
+ * Hàm hỗ trợ Reverse Geocoding chuyển đổi tọa độ (lat, lng) thành chuỗi địa chỉ tiếng Việt.
+ * Áp dụng cơ chế Multi-Provider Fallback:
+ * 1. Photon (Komoot OpenStreetMap) - Nhanh, không bị lỗi DNS tại Việt Nam, hỗ trợ số nhà, đường, phường, quận.
+ * 2. BigDataCloud Reverse Client - Dự phòng quốc tế miễn phí, có CORS, dịch sang tiếng Việt.
  */
 export const reverseGeocode = async (lat, lng) => {
+  if (typeof lat !== 'number' || typeof lng !== 'number') return null
+
+  // 1. Thử qua dịch vụ Photon Komoot Reverse
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-    const res = await fetch(url, {
-      headers: {
-        'Accept-Language': 'vi,en;q=0.9',
-      },
-    })
-    if (!res.ok) throw new Error('Không thể lấy thông tin địa chỉ từ tọa độ')
-    const data = await res.json()
-    if (!data) return null
-
-    const addr = data.address || {}
-    // Xây dựng địa chỉ tự nhiên và đầy đủ theo chuẩn Việt Nam
-    const parts = []
-    if (addr.house_number) parts.push(`Số ${addr.house_number}`)
-    if (addr.road) parts.push(addr.road)
-    if (addr.suburb || addr.quarter || addr.neighbourhood) {
-      parts.push(addr.suburb || addr.quarter || addr.neighbourhood)
-    }
-    if (addr.city_district || addr.district || addr.county) {
-      parts.push(addr.city_district || addr.district || addr.county)
-    }
-    if (addr.city || addr.province || addr.state) {
-      parts.push(addr.city || addr.province || addr.state)
-    }
-
-    const formattedAddress = parts.length >= 2 ? parts.join(', ') : data.display_name
-    return {
-      formattedAddress,
-      raw: data,
-      lat,
-      lng,
+    const url = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lng}`
+    const res = await fetch(url)
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.features && data.features.length > 0) {
+        const feature = data.features[0]
+        const formattedAddress = buildPhotonAddress(feature.properties)
+        if (formattedAddress && formattedAddress.trim()) {
+          return {
+            formattedAddress,
+            raw: feature,
+            lat,
+            lng,
+          }
+        }
+      }
     }
   } catch (err) {
-    console.warn('Lỗi reverse geocode:', err)
-    return null
+    console.warn('Lỗi reverse geocode với Photon, chuyển sang BigDataCloud:', err)
+  }
+
+  // 2. Dự phòng qua dịch vụ BigDataCloud Client API
+  try {
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=vi`
+    const res = await fetch(url)
+    if (res.ok) {
+      const data = await res.json()
+      const formattedAddress = buildBigDataCloudAddress(data)
+      if (formattedAddress && formattedAddress.trim()) {
+        return {
+          formattedAddress,
+          raw: data,
+          lat,
+          lng,
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Lỗi reverse geocode với BigDataCloud:', err)
+  }
+
+  // Fallback tọa độ nếu mọi dịch vụ gặp sự cố mạng
+  return {
+    formattedAddress: `Tọa độ: ${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+    raw: null,
+    lat,
+    lng,
   }
 }
 
 /**
- * Tìm kiếm địa điểm theo từ khóa qua Nominatim OpenStreetMap.
+ * Tìm kiếm địa điểm theo từ khóa (Geocoding / Search Autocomplete).
+ * Sử dụng Photon Komoot API - Tích hợp đầy đủ dữ liệu OpenStreetMap,
+ * hỗ trợ tìm kiếm không dấu / có dấu tiếng Việt, không bị DNS block tại VN.
  */
-export const searchLocation = async (query) => {
+export const searchLocation = async (query, centerCoords = null) => {
   if (!query || !query.trim()) return []
+
   try {
-    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-      query.trim()
-    )}&countrycodes=vn&limit=5&addressdetails=1`
-    const res = await fetch(url, {
-      headers: {
-        'Accept-Language': 'vi,en;q=0.9',
-      },
-    })
+    const trimmed = query.trim()
+    const lat = centerCoords?.lat || 21.0285
+    const lon = centerCoords?.lng || centerCoords?.lon || 105.8542
+    // Thêm lat/lon bias để ưu tiên kết quả tìm kiếm gần vị trí người dùng ở Việt Nam
+    const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(trimmed)}&lat=${lat}&lon=${lon}&limit=8`
+
+    const res = await fetch(url)
     if (!res.ok) return []
-    const list = await res.json()
-    return Array.isArray(list) ? list : []
+    const data = await res.json()
+
+    if (!data || !data.features || !Array.isArray(data.features)) return []
+
+    return data.features.map((feature) => {
+      const coords = feature.geometry?.coordinates || [105.8542, 21.0285]
+      const lon = coords[0]
+      const lat = coords[1]
+      const formatted = buildPhotonAddress(feature.properties)
+      const label = formatted || feature.properties?.name || trimmed
+
+      return {
+        lat,
+        lon,
+        lng: lon,
+        display_name: label,
+        formattedAddress: label,
+        properties: feature.properties,
+        raw: feature,
+      }
+    })
   } catch (err) {
-    console.warn('Lỗi tìm kiếm địa điểm:', err)
+    console.warn('Lỗi tìm kiếm địa điểm với Photon:', err)
     return []
   }
 }
