@@ -1148,14 +1148,29 @@ export const OrderDetailPage = () => {
                     <div className="flex justify-between text-slate-600">
                       <span>Tạm tính</span>
                       <span className="font-semibold text-slate-900 tabular-nums">
-                        {formatPrice(order.totalAmount)}
+                        {formatPrice(
+                          order.items?.reduce((sum, item) => sum + (Number(item.price || item.unitPrice) || 0) * (Number(item.quantity) || 1), 0) ||
+                          Math.max(0, (Number(order.totalAmount) || 0) - (Number(order.shippingFee) || 16000))
+                        )}
                       </span>
                     </div>
 
+                    {order.discountAmount > 0 && (
+                      <div className="flex justify-between text-emerald-700">
+                        <span>Giảm giá ({order.couponCode || 'Voucher'})</span>
+                        <span className="font-semibold tabular-nums">
+                          -{formatPrice(order.discountAmount)}
+                        </span>
+                      </div>
+                    )}
+
                     <div className="flex justify-between text-slate-600">
-                      <span>Phí vận chuyển</span>
-                      <span className="font-semibold text-emerald-600">
-                        Miễn phí
+                      <span className="flex items-center gap-1">
+                        <span>Phí vận chuyển</span>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold">Cố định</span>
+                      </span>
+                      <span className="font-semibold text-slate-900 tabular-nums">
+                        {formatPrice(order.shippingFee !== undefined && order.shippingFee !== null ? order.shippingFee : 16000)}
                       </span>
                     </div>
 

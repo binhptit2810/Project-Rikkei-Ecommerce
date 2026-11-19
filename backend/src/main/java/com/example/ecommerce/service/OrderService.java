@@ -50,6 +50,8 @@ import java.util.UUID;
 @Slf4j
 public class OrderService {
 
+    public static final BigDecimal FIXED_SHIPPING_FEE = new BigDecimal("16000.00");
+
     private final OrderRepository orderRepository;
     private final ProductRepository productRepository;
     private final UserRepository userRepository;
@@ -237,6 +239,9 @@ public class OrderService {
             order.setDiscountAmount(discountAmount);
             totalAmount = totalAmount.subtract(discountAmount).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
         }
+
+        // Phí giao hàng cố định 16k (16.000 VNĐ) cộng thẳng vào tiền mà khách phải trả
+        totalAmount = totalAmount.add(FIXED_SHIPPING_FEE).setScale(2, RoundingMode.HALF_UP);
 
         order.setTotalAmount(totalAmount);
 
@@ -717,6 +722,7 @@ public class OrderService {
                 .note(order.getNote())
                 .couponCode(order.getCouponCode())
                 .discountAmount(order.getDiscountAmount())
+                .shippingFee(FIXED_SHIPPING_FEE)
                 .itemCount(itemCount)
                 .createdAt(order.getCreatedAt())
                 .updatedAt(order.getUpdatedAt())

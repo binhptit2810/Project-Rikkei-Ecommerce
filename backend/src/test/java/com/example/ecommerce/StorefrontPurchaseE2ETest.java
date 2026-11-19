@@ -209,7 +209,7 @@ class StorefrontPurchaseE2ETest {
                 .andExpect(jsonPath("$.message").value("Đặt hàng thành công"))
                 .andExpect(jsonPath("$.data.orderCode").value(startsWith("ORD-")))
                 .andExpect(jsonPath("$.data.recipientName").value("Vũ Đức Huy Hoàng"))
-                .andExpect(jsonPath("$.data.totalAmount").value(500000.00))
+                .andExpect(jsonPath("$.data.totalAmount").value(516000.00))
                 .andExpect(jsonPath("$.data.orderStatus").value("PENDING"))
                 .andExpect(jsonPath("$.data.paymentStatus").value("UNPAID"))
                 .andExpect(jsonPath("$.data.paymentMethod").value("COD"))
@@ -228,7 +228,7 @@ class StorefrontPurchaseE2ETest {
 
         assertThat(savedOrder.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
         assertThat(savedOrder.getPaymentStatus()).isEqualTo(PaymentStatus.UNPAID);
-        assertThat(savedOrder.getTotalAmount()).isEqualByComparingTo(BigDecimal.valueOf(500000.00));
+        assertThat(savedOrder.getTotalAmount()).isEqualByComparingTo(BigDecimal.valueOf(516000.00));
         assertThat(savedOrder.getItems()).hasSize(1);
 
         OrderItem item = savedOrder.getItems().get(0);
@@ -253,7 +253,7 @@ class StorefrontPurchaseE2ETest {
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.UNPAID);
         assertThat(payment.getPaymentMethod()).isEqualTo(PaymentMethod.COD);
         assertThat(payment.getTransactionCode()).startsWith("PAY-");
-        assertThat(payment.getAmount()).isEqualByComparingTo(BigDecimal.valueOf(500000.00));
+        assertThat(payment.getAmount()).isEqualByComparingTo(BigDecimal.valueOf(516000.00));
     }
 
     // =========================================================================
@@ -282,19 +282,19 @@ class StorefrontPurchaseE2ETest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.data.totalAmount").value(1049001.00))
+                .andExpect(jsonPath("$.data.totalAmount").value(1065001.00))
                 .andExpect(jsonPath("$.data.itemCount").value(5));
 
         Long createdOrderId = orderRepository.findByUserIdOrderByCreatedAtDesc(customer1.getId()).get(0).getId();
         Order order = orderRepository.findByIdWithItems(createdOrderId).orElseThrow();
-        BigDecimal expectedTotal = BigDecimal.valueOf(1049001.00).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal expectedTotal = BigDecimal.valueOf(1065001.00).setScale(2, RoundingMode.HALF_UP);
         assertThat(order.getTotalAmount()).isEqualByComparingTo(expectedTotal);
 
-        // Đối soát công thức bắt buộc: Order.totalAmount = sum(OrderItem.unitPrice * OrderItem.quantity)
+        // Đối soát công thức: Order.totalAmount = sum(OrderItem.unitPrice * OrderItem.quantity) + FIXED_SHIPPING_FEE
         BigDecimal sumCalculated = order.getItems().stream()
                 .map(i -> i.getUnitPrice().multiply(BigDecimal.valueOf(i.getQuantity())))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        assertThat(order.getTotalAmount()).isEqualByComparingTo(sumCalculated);
+        assertThat(order.getTotalAmount()).isEqualByComparingTo(sumCalculated.add(com.example.ecommerce.service.OrderService.FIXED_SHIPPING_FEE));
 
         // THAY ĐỔI GIÁ SẢN PHẨM VÀ TÊN SẢN PHẨM TRONG DATABASE ĐỂ KIỂM TRA TÍNH TOÀN VẸN SNAPSHOT
         productA.setPrice(BigDecimal.valueOf(999999.99));
@@ -308,7 +308,7 @@ class StorefrontPurchaseE2ETest {
         // Gọi API xem chi tiết đơn hàng cũ: giá snapshot và tên sản phẩm snapshot KHÔNG ĐƯỢC PHÉP THAY ĐỔI
         mockMvc.perform(get("/api/v1/orders/" + order.getId()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.totalAmount").value(1049001.00))
+                .andExpect(jsonPath("$.data.totalAmount").value(1065001.00))
                 .andExpect(jsonPath("$.data.items[0].productName").value("Áo Polo Nam Classic"))
                 .andExpect(jsonPath("$.data.items[0].unitPrice").value(250000.00))
                 .andExpect(jsonPath("$.data.items[1].productName").value("Quần Short Kaki Co Giãn"))
@@ -733,7 +733,7 @@ class StorefrontPurchaseE2ETest {
                 .andExpect(jsonPath("$.data.paymentStatus").value("UNPAID"))
                 .andExpect(jsonPath("$.data.couponCode").value("DISCOUNT10"))
                 .andExpect(jsonPath("$.data.discountAmount").value(39950.05))
-                .andExpect(jsonPath("$.data.totalAmount").value(359550.45))
+                .andExpect(jsonPath("$.data.totalAmount").value(375550.45))
                 .andReturn()
                 .getResponse()
                 .getContentAsString();
@@ -766,10 +766,10 @@ class StorefrontPurchaseE2ETest {
         assertThat(vnpTxnRef).isNotBlank();
 
         // 4. Mô phỏng Webhook IPN từ cổng VNPay gửi về server với chữ ký số HMAC-SHA512 hợp lệ
-        // Số tiền VNPay gửi: 359,550.45 * 100 = 35955045
+        // Số tiền VNPay gửi: 375,550.45 * 100 = 37555045
         Map<String, String> ipnParams = new HashMap<>();
         ipnParams.put("vnp_TmnCode", vnPayConfig.getTmnCode());
-        ipnParams.put("vnp_Amount", "35955045");
+        ipnParams.put("vnp_Amount", "37555045");
         ipnParams.put("vnp_BankCode", "NCB");
         ipnParams.put("vnp_BankTranNo", "VNP14567890");
         ipnParams.put("vnp_CardType", "ATM");

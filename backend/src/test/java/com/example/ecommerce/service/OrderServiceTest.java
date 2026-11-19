@@ -148,7 +148,7 @@ class OrderServiceTest {
                 .transactionCode("PAY-20261102-12345678")
                 .paymentMethod(PaymentMethod.COD)
                 .status(PaymentStatus.UNPAID)
-                .amount(BigDecimal.valueOf(1000000))
+                .amount(BigDecimal.valueOf(1016000))
                 .build();
         when(paymentService.createInitialPayment(any(Order.class), eq(PaymentMethod.COD))).thenReturn(dummyPayment);
 
@@ -157,7 +157,7 @@ class OrderServiceTest {
         assertThat(response).isNotNull();
         assertThat(response.getId()).isEqualTo(99L);
         assertThat(response.getOrderCode()).startsWith("ORD-");
-        assertThat(response.getTotalAmount()).isEqualByComparingTo(BigDecimal.valueOf(1000000));
+        assertThat(response.getTotalAmount()).isEqualByComparingTo(BigDecimal.valueOf(1016000));
         assertThat(response.getOrderStatus()).isEqualTo(OrderStatus.PENDING);
         assertThat(response.getPaymentMethod()).isEqualTo(PaymentMethod.COD);
         assertThat(response.getTransactionCode()).isEqualTo("PAY-20261102-12345678");

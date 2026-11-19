@@ -36,6 +36,8 @@ public class OrderResponse {
     private String note;
     private String couponCode;
     private BigDecimal discountAmount;
+    @Builder.Default
+    private BigDecimal shippingFee = new BigDecimal("16000.00");
     private Integer itemCount;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
