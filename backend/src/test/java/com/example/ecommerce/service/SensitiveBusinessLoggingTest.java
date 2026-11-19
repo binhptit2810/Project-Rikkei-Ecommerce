@@ -139,7 +139,7 @@ class SensitiveBusinessLoggingTest {
 
         assertThat(output.getOut())
                 .contains("INFO")
-                .contains("userId=15 | action=CREATE_ORDER | result=SUCCESS | orderId=1001 | totalAmount=500000");
+                .contains("userId=15 | action=CREATE_ORDER | result=SUCCESS | orderId=1001 | totalAmount=516000");
 
         // Đảm bảo không lộ thông tin nhạy cảm
         assertThat(output.getOut())

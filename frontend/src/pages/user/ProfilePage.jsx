@@ -11,9 +11,15 @@ import {
   Eye,
   EyeOff,
   Save,
+  Map,
+  Navigation,
+  Loader2,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
+import { useToastStore } from '../../store/useToastStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
+import AddressMapModal from '../../components/common/AddressMapModal'
+import { reverseGeocode } from '../../utils/addressStorage'
 
 export const ProfilePage = () => {
   const navigate = useNavigate()
@@ -45,6 +51,10 @@ export const ProfilePage = () => {
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
 
+  // Map Picker & Geolocation State cho Profile
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false)
+  const [isLocatingGps, setIsLocatingGps] = useState(false)
+
   // Đồng bộ thông tin user vào form khi load
   useEffect(() => {
     fetchProfile()
@@ -69,6 +79,80 @@ export const ProfilePage = () => {
     }
     setProfileSuccessMsg('')
     setProfileErrorMsg('')
+  }
+
+  // Chọn địa chỉ từ Bản đồ
+  const handleSelectMapAddress = (addressStr) => {
+    setProfileData((prev) => ({ ...prev, address: addressStr }))
+    setIsMapModalOpen(false)
+    useToastStore.getState().showToast({
+      type: 'success',
+      title: 'Đã cập nhật vị trí từ bản đồ',
+      message: addressStr,
+      duration: 3000,
+    })
+  }
+
+  // Tự động định vị GPS cho Profile
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      useToastStore.getState().showToast({
+        type: 'error',
+        title: 'Không hỗ trợ GPS',
+        message: 'Trình duyệt không hỗ trợ chức năng định vị GPS.',
+        duration: 3500,
+      })
+      return
+    }
+
+    setIsLocatingGps(true)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords
+          const res = await reverseGeocode(latitude, longitude)
+          if (res && res.formattedAddress) {
+            setProfileData((prev) => ({ ...prev, address: res.formattedAddress }))
+            useToastStore.getState().showToast({
+              type: 'success',
+              title: 'Đã lấy vị trí hiện tại',
+              message: res.formattedAddress,
+              duration: 3500,
+            })
+          } else {
+            useToastStore.getState().showToast({
+              type: 'error',
+              title: 'Không tìm thấy địa chỉ',
+              message: 'Không thể giải mã địa chỉ từ tọa độ GPS.',
+              duration: 3500,
+            })
+          }
+        } catch (err) {
+          useToastStore.getState().showToast({
+            type: 'error',
+            title: 'Lỗi định vị',
+            message: err.message || 'Lỗi khi lấy thông tin địa chỉ GPS.',
+            duration: 3500,
+          })
+        } finally {
+          setIsLocatingGps(false)
+        }
+      },
+      (err) => {
+        setIsLocatingGps(false)
+        let msg = 'Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí trên trình duyệt.'
+        if (err.code === 1) {
+          msg = 'Bạn đã từ chối quyền truy cập vị trí. Hãy bật lại trong cài đặt trình duyệt.'
+        }
+        useToastStore.getState().showToast({
+          type: 'error',
+          title: 'Lỗi truy cập vị trí',
+          message: msg,
+          duration: 4000,
+        })
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    )
   }
 
   const validateProfile = () => {
@@ -379,10 +463,48 @@ export const ProfilePage = () => {
                 </div>
 
                 {/* Address */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-                    Địa chỉ nhận hàng mặc định
-                  </label>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider">
+                      Địa chỉ nhận hàng mặc định
+                    </label>
+
+                    <div className="flex items-center gap-2">
+                      {/* Nút định vị GPS */}
+                      <button
+                        type="button"
+                        onClick={handleGetCurrentLocation}
+                        disabled={isLocatingGps || isLoading}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-emerald-200/90 shadow-2xs hover:shadow-xs disabled:opacity-50"
+                        title="Tự động lấy vị trí hiện tại của bạn qua GPS"
+                      >
+                        {isLocatingGps ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                            <span>Đang định vị...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Navigation className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Vị trí hiện tại</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Nút mở bản đồ tương tác */}
+                      <button
+                        type="button"
+                        onClick={() => setIsMapModalOpen(true)}
+                        disabled={isLoading}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-blue-200/90 shadow-2xs hover:shadow-xs"
+                        title="Mở bản đồ trực quan chọn địa chỉ"
+                      >
+                        <Map className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Mở bản đồ</span>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="relative">
                     <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                     <textarea
@@ -578,6 +700,14 @@ export const ProfilePage = () => {
           )}
         </div>
       </div>
+
+      {/* Modal Bản đồ chọn vị trí cho Profile */}
+      <AddressMapModal
+        isOpen={isMapModalOpen}
+        onClose={() => setIsMapModalOpen(false)}
+        onSelectAddress={handleSelectMapAddress}
+        initialAddress={profileData.address}
+      />
     </div>
   )
 }

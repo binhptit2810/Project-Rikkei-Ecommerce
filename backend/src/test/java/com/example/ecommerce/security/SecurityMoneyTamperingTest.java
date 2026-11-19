@@ -163,8 +163,8 @@ class SecurityMoneyTamperingTest {
 
         var response = orderService.createOrder(orderReq, "buyer@example.com");
 
-        // Backend lấy giá niêm yết 1.500.000đ * 2 = 3.000.000đ
-        assertThat(response.getTotalAmount()).isEqualByComparingTo(new BigDecimal("3000000"));
+        // Backend lấy giá niêm yết 1.500.000đ * 2 = 3.000.000đ + phí ship 16.000đ = 3.016.000đ
+        assertThat(response.getTotalAmount()).isEqualByComparingTo(new BigDecimal("3016000"));
         assertThat(response.getItems()).hasSize(1);
         assertThat(response.getItems().get(0).getUnitPrice()).isEqualByComparingTo(new BigDecimal("1500000"));
         assertThat(response.getItems().get(0).getSubtotal()).isEqualByComparingTo(new BigDecimal("3000000"));
@@ -204,7 +204,8 @@ class SecurityMoneyTamperingTest {
 
         var response = orderService.createOrder(orderReq, "buyer@example.com");
 
-        assertThat(response.getTotalAmount()).isEqualByComparingTo(new BigDecimal("2400000"));
+        // Subtotal 2.500.000 - 100.000 giảm giá + 16.000 phí ship cố định = 2.416.000
+        assertThat(response.getTotalAmount()).isEqualByComparingTo(new BigDecimal("2416000"));
         verify(couponService).applyCouponForOrder(eq("GIAM100K"), any(BigDecimal.class));
     }
 

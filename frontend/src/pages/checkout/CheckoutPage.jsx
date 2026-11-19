@@ -14,6 +14,10 @@ import {
   ChevronRight,
   X,
   QrCode,
+  Map,
+  Navigation,
+  BookOpen,
+  Loader2,
 } from 'lucide-react'
 import { useCartStore } from '../../store/useCartStore'
 import { useAuthStore } from '../../store/useAuthStore'
@@ -21,6 +25,13 @@ import { useToastStore } from '../../store/useToastStore'
 import orderService from '../../services/orderService'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import VoucherPickerModal from '../../components/checkout/VoucherPickerModal'
+import AddressMapModal from '../../components/common/AddressMapModal'
+import SavedAddressModal from '../../components/checkout/SavedAddressModal'
+import {
+  reverseGeocode,
+  saveAddress,
+  getSavedAddresses,
+} from '../../utils/addressStorage'
 
 export const CheckoutPage = () => {
   const navigate = useNavigate()
@@ -49,14 +60,25 @@ export const CheckoutPage = () => {
   const [couponError, setCouponError] = useState(null)
   const [isVoucherModalOpen, setIsVoucherModalOpen] = useState(false)
 
-  // Tự động điền thông tin có sẵn từ tài khoản người dùng
+  // Quản lý Bản đồ (Map Picker) và Sổ địa chỉ (Saved Addresses)
+  const [isMapModalOpen, setIsMapModalOpen] = useState(false)
+  const [isSavedAddressModalOpen, setIsSavedAddressModalOpen] = useState(false)
+  const [saveForLater, setSaveForLater] = useState(true)
+  const [isLocatingGps, setIsLocatingGps] = useState(false)
+  const [savedCount, setSavedCount] = useState(0)
+
+  // Tự động điền thông tin có sẵn từ tài khoản hoặc địa chỉ mặc định trong sổ địa chỉ
   useEffect(() => {
     if (user) {
+      const savedList = getSavedAddresses(user.id)
+      setSavedCount(savedList.length)
+      const defaultSaved = savedList.find((a) => a.isDefault) || savedList[0]
+
       setFormData((prev) => ({
         ...prev,
-        recipientName: prev.recipientName || user.fullName || '',
-        recipientPhone: prev.recipientPhone || user.phone || '',
-        shippingAddress: prev.shippingAddress || user.address || '',
+        recipientName: prev.recipientName || defaultSaved?.recipientName || user.fullName || '',
+        recipientPhone: prev.recipientPhone || defaultSaved?.recipientPhone || user.phone || '',
+        shippingAddress: prev.shippingAddress || defaultSaved?.shippingAddress || user.address || '',
       }))
     }
   }, [user])
@@ -89,6 +111,104 @@ export const CheckoutPage = () => {
   const handleRemoveCoupon = () => {
     setAppliedCoupon(null)
     setCouponError(null)
+  }
+
+  // Xử lý chọn địa chỉ từ Bản đồ tương tác
+  const handleSelectMapAddress = (addressStr) => {
+    setFormData((prev) => ({
+      ...prev,
+      shippingAddress: addressStr,
+    }))
+    setIsMapModalOpen(false)
+    useToastStore.getState().showToast({
+      type: 'success',
+      title: 'Đã chọn vị trí trên bản đồ',
+      message: addressStr,
+      duration: 3000,
+    })
+  }
+
+  // Xử lý chọn từ Sổ địa chỉ đã lưu
+  const handleSelectSavedAddress = (saved) => {
+    if (!saved) return
+    setFormData((prev) => ({
+      ...prev,
+      recipientName: saved.recipientName || prev.recipientName,
+      recipientPhone: saved.recipientPhone || prev.recipientPhone,
+      shippingAddress: saved.shippingAddress || prev.shippingAddress,
+    }))
+    setIsSavedAddressModalOpen(false)
+    useToastStore.getState().showToast({
+      type: 'success',
+      title: 'Đã áp dụng địa chỉ',
+      message: `${saved.recipientName} - ${saved.shippingAddress}`,
+      duration: 3000,
+    })
+  }
+
+  // Xử lý tự động lấy vị trí hiện tại bằng định vị GPS của trình duyệt
+  const handleGetCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      useToastStore.getState().showToast({
+        type: 'error',
+        title: 'Không hỗ trợ GPS',
+        message: 'Trình duyệt của bạn không hỗ trợ chức năng định vị GPS.',
+        duration: 3500,
+      })
+      return
+    }
+
+    setIsLocatingGps(true)
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords
+          const res = await reverseGeocode(latitude, longitude)
+          if (res && res.formattedAddress) {
+            setFormData((prev) => ({
+              ...prev,
+              shippingAddress: res.formattedAddress,
+            }))
+            useToastStore.getState().showToast({
+              type: 'success',
+              title: 'Đã xác định vị trí hiện tại',
+              message: res.formattedAddress,
+              duration: 3500,
+            })
+          } else {
+            useToastStore.getState().showToast({
+              type: 'error',
+              title: 'Không tìm thấy địa chỉ',
+              message: 'Không thể giải mã địa chỉ từ tọa độ GPS.',
+              duration: 3500,
+            })
+          }
+        } catch (err) {
+          useToastStore.getState().showToast({
+            type: 'error',
+            title: 'Lỗi định vị',
+            message: err.message || 'Lỗi khi lấy thông tin địa chỉ GPS.',
+            duration: 3500,
+          })
+        } finally {
+          setIsLocatingGps(false)
+        }
+      },
+      (err) => {
+        setIsLocatingGps(false)
+        let msg = 'Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí trên trình duyệt.'
+        if (err.code === 1) {
+          msg = 'Bạn đã từ chối quyền truy cập vị trí. Hãy bật cho phép quyền trong cài đặt trình duyệt.'
+        }
+        useToastStore.getState().showToast({
+          type: 'error',
+          title: 'Lỗi truy cập vị trí',
+          message: msg,
+          duration: 4000,
+        })
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    )
   }
 
   const handleSubmit = async (e) => {
@@ -201,6 +321,21 @@ export const CheckoutPage = () => {
         throw new Error('Dữ liệu đơn hàng phản hồi từ máy chủ không hợp lệ.')
       }
 
+      // Tự động lưu thông tin nhận hàng vào sổ địa chỉ nếu người dùng tích chọn
+      if (saveForLater && formData.shippingAddress.trim()) {
+        try {
+          saveAddress(user?.id, {
+            recipientName: formData.recipientName.trim(),
+            recipientPhone: formData.recipientPhone.trim(),
+            shippingAddress: formData.shippingAddress.trim(),
+            label: 'Địa chỉ nhận hàng',
+          })
+          setSavedCount(getSavedAddresses(user?.id).length)
+        } catch (saveErr) {
+          console.warn('Không thể tự động lưu sổ địa chỉ:', saveErr)
+        }
+      }
+
       // Xử lý theo phương thức thanh toán
       if (formData.paymentMethod === 'SEPAY') {
         if (!isBuyNow) {
@@ -292,6 +427,7 @@ export const CheckoutPage = () => {
     }
   }
 
+  const SHIPPING_FEE = 16000
   const totalPrice = isBuyNow
     ? (Number(buyNowItem?.price) || 0) * (Number(buyNowItem?.quantity) || 1)
     : getTotalPrice()
@@ -299,7 +435,7 @@ export const CheckoutPage = () => {
     ? (Number(buyNowItem?.quantity) || 1)
     : getTotalCount()
   const discountAmount = appliedCoupon?.discountAmount || 0
-  const finalPrice = Math.max(0, totalPrice - discountAmount)
+  const finalPrice = Math.max(0, totalPrice - discountAmount) + SHIPPING_FEE
 
   if (checkoutItems.length === 0) {
     return null
@@ -366,11 +502,29 @@ export const CheckoutPage = () => {
 
               {/* Card thông tin giao hàng */}
               <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm p-6 sm:p-8 space-y-5">
-                <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-                  <span className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
-                    1
-                  </span>
-                  <h2 className="text-base font-bold text-slate-900">Thông tin người nhận</h2>
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100 flex-wrap gap-2">
+                  <div className="flex items-center gap-3">
+                    <span className="w-7 h-7 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-xs shadow-xs">
+                      1
+                    </span>
+                    <h2 className="text-base font-bold text-slate-900">Thông tin người nhận</h2>
+                  </div>
+
+                  {/* Nút Chọn từ sổ địa chỉ đã lưu */}
+                  <button
+                    type="button"
+                    onClick={() => setIsSavedAddressModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-200 bg-blue-50/70 hover:bg-blue-100 text-blue-700 text-xs font-bold transition-all cursor-pointer shadow-2xs hover:shadow-xs"
+                    title="Chọn nhanh từ các địa chỉ bạn đã lưu"
+                  >
+                    <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                    <span>Chọn từ sổ địa chỉ</span>
+                    {savedCount > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full bg-blue-600 text-white text-[10px] font-extrabold">
+                        {savedCount}
+                      </span>
+                    )}
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -413,10 +567,48 @@ export const CheckoutPage = () => {
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-900 block">
-                    Địa chỉ nhận hàng chi tiết <span className="text-red-500">*</span>
-                  </label>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="text-xs font-bold text-slate-900 block">
+                      Địa chỉ nhận hàng chi tiết <span className="text-red-500">*</span>
+                    </label>
+
+                    <div className="flex items-center gap-2">
+                      {/* Nút định vị GPS vị trí hiện tại */}
+                      <button
+                        type="button"
+                        onClick={handleGetCurrentLocation}
+                        disabled={isLocatingGps || isSubmitting}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-emerald-200/90 shadow-2xs hover:shadow-xs disabled:opacity-50"
+                        title="Tự động lấy vị trí hiện tại của bạn qua GPS"
+                      >
+                        {isLocatingGps ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-emerald-600" />
+                            <span>Đang định vị...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Navigation className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Vị trí hiện tại</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Nút mở bản đồ tương tác Leaflet */}
+                      <button
+                        type="button"
+                        onClick={() => setIsMapModalOpen(true)}
+                        disabled={isSubmitting}
+                        className="inline-flex items-center gap-1.5 text-xs font-bold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-blue-200/90 shadow-2xs hover:shadow-xs"
+                        title="Mở bản đồ trực quan để chấm điểm giao hàng"
+                      >
+                        <Map className="w-3.5 h-3.5 text-blue-600" />
+                        <span>Mở bản đồ</span>
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="relative">
                     <MapPin className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                     <textarea
@@ -429,6 +621,22 @@ export const CheckoutPage = () => {
                       required
                       className="flex min-h-[70px] w-full rounded-xl border border-slate-200 bg-slate-50 hover:bg-white pl-10 pr-3 py-2 text-sm shadow-xs transition-colors placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/20 resize-none disabled:bg-slate-100"
                     />
+                  </div>
+
+                  {/* Checkbox lưu thông tin nhận hàng cho lần sau */}
+                  <div className="pt-1">
+                    <label className="inline-flex items-center gap-2 cursor-pointer select-none text-xs text-slate-700 hover:text-slate-900">
+                      <input
+                        type="checkbox"
+                        checked={saveForLater}
+                        onChange={(e) => setSaveForLater(e.target.checked)}
+                        disabled={isSubmitting}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                      />
+                      <span className="font-medium">
+                        Lưu thông tin giao hàng này vào sổ địa chỉ cho lần đặt hàng sau
+                      </span>
+                    </label>
                   </div>
                 </div>
 
@@ -689,8 +897,11 @@ export const CheckoutPage = () => {
                     </div>
                   )}
                   <div className="flex justify-between text-slate-600">
-                    <span>Phí vận chuyển</span>
-                    <span className="font-bold text-emerald-600">Miễn phí toàn quốc</span>
+                    <span className="flex items-center gap-1.5">
+                      <span>Phí vận chuyển</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-100 text-slate-600 font-semibold">Cố định</span>
+                    </span>
+                    <span className="font-bold text-slate-900 tabular-nums">16.000 ₫</span>
                   </div>
                   <div className="pt-3 border-t border-slate-100 flex justify-between text-sm">
                     <span className="font-bold text-slate-900">Tổng thanh toán</span>
@@ -746,6 +957,26 @@ export const CheckoutPage = () => {
         }}
         currentCode={appliedCoupon?.code}
         orderValue={totalPrice}
+      />
+
+      {/* Modal Bản đồ tương tác OpenStreetMap Leaflet */}
+      <AddressMapModal
+        isOpen={isMapModalOpen}
+        onClose={() => setIsMapModalOpen(false)}
+        onSelectAddress={handleSelectMapAddress}
+        initialAddress={formData.shippingAddress}
+      />
+
+      {/* Modal Sổ địa chỉ giao hàng đã lưu */}
+      <SavedAddressModal
+        isOpen={isSavedAddressModalOpen}
+        onClose={() => {
+          setIsSavedAddressModalOpen(false)
+          setSavedCount(getSavedAddresses(user?.id).length)
+        }}
+        onSelectAddress={handleSelectSavedAddress}
+        userId={user?.id}
+        currentAddress={formData.shippingAddress}
       />
     </div>
   )
