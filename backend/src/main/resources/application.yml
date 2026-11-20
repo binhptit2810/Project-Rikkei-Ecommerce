@@ -72,6 +72,8 @@ spring:
     openai:
       api-key: ${GEMINI_API_KEY:mock-gemini-key-placeholder}
       base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com/v1beta/openai}
+      connect-timeout: ${GEMINI_CONNECT_TIMEOUT:10000}
+      read-timeout: ${GEMINI_READ_TIMEOUT:60000}
       embedding:
         enabled: false
       image:

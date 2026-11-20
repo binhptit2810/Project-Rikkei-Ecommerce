@@ -101,6 +101,7 @@ class OrderToolsTest {
 
         OrderResponse order1 = OrderResponse.builder()
                 .id(10L)
+                .userId(100L)
                 .orderCode("ORD-20241108-001")
                 .orderStatus(OrderStatus.COMPLETED)
                 .totalAmount(new BigDecimal("500000"))
@@ -169,6 +170,7 @@ class OrderToolsTest {
 
         OrderResponse order = OrderResponse.builder()
                 .id(10L)
+                .userId(100L)
                 .orderCode("ORD-20241108-001")
                 .orderStatus(OrderStatus.PROCESSING)
                 .recipientName("Nguyễn Văn A")
@@ -251,6 +253,7 @@ class OrderToolsTest {
 
         OrderResponse order = OrderResponse.builder()
                 .id(1L)
+                .userId(100L)
                 .orderCode("ORD-20241108-001")
                 .orderStatus(OrderStatus.PROCESSING)
                 .recipientName("Nguyễn Văn A")
@@ -293,5 +296,75 @@ class OrderToolsTest {
         String result = orderTools.getOrderDetail(request, authenticatedToolContext);
 
         assertThat(result).contains("Không tìm thấy đơn hàng");
+    }
+
+    @Test
+    @DisplayName("OT-12: ADMIN cố ý tra cứu đơn hàng của người khác trong Chatbot bị từ chối truy cập")
+    void testGetOrderDetail_AdminViewingOtherUserOrder_Blocked() {
+        User adminUser = User.builder()
+                .id(999L)
+                .email("admin@example.com")
+                .fullName("Quản trị viên")
+                .role(Role.ADMIN)
+                .build();
+
+        ToolContext adminToolContext = new ToolContext(Map.of(
+                "authenticatedUserId", "999",
+                "isGuest", false,
+                "sessionId", "session-admin-123"
+        ));
+
+        when(userRepository.findById(999L)).thenReturn(Optional.of(adminUser));
+
+        // OrderService không quăng exception vì role ADMIN được bypass ở tầng Service
+        OrderResponse otherUserOrder = OrderResponse.builder()
+                .id(10L)
+                .userId(100L) // Thuộc về User 100 khác!
+                .orderCode("ORD-VICTIM-001")
+                .build();
+
+        when(orderService.getOrderByOrderCode("ORD-VICTIM-001", "admin@example.com"))
+                .thenReturn(otherUserOrder);
+
+        OrderDetailRequest request = OrderDetailRequest.builder()
+                .orderCode("ORD-VICTIM-001")
+                .build();
+
+        String result = orderTools.getOrderDetail(request, adminToolContext);
+
+        assertThat(result).contains("Bạn không có quyền truy cập hoặc xem chi tiết đơn hàng này.");
+    }
+
+    @Test
+    @DisplayName("OT-13: getOrderDetail che giấu thông tin nhạy cảm (PII masking: phone, address, formatted date)")
+    void testGetOrderDetail_PIIMasking() {
+        when(userRepository.findById(100L)).thenReturn(Optional.of(testUser));
+
+        OrderResponse order = OrderResponse.builder()
+                .id(10L)
+                .userId(100L)
+                .orderCode("ORD-20241108-001")
+                .orderStatus(OrderStatus.PROCESSING)
+                .recipientName("Nguyễn Văn A")
+                .recipientPhone("0901234567")
+                .shippingAddress("Số 10, Cầu Giấy, Hà Nội")
+                .paymentMethod(PaymentMethod.COD)
+                .paymentStatus(PaymentStatus.UNPAID)
+                .totalAmount(new BigDecimal("700000"))
+                .createdAt(LocalDateTime.of(2024, 11, 8, 10, 0))
+                .build();
+
+        when(orderService.getOrderByOrderCode("ORD-20241108-001", "customer@example.com"))
+                .thenReturn(order);
+
+        OrderDetailRequest request = OrderDetailRequest.builder()
+                .orderCode("ORD-20241108-001")
+                .build();
+
+        String result = orderTools.getOrderDetail(request, authenticatedToolContext);
+
+        assertThat(result).doesNotContain("0901234567");
+        assertThat(result).contains("090****567");
+        assertThat(result).contains("08/11/2024 10:00");
     }
 }

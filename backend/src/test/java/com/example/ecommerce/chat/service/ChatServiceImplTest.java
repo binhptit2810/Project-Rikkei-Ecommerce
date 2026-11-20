@@ -41,7 +41,11 @@ import org.springframework.web.client.ResourceAccessException;
 import java.math.BigDecimal;
 import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -399,6 +403,63 @@ class ChatServiceImplTest {
             assertThatThrownBy(() -> chatService.sendMessage(TEST_SESSION_ID, "Câu hỏi", TEST_GUEST_TOKEN, null))
                     .isInstanceOf(GeminiTimeoutException.class);
 
+            verify(chatMemoryService).releaseLock(TEST_SESSION_ID, TEST_LOCK_TOKEN);
+        }
+
+        @Test
+        @DisplayName("CS-08C: Khi Spring AI ném NonTransientAiException bao bọc Read timed out, ném đúng GeminiTimeoutException")
+        void testSendMessage_NonTransientAiExceptionWrappingTimeout_ThrowsGeminiTimeoutException() {
+            when(chatMemoryService.acquireLock(TEST_SESSION_ID)).thenReturn(TEST_LOCK_TOKEN);
+
+            ChatSessionMetadata oldMeta = ChatSessionMetadata.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .ownerId("GUEST")
+                    .version(1L)
+                    .build();
+
+            when(chatMemoryService.getChatMemory(TEST_SESSION_ID, TEST_GUEST_TOKEN, null))
+                    .thenReturn(ChatMemoryData.builder().metadata(oldMeta).messages(Collections.emptyList()).build());
+            when(chatToolsConfig.getGuestTools()).thenReturn(new FunctionCallback[0]);
+
+            NonTransientAiException wrappedTimeout = new NonTransientAiException(
+                    "Spring AI call failed", new SocketTimeoutException("Read timed out")
+            );
+            when(callResponseSpec.content()).thenThrow(wrappedTimeout);
+
+            assertThatThrownBy(() -> chatService.sendMessage(TEST_SESSION_ID, "Câu hỏi", TEST_GUEST_TOKEN, null))
+                    .isInstanceOf(GeminiTimeoutException.class);
+
+            verify(chatMemoryService).releaseLock(TEST_SESSION_ID, TEST_LOCK_TOKEN);
+        }
+
+        @Test
+        @DisplayName("CS-08D: Khi xảy ra Timeout, hệ thống xóa Idempotency Key để cho phép người dùng bấm 'Thử lại' thành công")
+        void testSendMessage_Timeout_ClearsIdempotencyKey() {
+            String clientMsgId = "msg-retry-test-001";
+            when(chatMemoryService.checkAndClaimIdempotency(TEST_SESSION_ID, clientMsgId, "Câu hỏi"))
+                    .thenReturn(IdempotencyCheckResult.newRequest());
+            when(chatMemoryService.acquireLock(TEST_SESSION_ID)).thenReturn(TEST_LOCK_TOKEN);
+
+            ChatSessionMetadata oldMeta = ChatSessionMetadata.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .ownerId("GUEST")
+                    .version(1L)
+                    .build();
+
+            when(chatMemoryService.getChatMemory(TEST_SESSION_ID, TEST_GUEST_TOKEN, null))
+                    .thenReturn(ChatMemoryData.builder().metadata(oldMeta).messages(Collections.emptyList()).build());
+            when(chatToolsConfig.getGuestTools()).thenReturn(new FunctionCallback[0]);
+
+            ResourceAccessException timeoutException = new ResourceAccessException(
+                    "Request timed out", new SocketTimeoutException("Read timed out")
+            );
+            when(callResponseSpec.content()).thenThrow(timeoutException);
+
+            assertThatThrownBy(() -> chatService.sendMessage(TEST_SESSION_ID, "Câu hỏi", TEST_GUEST_TOKEN, null, clientMsgId))
+                    .isInstanceOf(GeminiTimeoutException.class);
+
+            // Kiểm tra giải phóng Lock và xóa Idempotency Key
+            verify(chatMemoryService).clearIdempotency(TEST_SESSION_ID, clientMsgId);
             verify(chatMemoryService).releaseLock(TEST_SESSION_ID, TEST_LOCK_TOKEN);
         }
 
@@ -798,6 +859,76 @@ class ChatServiceImplTest {
               .hasMessageNotContaining("quá tải");
 
             verify(chatMemoryService).releaseLock(TEST_SESSION_ID, TEST_LOCK_TOKEN);
+        }
+    }
+
+    @Nested
+    @DisplayName("9. Dynamic Real-time Context & Timezone Tests (P2)")
+    class DynamicTimezoneTests {
+
+        @Test
+        @DisplayName("CS-TIME-01: buildDynamicSystemPrompt sinh đúng thứ tiếng Việt, ngày dd/MM/yyyy, giờ HH:mm:ss theo Asia/Ho_Chi_Minh")
+        void testBuildDynamicSystemPrompt_CorrectVietnamTime() {
+            // Giả lập thời gian: 2026-11-20T14:30:45Z (tại UTC) -> tại Asia/Ho_Chi_Minh (UTC+7) là 2026-11-20 21:30:45 (Thứ Sáu)
+            Instant fixedInstant = Instant.parse("2026-11-20T14:30:45Z");
+            Clock fixedClock = Clock.fixed(fixedInstant, ZoneId.of("UTC"));
+            chatService.setClock(fixedClock);
+
+            String prompt = chatService.buildDynamicSystemPrompt();
+
+            assertThat(prompt).contains("Mốc thời gian thực hiện tại: Thứ Sáu, ngày 20/11/2026, lúc 21:30:45 (Múi giờ Việt Nam GMT+7, Asia/Ho_Chi_Minh)");
+            assertThat(prompt).contains("ground truth");
+            assertThat(prompt).contains("createdAt, updatedAt trong Order Tools");
+            assertThat(prompt).contains("Tuyệt đối không tự suy đoán, bịa đặt hoặc hallucinate ngày giờ");
+        }
+
+        @Test
+        @DisplayName("CS-TIME-02: Kiểm tra chuyển đổi qua nửa đêm (23:59:59 -> 00:00:01) nhảy sang ngày và thứ mới chính xác")
+        void testBuildDynamicSystemPrompt_MidnightTransition() {
+            // 2026-12-31 23:59:59 tại Hà Nội = 2026-12-31T16:59:59Z
+            Instant instantBeforeMidnight = Instant.parse("2026-12-31T16:59:59Z");
+            chatService.setClock(Clock.fixed(instantBeforeMidnight, ZoneId.of("Asia/Ho_Chi_Minh")));
+
+            String promptBefore = chatService.buildDynamicSystemPrompt();
+            assertThat(promptBefore).contains("ngày 31/12/2026, lúc 23:59:59");
+            assertThat(promptBefore).contains("Thứ Năm");
+
+            // 2 giây sau: 2027-01-01 00:00:01 tại Hà Nội = 2026-12-31T17:00:01Z
+            Instant instantAfterMidnight = Instant.parse("2026-12-31T17:00:01Z");
+            chatService.setClock(Clock.fixed(instantAfterMidnight, ZoneId.of("Asia/Ho_Chi_Minh")));
+
+            String promptAfter = chatService.buildDynamicSystemPrompt();
+            assertThat(promptAfter).contains("ngày 01/01/2027, lúc 00:00:01");
+            assertThat(promptAfter).contains("Thứ Sáu");
+        }
+
+        @Test
+        @DisplayName("CS-TIME-03: Gửi tin nhắn thực tế qua sendMessage truyền SystemMessage chứa thông tin ngày giờ động")
+        void testSendMessage_IncludesDynamicTimeInSystemPrompt() {
+            Instant fixedInstant = Instant.parse("2026-10-20T03:15:00Z"); // 10:15:00 Thứ Ba 20/10/2026 VN
+            chatService.setClock(Clock.fixed(fixedInstant, ZoneId.of("UTC")));
+
+            when(chatMemoryService.acquireLock(TEST_SESSION_ID)).thenReturn(TEST_LOCK_TOKEN);
+            ChatSessionMetadata oldMeta = ChatSessionMetadata.builder()
+                    .sessionId(TEST_SESSION_ID)
+                    .ownerId("GUEST")
+                    .version(1L)
+                    .build();
+            when(chatMemoryService.getChatMemory(TEST_SESSION_ID, TEST_GUEST_TOKEN, null))
+                    .thenReturn(ChatMemoryData.builder().metadata(oldMeta).messages(Collections.emptyList()).build());
+            when(chatToolsConfig.getGuestTools()).thenReturn(new FunctionCallback[0]);
+            when(callResponseSpec.content()).thenReturn("Hôm nay là ngày 20/10/2026 bạn nhé!");
+            when(chatMemoryService.saveChatMemory(anyString(), anyString(), anyLong(), any(), any(), any(), any()))
+                    .thenReturn(oldMeta);
+
+            chatService.sendMessage(TEST_SESSION_ID, "Hôm nay ngày mấy?", TEST_GUEST_TOKEN, null);
+
+            @SuppressWarnings("unchecked")
+            ArgumentCaptor<List<Message>> messagesCaptor = ArgumentCaptor.forClass(List.class);
+            verify(requestSpec).messages(messagesCaptor.capture());
+            List<Message> messages = messagesCaptor.getValue();
+
+            assertThat(messages.get(0).getContent()).contains("Thứ Ba, ngày 20/10/2026, lúc 10:15:00");
         }
     }
 }

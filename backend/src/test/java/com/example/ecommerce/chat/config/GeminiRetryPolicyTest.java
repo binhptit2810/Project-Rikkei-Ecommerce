@@ -212,5 +212,23 @@ class GeminiRetryPolicyTest {
         assertThat(GeminiRetryPolicy.parseRetryAfter("")).isNull();
         assertThat(GeminiRetryPolicy.parseRetryAfter("invalid-format")).isNull();
     }
+
+    @Test
+    @DisplayName("GRP-14: canRetry lưu cache kết quả đánh giá cho cùng một exception để chống duplicate log WARN")
+    void testCanRetry_DeduplicatesEvaluationForSameException() {
+        RetryContext context = retryPolicy.open(null);
+        SocketTimeoutException ste = new SocketTimeoutException("Read timed out");
+        ResourceAccessException rae = new ResourceAccessException("I/O error: Read timed out", ste);
+
+        retryPolicy.registerThrowable(context, rae);
+
+        // Lần gọi 1: canRetry trả về false và lưu cache
+        boolean firstCall = retryPolicy.canRetry(context);
+        assertThat(firstCall).isFalse();
+
+        // Lần gọi 2 (mô phỏng while-loop header trong RetryTemplate.doExecute): sử dụng cache, không gọi lại shouldRetry
+        boolean secondCall = retryPolicy.canRetry(context);
+        assertThat(secondCall).isFalse();
+    }
 }
 

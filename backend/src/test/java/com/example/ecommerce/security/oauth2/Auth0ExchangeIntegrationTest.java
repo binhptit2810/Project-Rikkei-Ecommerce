@@ -197,20 +197,21 @@ class Auth0ExchangeIntegrationTest {
     }
 
     @Test
-    @DisplayName("TC-EXCH-03: Email đã tồn tại trong local users nhưng chưa liên kết -> Từ chối tự động liên kết (Account Takeover Prevention)")
-    void exchangeAuth0Token_ExistingLocalEmailWithoutLink_ThrowsBusinessException() {
+    @DisplayName("TC-EXCH-03: Email đã tồn tại trong local users -> Tự động liên kết thành công, không thay đổi password")
+    void exchangeAuth0Token_ExistingLocalEmail_AutoLinksSuccessfully() {
         String email = "local.user@example.com";
+        String originalPassword = passwordEncoder.encode("LocalPassword123");
 
         User localUser = User.builder()
                 .email(email)
-                .password(passwordEncoder.encode("LocalPassword123"))
+                .password(originalPassword)
                 .fullName("Local Account User")
                 .role(Role.CUSTOMER)
                 .active(true)
                 .emailVerified(true)
                 .emailVerifiedAt(LocalDateTime.now())
                 .build();
-        userRepository.save(localUser);
+        localUser = userRepository.save(localUser);
 
         String token = "auth0.token.unlinked";
         String sub = "google-oauth2|300000000003";
@@ -219,17 +220,77 @@ class Auth0ExchangeIntegrationTest {
                 .sub(sub)
                 .email(email)
                 .emailVerified(true)
-                .name("Attempted Hijacker")
+                .name("Local Account User")
+                .picture("https://example.com/avatar.jpg")
+                .build();
+
+        when(auth0TokenValidator.validateToken(token)).thenReturn(mockInfo);
+
+        AuthResponse response = authService.exchangeAuth0IdToken(token);
+
+        assertNotNull(response);
+        assertNotNull(response.getAccessToken());
+        assertEquals(email, response.getUser().getEmail());
+
+        // Xác nhận đã có liên kết OAuth được tạo trong DB
+        Optional<UserOAuthAccount> linkedOAuth = userOAuthAccountRepository.findByProviderAndProviderId("AUTH0", sub);
+        assertTrue(linkedOAuth.isPresent());
+        assertEquals(localUser.getId(), linkedOAuth.get().getUser().getId());
+
+        // Xác nhận password cũ không hề bị thay đổi
+        User reloadedUser = userRepository.findById(localUser.getId()).orElseThrow();
+        assertEquals(originalPassword, reloadedUser.getPassword());
+        assertEquals("https://example.com/avatar.jpg", reloadedUser.getAvatarUrl());
+    }
+
+    @Test
+    @DisplayName("TC-EXCH-03b: Sub đã liên kết với user khác -> Ném BusinessException không cho phép ghi đè")
+    void exchangeAuth0Token_ConflictingSub_ThrowsBusinessException() {
+        String email1 = "user1@example.com";
+        User user1 = User.builder()
+                .email(email1)
+                .password(passwordEncoder.encode("Password123"))
+                .fullName("User 1")
+                .role(Role.CUSTOMER)
+                .active(true)
+                .emailVerified(true)
+                .build();
+        user1 = userRepository.save(user1);
+
+        String sub = "google-oauth2|300000000099";
+        UserOAuthAccount existingOAuth = UserOAuthAccount.builder()
+                .user(user1)
+                .provider("AUTH0")
+                .providerId(sub)
+                .email(email1)
+                .build();
+        userOAuthAccountRepository.save(existingOAuth);
+
+        // User 2 có email khác
+        String email2 = "user2@example.com";
+        User user2 = User.builder()
+                .email(email2)
+                .password(passwordEncoder.encode("Password123"))
+                .fullName("User 2")
+                .role(Role.CUSTOMER)
+                .active(true)
+                .emailVerified(true)
+                .build();
+        userRepository.save(user2);
+
+        // Token trả về email của user2 nhưng sub của user1
+        String token = "auth0.token.conflict";
+        Auth0UserInfo mockInfo = Auth0UserInfo.builder()
+                .sub(sub)
+                .email(email2)
+                .emailVerified(true)
+                .name("User 2")
                 .build();
 
         when(auth0TokenValidator.validateToken(token)).thenReturn(mockInfo);
 
         BusinessException ex = assertThrows(BusinessException.class, () -> authService.exchangeAuth0IdToken(token));
-        assertTrue(ex.getMessage().contains("đã được đăng ký"));
-        assertTrue(ex.getMessage().contains("mật khẩu"));
-
-        // Xác nhận chưa hề có liên kết OAuth nào được tạo trong DB
-        assertFalse(userOAuthAccountRepository.existsByProviderAndProviderId("AUTH0", sub));
+        assertTrue(ex.getMessage().contains("liên kết"));
     }
 
     @Test

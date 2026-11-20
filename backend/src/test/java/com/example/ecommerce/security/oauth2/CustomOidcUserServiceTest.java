@@ -245,12 +245,13 @@ class CustomOidcUserServiceTest {
     }
 
     @Test
-    @DisplayName("TC-OIDC-06: AN NINH - Từ chối tự động liên kết nếu trùng email với tài khoản LOCAL có sẵn")
-    void loadUser_EmailMatchesLocalAccount_ThrowsOAuth2AuthenticationException() {
-        String sub = "google-sub-attacker-or-new";
+    @DisplayName("TC-OIDC-06: Tự động liên kết tài khoản an toàn khi email Google đã xác thực trùng tài khoản LOCAL")
+    void loadUser_EmailMatchesLocalAccount_AutoLinksSuccessfully() {
+        String sub = "google-sub-verified-link";
         String email = "localcustomer@example.com";
+        String picture = "https://lh3.googleusercontent.com/avatar-new.jpg";
 
-        OidcUser mockOidcUser = createMockOidcUser(sub, email, true, "Local Match", null);
+        OidcUser mockOidcUser = createMockOidcUser(sub, email, true, "Local Match", picture);
         doReturn(mockOidcUser).when(oidcUserService).fetchOidcUser(any(OidcUserRequest.class));
 
         when(userOAuthAccountRepository.findByProviderAndProviderId("GOOGLE", sub)).thenReturn(Optional.empty());
@@ -261,16 +262,121 @@ class CustomOidcUserServiceTest {
                 .password("$2a$12$LocalUserExistingBcryptPassword")
                 .role(Role.CUSTOMER)
                 .active(true)
+                .emailVerified(false) // Ban đầu chưa kích hoạt OTP
                 .build();
 
         when(userRepository.findByEmail(email)).thenReturn(Optional.of(localUser));
+        when(userOAuthAccountRepository.findByUserIdAndProvider(10L, "GOOGLE")).thenReturn(Optional.empty());
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        OidcUser result = oidcUserService.loadUser(oidcUserRequest);
+
+        assertThat(result).isNotNull();
+        assertThat(result).isInstanceOf(CustomOidcUser.class);
+        CustomOidcUser customOidcUser = (CustomOidcUser) result;
+        assertThat(customOidcUser.getUserEntity().getId()).isEqualTo(10L);
+        assertThat(customOidcUser.getUserEntity().getEmail()).isEqualTo(email);
+        assertThat(customOidcUser.getUserEntity().getPassword()).isEqualTo("$2a$12$LocalUserExistingBcryptPassword"); // Mật khẩu không đổi
+        assertThat(customOidcUser.getUserEntity().getEmailVerified()).isTrue(); // Tự kích hoạt email_verified
+        assertThat(customOidcUser.getUserEntity().getAvatarUrl()).isEqualTo(picture); // Đồng bộ avatar
+
+        // Xác nhận đã lưu UserOAuthAccount liên kết
+        ArgumentCaptor<UserOAuthAccount> oauthCaptor = ArgumentCaptor.forClass(UserOAuthAccount.class);
+        verify(userOAuthAccountRepository).save(oauthCaptor.capture());
+        UserOAuthAccount savedOAuth = oauthCaptor.getValue();
+        assertThat(savedOAuth.getUser().getId()).isEqualTo(10L);
+        assertThat(savedOAuth.getProvider()).isEqualTo("GOOGLE");
+        assertThat(savedOAuth.getProviderId()).isEqualTo(sub);
+        assertThat(savedOAuth.getEmail()).isEqualTo(email);
+    }
+
+    @Test
+    @DisplayName("TC-OIDC-07: Từ chối liên kết Google nếu tài khoản LOCAL đang bị khóa (active = false)")
+    void loadUser_EmailMatchesLocalAccount_LockedUser_ThrowsAccountLocked() {
+        String sub = "google-sub-locked";
+        String email = "lockeduser@example.com";
+
+        OidcUser mockOidcUser = createMockOidcUser(sub, email, true, "Locked User", null);
+        doReturn(mockOidcUser).when(oidcUserService).fetchOidcUser(any(OidcUserRequest.class));
+
+        when(userOAuthAccountRepository.findByProviderAndProviderId("GOOGLE", sub)).thenReturn(Optional.empty());
+
+        User lockedUser = User.builder()
+                .id(20L)
+                .email(email)
+                .role(Role.CUSTOMER)
+                .active(false)
+                .lockReason("Vi phạm chính sách sàn")
+                .build();
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(lockedUser));
 
         assertThatThrownBy(() -> oidcUserService.loadUser(oidcUserRequest))
                 .isInstanceOf(OAuth2AuthenticationException.class)
-                .hasMessageContaining("Email này đã được đăng ký bằng tài khoản thông thường. Vui lòng đăng nhập bằng mật khẩu để liên kết tài khoản.");
+                .hasMessageContaining("Tài khoản của bạn đã bị khóa: Vi phạm chính sách sàn");
 
-        // Khẳng định không ghi đè mật khẩu và không tạo liên kết tùy tiện
-        verify(userRepository, never()).save(any());
+        verify(userOAuthAccountRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("TC-OIDC-08: Từ chối liên kết Google nếu tài khoản LOCAL là ADMIN tại storefront")
+    void loadUser_EmailMatchesLocalAccount_AdminUser_ThrowsAdminAccessDenied() {
+        String sub = "google-sub-admin";
+        String email = "admin@example.com";
+
+        OidcUser mockOidcUser = createMockOidcUser(sub, email, true, "Admin User", null);
+        doReturn(mockOidcUser).when(oidcUserService).fetchOidcUser(any(OidcUserRequest.class));
+
+        when(userOAuthAccountRepository.findByProviderAndProviderId("GOOGLE", sub)).thenReturn(Optional.empty());
+
+        User adminUser = User.builder()
+                .id(1L)
+                .email(email)
+                .role(Role.ADMIN)
+                .active(true)
+                .build();
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(adminUser));
+
+        assertThatThrownBy(() -> oidcUserService.loadUser(oidcUserRequest))
+                .isInstanceOf(OAuth2AuthenticationException.class)
+                .hasMessageContaining("Tài khoản Quản trị viên (ADMIN) không được phép đăng nhập tại cổng Khách hàng");
+
+        verify(userOAuthAccountRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("TC-OIDC-09: Từ chối liên kết nếu Google sub đã thuộc về một tài khoản khác trong hệ thống")
+    void loadUser_GoogleSubBelongsToDifferentUser_ThrowsConflict() {
+        String sub = "google-sub-taken";
+        String email = "user2@example.com";
+
+        OidcUser mockOidcUser = createMockOidcUser(sub, email, true, "Conflicted User", null);
+        doReturn(mockOidcUser).when(oidcUserService).fetchOidcUser(any(OidcUserRequest.class));
+
+        User user1 = User.builder().id(11L).email("user1@example.com").build();
+        User user2 = User.builder().id(22L).email("user2@example.com").role(Role.CUSTOMER).active(true).build();
+
+        // sub này đang gắn với user1
+        UserOAuthAccount takenAccount = UserOAuthAccount.builder()
+                .user(user1)
+                .provider("GOOGLE")
+                .providerId(sub)
+                .email("user1@example.com")
+                .build();
+
+        // Lần đầu findByProviderAndProviderId trong bước 4: giả sử sub chưa khớp phiên đăng nhập này
+        // Nhưng trong bước 5, khi kiểm tra providerId xung đột:
+        when(userOAuthAccountRepository.findByProviderAndProviderId("GOOGLE", sub))
+                .thenReturn(Optional.empty()) // ở bước 4
+                .thenReturn(Optional.of(takenAccount)); // ở bước 5 check xung đột
+
+        when(userRepository.findByEmail(email)).thenReturn(Optional.of(user2));
+
+        assertThatThrownBy(() -> oidcUserService.loadUser(oidcUserRequest))
+                .isInstanceOf(OAuth2AuthenticationException.class)
+                .hasMessageContaining("Tài khoản Google này đã được liên kết với một tài khoản khác");
+
         verify(userOAuthAccountRepository, never()).save(any());
     }
 }

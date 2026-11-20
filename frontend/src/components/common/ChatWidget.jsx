@@ -17,20 +17,13 @@ import {
   Truck
 } from 'lucide-react'
 import chatService from '../../services/chatService'
-import orderService from '../../services/orderService'
 import { useAuthStore } from '../../store/useAuthStore'
 import { MiniProductList } from '../chat/MiniProductCard'
 import { ChatOrderStatusCard } from './ChatOrderStatusCard'
-import {
-  detectOrderQuery,
-  getDeterministicOrder,
-  buildOrderStatusReply,
-  buildGeneralOrderInquiryReply
-} from '../../services/chatOrderHelper'
 
 // Danh sách câu hỏi gợi ý nhanh theo yêu cầu Trello và tiện ích cho người dùng
 const QUICK_PROMPTS = [
-  { id: 'order-123', label: 'Đơn hàng ORD-123 của tôi đến đâu rồi?', icon: Package },
+  { id: 'my-orders', label: 'Kiểm tra đơn hàng gần đây của tôi', icon: Package },
   { id: 'size', label: 'Tư vấn chọn size', icon: Ruler },
   { id: 'return', label: 'Chính sách đổi trả', icon: RefreshCw },
   { id: 'coupon', label: 'Mã giảm giá hôm nay', icon: Tag },
@@ -41,8 +34,8 @@ const INITIAL_MESSAGES = [
   {
     id: 'welcome-1',
     sender: 'ai',
-    text: 'Xin chào quý khách! 👋 Tôi là Rikkei AI - Trợ lý mua sắm thông minh của bạn.\n\nTôi sẵn sàng hỗ trợ bạn tức thì:\n• 📦 Tra cứu hành trình đơn hàng (ví dụ: "Đơn hàng ORD-123 của tôi đến đâu rồi?")\n• 📏 Tư vấn chọn size chuẩn vóc dáng\n• 🔄 Chính sách đổi trả & bảo hành 7 ngày\n• 🎟️ Săn mã giảm giá hot hôm nay\n\nBạn cần Rikkei AI hỗ trợ thông tin gì ạ?',
-    fullText: 'Xin chào quý khách! 👋 Tôi là Rikkei AI - Trợ lý mua sắm thông minh của bạn.\n\nTôi sẵn sàng hỗ trợ bạn tức thì:\n• 📦 Tra cứu hành trình đơn hàng (ví dụ: "Đơn hàng ORD-123 của tôi đến đâu rồi?")\n• 📏 Tư vấn chọn size chuẩn vóc dáng\n• 🔄 Chính sách đổi trả & bảo hành 7 ngày\n• 🎟️ Săn mã giảm giá hot hôm nay\n\nBạn cần Rikkei AI hỗ trợ thông tin gì ạ?',
+    text: 'Xin chào quý khách! 👋 Tôi là Rikkei AI - Trợ lý mua sắm thông minh của bạn.\n\nTôi sẵn sàng hỗ trợ bạn tức thì:\n• 📦 Tra cứu hành trình đơn hàng của bạn\n• 📏 Tư vấn chọn size chuẩn vóc dáng\n• 🔄 Chính sách đổi trả & bảo hành 7 ngày\n• 🎟️ Săn mã giảm giá hot hôm nay\n\nBạn cần Rikkei AI hỗ trợ thông tin gì ạ?',
+    fullText: 'Xin chào quý khách! 👋 Tôi là Rikkei AI - Trợ lý mua sắm thông minh của bạn.\n\nTôi sẵn sàng hỗ trợ bạn tức thì:\n• 📦 Tra cứu hành trình đơn hàng của bạn\n• 📏 Tư vấn chọn size chuẩn vóc dáng\n• 🔄 Chính sách đổi trả & bảo hành 7 ngày\n• 🎟️ Săn mã giảm giá hot hôm nay\n\nBạn cần Rikkei AI hỗ trợ thông tin gì ạ?',
     isStreaming: false,
     timestamp: new Date().toISOString(),
   },
@@ -694,104 +687,29 @@ export const ChatWidget = () => {
       setInputValue('')
     }
 
-    // 1. Kiểm tra intent nhận diện mã đơn hàng
-    const orderQuery = detectOrderQuery(trimmed)
-    if (orderQuery?.isOrderQuery) {
-      setTypingStatusText('Đang tra cứu đơn hàng...')
-    } else {
-      setTypingStatusText('Rikkei AI đang suy nghĩ và phản hồi...')
-    }
-
+    setTypingStatusText('Rikkei AI đang suy nghĩ và phản hồi...')
     setIsTyping(true)
 
     try {
+      // Toàn bộ tin nhắn được chuyển tiếp an toàn tới Backend Spring AI để xử lý và phân quyền tập trung
+      const currentSession = await ensureSession()
+      const tokenToSend = isAuthenticated ? null : currentSession.guestToken
+
+      const responseData = await chatService.sendMessage(
+        currentSession.sessionId,
+        trimmed,
+        tokenToSend,
+        messageId
+      )
+
       let finalAiResponseText = ''
       let finalProducts = []
-      let finalOrderData = null
 
-      if (orderQuery?.isOrderQuery) {
-        // TRƯỜNG HỢP A: Người dùng hỏi chung về đơn hàng nhưng chưa kèm mã
-        if (!orderQuery.hasCode) {
-          finalAiResponseText = buildGeneralOrderInquiryReply()
-        } else {
-          // TRƯỜNG HỢP B: Người dùng cung cấp mã ORD-xxx hoặc #ID
-          let realOrderFromApi = null
-
-          // Thử tra cứu đơn hàng thực tế nếu đã đăng nhập tài khoản
-          if (isAuthenticated) {
-            try {
-              if (orderQuery.numericId) {
-                const apiRes = await orderService.getOrderById(orderQuery.numericId)
-                if (apiRes && (apiRes.data || apiRes.id)) {
-                  realOrderFromApi = apiRes.data || apiRes
-                }
-              }
-              if (!realOrderFromApi) {
-                const myOrdersRes = await orderService.getMyOrders({ size: 10 })
-                const list = myOrdersRes?.data?.content || myOrdersRes?.content || []
-                const found = list.find((o) => {
-                  const oCode = (o.orderCode || '').toUpperCase()
-                  return (
-                    oCode === orderQuery.code ||
-                    oCode === orderQuery.rawCode ||
-                    (orderQuery.numericId && Number(o.id) === Number(orderQuery.numericId))
-                  )
-                })
-                if (found) {
-                  realOrderFromApi = found
-                }
-              }
-            } catch (orderApiErr) {
-              console.warn('API lookup order error (falling back to deterministic QA helper):', orderApiErr)
-            }
-          }
-
-          if (realOrderFromApi) {
-            finalOrderData = realOrderFromApi
-            finalAiResponseText = buildOrderStatusReply(realOrderFromApi)
-          } else {
-            // TESTER-PROOF FALLBACK: Sử dụng deterministic mock hỗ trợ đầy đủ 3 trạng thái
-            const demoOrder = getDeterministicOrder(orderQuery.code || orderQuery.rawCode)
-            if (demoOrder?.notFound) {
-              finalAiResponseText = buildOrderStatusReply(demoOrder)
-            } else {
-              finalOrderData = demoOrder
-              finalAiResponseText = buildOrderStatusReply(demoOrder)
-            }
-          }
-
-          // Gửi kèm tin nhắn tới Backend Chatbot để duy trì ngữ cảnh đàm thoại nếu session khả dụng
-          try {
-            const currentSession = await ensureSession()
-            const tokenToSend = isAuthenticated ? null : currentSession.guestToken
-            await chatService.sendMessage(
-              currentSession.sessionId,
-              trimmed,
-              tokenToSend,
-              messageId
-            )
-          } catch (_chatContextErr) {
-            // Không làm gián đoạn kết quả tra cứu đơn hàng nếu chat service offline
-          }
-        }
+      if (responseData && responseData.message) {
+        finalAiResponseText = formatChatAssistantText(responseData.message)
+        finalProducts = Array.isArray(responseData.products) ? responseData.products : []
       } else {
-        // TRƯỜNG HỢP C: Câu hỏi tư vấn thông thường -> Gọi Backend Spring AI + Google Gemini
-        const currentSession = await ensureSession()
-        const tokenToSend = isAuthenticated ? null : currentSession.guestToken
-
-        const responseData = await chatService.sendMessage(
-          currentSession.sessionId,
-          trimmed,
-          tokenToSend,
-          messageId
-        )
-
-        if (responseData && responseData.message) {
-          finalAiResponseText = formatChatAssistantText(responseData.message)
-          finalProducts = Array.isArray(responseData.products) ? responseData.products : []
-        } else {
-          throw new Error('Phản hồi từ dịch vụ AI không hợp lệ')
-        }
+        throw new Error('Phản hồi từ dịch vụ AI không hợp lệ')
       }
 
       // 2. Tạo tin nhắn AI với trạng thái isStreaming = true và kích hoạt hiệu ứng Typewriter
@@ -802,7 +720,7 @@ export const ChatWidget = () => {
         text: '',
         fullText: finalAiResponseText,
         isStreaming: true,
-        order: finalOrderData,
+        order: null,
         products: finalProducts,
         timestamp: new Date().toISOString(),
       }

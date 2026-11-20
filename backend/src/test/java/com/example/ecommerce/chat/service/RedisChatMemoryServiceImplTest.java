@@ -396,7 +396,7 @@ class RedisChatMemoryServiceImplTest {
         @DisplayName("UT-11: Chiếm lock thành công khi SET NX trả về true")
         void testAcquireLock_Success() {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.setIfAbsent(anyString(), anyString(), eq(60000L), eq(TimeUnit.MILLISECONDS)))
+            when(valueOperations.setIfAbsent(anyString(), anyString(), eq(120000L), eq(TimeUnit.MILLISECONDS)))
                     .thenReturn(Boolean.TRUE);
 
             String lockToken = service.acquireLock(TEST_SESSION_ID);
@@ -409,7 +409,7 @@ class RedisChatMemoryServiceImplTest {
         @DisplayName("UT-12: Ném ChatLockContentionException (HTTP 409) khi SET NX trả về false")
         void testAcquireLock_Contention() {
             when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-            when(valueOperations.setIfAbsent(anyString(), anyString(), eq(60000L), eq(TimeUnit.MILLISECONDS)))
+            when(valueOperations.setIfAbsent(anyString(), anyString(), eq(120000L), eq(TimeUnit.MILLISECONDS)))
                     .thenReturn(Boolean.FALSE);
 
             assertThatThrownBy(() -> service.acquireLock(TEST_SESSION_ID))

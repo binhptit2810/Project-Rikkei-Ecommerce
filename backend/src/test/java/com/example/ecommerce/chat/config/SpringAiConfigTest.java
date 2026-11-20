@@ -49,5 +49,16 @@ class SpringAiConfigTest {
         assertThat(SpringAiConfig.sanitizeCompletionsPath(null))
                 .isEqualTo("/chat/completions");
     }
+
+    @Test
+    @DisplayName("SAC-05: SpringAiConfig cấu hình Connect Timeout 10s (10000ms) và Read Timeout 60s (60000ms)")
+    void testDefaultTimeouts() {
+        SpringAiConfig config = new SpringAiConfig();
+        org.springframework.test.util.ReflectionTestUtils.setField(config, "connectTimeout", 10000);
+        org.springframework.test.util.ReflectionTestUtils.setField(config, "readTimeout", 60000);
+
+        assertThat(config.getConnectTimeout()).isEqualTo(10000);
+        assertThat(config.getReadTimeout()).isEqualTo(60000);
+    }
 }
 

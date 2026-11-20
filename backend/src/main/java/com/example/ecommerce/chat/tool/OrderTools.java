@@ -15,6 +15,8 @@ import org.springframework.ai.chat.model.ToolContext;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
 
@@ -75,11 +77,11 @@ public class OrderTools {
             for (OrderResponse o : orders) {
                 sb.append(String.format("- Mã đơn: %s | Ngày đặt: %s | Trạng thái: %s | Tổng tiền: %,.0f đ | Người nhận: %s (%s)\n",
                         o.getOrderCode(),
-                        o.getCreatedAt() != null ? o.getCreatedAt().toString() : "N/A",
+                        formatDateTime(o.getCreatedAt()),
                         formatOrderStatus(o.getStatus() != null ? o.getStatus().name() : null),
                         o.getTotalAmount(),
                         o.getRecipientName(),
-                        o.getRecipientPhone()
+                        maskPhone(o.getRecipientPhone())
                 ));
             }
             sb.append("\nBạn có thể hỏi thêm thông tin chi tiết từng đơn hàng bằng cách cung cấp mã đơn hàng tương ứng.");
@@ -133,13 +135,29 @@ public class OrderTools {
                 return "Không tìm thấy thông tin đơn hàng theo yêu cầu.";
             }
 
+            // BẮT BUỘC KIỂM TRA QUYỀN SỞ HỮU (Enforce Strict Ownership in AI Chat Context)
+            // Kể cả khi tài khoản có role ADMIN, trong ngữ cảnh Chatbot tư vấn khách hàng,
+            // người dùng chỉ được phép xem đơn hàng của chính tài khoản mình!
+            if (order.getUserId() != null && !order.getUserId().equals(currentUser.getId())) {
+                log.warn("Access denied: User ID={} (role={}) attempted to view order ID={} owned by user ID={}",
+                        currentUser.getId(), currentUser.getRole(), order.getId(), order.getUserId());
+                return "Bạn không có quyền truy cập hoặc xem chi tiết đơn hàng này.";
+            }
+
             StringBuilder sb = new StringBuilder();
             sb.append("Thông tin chi tiết đơn hàng:\n");
             sb.append(String.format("- Mã đơn: %s (ID: %d)\n", order.getOrderCode(), order.getId()));
             sb.append(String.format("- Trạng thái xử lý: %s\n", formatOrderStatus(order.getStatus() != null ? order.getStatus().name() : null)));
-            sb.append(String.format("- Ngày tạo: %s\n", order.getCreatedAt()));
-            sb.append(String.format("- Người nhận: %s - SĐT: %s\n", order.getRecipientName(), order.getRecipientPhone()));
-            sb.append(String.format("- Địa chỉ giao hàng: %s\n", order.getShippingAddress()));
+            sb.append(String.format("- Ngày tạo: %s\n", formatDateTime(order.getCreatedAt())));
+            if (order.getRecipientName() != null && !order.getRecipientName().isBlank()) {
+                sb.append(String.format("- Người nhận: %s\n", order.getRecipientName()));
+            }
+            if (order.getRecipientPhone() != null && !order.getRecipientPhone().isBlank()) {
+                sb.append(String.format("- SĐT liên hệ: %s\n", maskPhone(order.getRecipientPhone())));
+            }
+            if (order.getShippingAddress() != null && !order.getShippingAddress().isBlank()) {
+                sb.append(String.format("- Địa chỉ giao hàng: %s\n", maskAddress(order.getShippingAddress())));
+            }
             sb.append(String.format("- Phương thức thanh toán: %s (Trạng thái: %s)\n",
                     order.getPaymentMethod(), order.getPaymentStatus()));
             sb.append(String.format("- Tổng giá trị thanh toán: %,.0f đ\n", order.getTotalAmount()));
@@ -218,5 +236,29 @@ public class OrderTools {
             case "CANCELLED" -> "Đã hủy đơn (CANCELLED)";
             default -> status;
         };
+    }
+
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+
+    private String formatDateTime(LocalDateTime dt) {
+        if (dt == null) return "N/A";
+        return dt.format(DATE_TIME_FORMATTER);
+    }
+
+    private String maskPhone(String phone) {
+        if (phone == null || phone.isBlank()) return "N/A";
+        String trimmed = phone.trim();
+        if (trimmed.length() <= 4) return "****";
+        return trimmed.substring(0, 3) + "****" + trimmed.substring(Math.max(3, trimmed.length() - 3));
+    }
+
+    private String maskAddress(String address) {
+        if (address == null || address.isBlank()) return "N/A";
+        String trimmed = address.trim();
+        String[] parts = trimmed.split("[,\\-]");
+        if (parts.length > 1) {
+            return parts[parts.length - 2].trim() + ", " + parts[parts.length - 1].trim();
+        }
+        return trimmed;
     }
 }
