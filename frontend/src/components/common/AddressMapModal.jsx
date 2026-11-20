@@ -11,7 +11,7 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react'
-import { reverseGeocode, searchLocation } from '../../utils/addressStorage'
+import { reverseGeocode, searchLocation, getIpLocation } from '../../utils/addressStorage'
 
 // Custom Pin icon dạng SVG sắc nét, không bị lỗi 404 ảnh marker trong Vite
 const createPinIcon = () =>
@@ -68,11 +68,11 @@ export const AddressMapModal = ({
           zoomControl: true,
         })
 
-        // Tile layer từ CartoDB Voyager (dựa trên dữ liệu OpenStreetMap, sắc nét, CDN Singapore cực nhanh, không lỗi DNS tại VN)
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-          maxZoom: 19,
-          subdomains: 'abcd',
-          attribution: '© OpenStreetMap contributors © CARTO',
+        // Lớp bản đồ Google Maps tiếng Việt sắc nét, chuẩn xác, không bị watermark API key, CDN Google cực nhanh tại VN
+        L.tileLayer('https://{s}.google.com/vt/lyrs=m&hl=vi&x={x}&y={y}&z={z}', {
+          maxZoom: 20,
+          subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+          attribution: '© Google Maps',
         }).addTo(map)
 
         // Marker có thể kéo thả
@@ -156,15 +156,34 @@ export const AddressMapModal = ({
     }
   }
 
-  // Định vị GPS vị trí hiện tại
+  // Định vị vị trí hiện tại (Tự động kết hợp GPS và Dự phòng IP mạng)
   const handleGetLocation = () => {
-    if (!navigator.geolocation) {
-      setGpsError('Trình duyệt của bạn không hỗ trợ định vị vị trí')
-      return
-    }
-
     setIsLocating(true)
     setGpsError(null)
+
+    const fallbackToIp = async () => {
+      try {
+        const ipLoc = await getIpLocation()
+        if (ipLoc) {
+          if (mapInstanceRef.current && markerRef.current) {
+            mapInstanceRef.current.flyTo([ipLoc.lat, ipLoc.lng], 16, { duration: 0.8 })
+            markerRef.current.setLatLng([ipLoc.lat, ipLoc.lng])
+          }
+          updateLocation(ipLoc.lat, ipLoc.lng)
+        } else {
+          setGpsError('Không thể xác định vị trí tự động. Bạn hãy bấm trực tiếp lên bản đồ để chọn.')
+        }
+      } catch (e) {
+        setGpsError('Không thể xác định vị trí tự động. Bạn hãy bấm trực tiếp lên bản đồ để chọn.')
+      } finally {
+        setIsLocating(false)
+      }
+    }
+
+    if (!navigator.geolocation) {
+      fallbackToIp()
+      return
+    }
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -172,28 +191,19 @@ export const AddressMapModal = ({
         setIsLocating(false)
 
         if (mapInstanceRef.current && markerRef.current) {
-          mapInstanceRef.current.flyTo([latitude, longitude], 16, { duration: 1 })
+          mapInstanceRef.current.flyTo([latitude, longitude], 16, { duration: 0.8 })
           markerRef.current.setLatLng([latitude, longitude])
         }
         updateLocation(latitude, longitude)
       },
       (err) => {
-        setIsLocating(false)
-        console.warn('Lỗi định vị GPS:', err)
-        let msg = 'Không thể lấy vị trí hiện tại.'
-        if (err.code === 1) {
-          msg = 'Bạn đã từ chối quyền truy cập vị trí trên trình duyệt. Vui lòng cho phép để định vị tự động.'
-        } else if (err.code === 2) {
-          msg = 'Không xác định được vị trí mạng. Vui lòng chọn thủ công trên bản đồ.'
-        } else if (err.code === 3) {
-          msg = 'Hết thời gian chờ định vị GPS. Vui lòng thử lại.'
-        }
-        setGpsError(msg)
+        console.warn('GPS thiết bị không khả dụng, tự động chuyển sang định vị mạng IP:', err)
+        fallbackToIp()
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0,
+        timeout: 5000,
+        maximumAge: 30000,
       }
     )
   }
