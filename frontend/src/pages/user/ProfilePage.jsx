@@ -19,7 +19,7 @@ import { useAuthStore } from '../../store/useAuthStore'
 import { useToastStore } from '../../store/useToastStore'
 import LoadingSpinner from '../../components/common/LoadingSpinner'
 import AddressMapModal from '../../components/common/AddressMapModal'
-import { reverseGeocode } from '../../utils/addressStorage'
+import { reverseGeocode, getIpLocation } from '../../utils/addressStorage'
 
 export const ProfilePage = () => {
   const navigate = useNavigate()
@@ -93,19 +93,46 @@ export const ProfilePage = () => {
     })
   }
 
-  // Tự động định vị GPS cho Profile
+  // Tự động định vị GPS cho Profile (kèm fallback IP mạng)
   const handleGetCurrentLocation = () => {
+    setIsLocatingGps(true)
+
+    const fallbackToIp = async () => {
+      try {
+        const ipLoc = await getIpLocation()
+        if (ipLoc && ipLoc.formattedAddress) {
+          setProfileData((prev) => ({ ...prev, address: ipLoc.formattedAddress }))
+          useToastStore.getState().showToast({
+            type: 'success',
+            title: 'Đã xác định vị trí theo mạng IP',
+            message: ipLoc.formattedAddress,
+            duration: 3500,
+          })
+        } else {
+          useToastStore.getState().showToast({
+            type: 'error',
+            title: 'Không thể định vị tự động',
+            message: 'Vui lòng bấm "Mở bản đồ" để ghim vị trí nhận hàng.',
+            duration: 4000,
+          })
+        }
+      } catch (err) {
+        useToastStore.getState().showToast({
+          type: 'error',
+          title: 'Lỗi định vị',
+          message: 'Vui lòng bấm "Mở bản đồ" để chọn địa điểm.',
+          duration: 3500,
+        })
+      } finally {
+        setIsLocatingGps(false)
+      }
+    }
+
     if (!navigator.geolocation) {
-      useToastStore.getState().showToast({
-        type: 'error',
-        title: 'Không hỗ trợ GPS',
-        message: 'Trình duyệt không hỗ trợ chức năng định vị GPS.',
-        duration: 3500,
-      })
+      fallbackToIp()
       return
     }
 
-    setIsLocatingGps(true)
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
@@ -120,38 +147,19 @@ export const ProfilePage = () => {
               duration: 3500,
             })
           } else {
-            useToastStore.getState().showToast({
-              type: 'error',
-              title: 'Không tìm thấy địa chỉ',
-              message: 'Không thể giải mã địa chỉ từ tọa độ GPS.',
-              duration: 3500,
-            })
+            fallbackToIp()
           }
         } catch (err) {
-          useToastStore.getState().showToast({
-            type: 'error',
-            title: 'Lỗi định vị',
-            message: err.message || 'Lỗi khi lấy thông tin địa chỉ GPS.',
-            duration: 3500,
-          })
+          fallbackToIp()
         } finally {
           setIsLocatingGps(false)
         }
       },
       (err) => {
-        setIsLocatingGps(false)
-        let msg = 'Không thể lấy vị trí hiện tại. Vui lòng cho phép quyền truy cập vị trí trên trình duyệt.'
-        if (err.code === 1) {
-          msg = 'Bạn đã từ chối quyền truy cập vị trí. Hãy bật lại trong cài đặt trình duyệt.'
-        }
-        useToastStore.getState().showToast({
-          type: 'error',
-          title: 'Lỗi truy cập vị trí',
-          message: msg,
-          duration: 4000,
-        })
+        console.warn('GPS lỗi, chuyển sang định vị IP:', err)
+        fallbackToIp()
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      { enableHighAccuracy: true, timeout: 5000, maximumAge: 30000 }
     )
   }
 

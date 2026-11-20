@@ -152,6 +152,30 @@ export const buildBigDataCloudAddress = (data) => {
 }
 
 /**
+ * Tự động lấy vị trí xấp xỉ qua IP mạng khi GPS không khả dụng hoặc bị từ chối quyền.
+ */
+export const getIpLocation = async () => {
+  try {
+    const res = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?localityLanguage=vi')
+    if (res.ok) {
+      const data = await res.json()
+      if (data && data.latitude && data.longitude) {
+        const formattedAddress = buildBigDataCloudAddress(data)
+        return {
+          lat: data.latitude,
+          lng: data.longitude,
+          formattedAddress: formattedAddress || data.city || data.principalSubdivision || 'Vị trí hiện tại',
+          raw: data,
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Lỗi định vị qua IP:', e)
+  }
+  return null
+}
+
+/**
  * Hàm hỗ trợ Reverse Geocoding chuyển đổi tọa độ (lat, lng) thành chuỗi địa chỉ tiếng Việt.
  * Áp dụng cơ chế Multi-Provider Fallback:
  * 1. Photon (Komoot OpenStreetMap) - Nhanh, không bị lỗi DNS tại Việt Nam, hỗ trợ số nhà, đường, phường, quận.
